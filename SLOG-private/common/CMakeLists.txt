@@ -1,0 +1,22 @@
+target_sources(slog-core
+  PRIVATE
+    configuration.cpp
+    configuration.h
+    constants.h
+    csv_writer.cpp
+    csv_writer.h
+    json_utils.h
+    metrics.cpp
+    metrics.h
+    offline_data_reader.cpp
+    offline_data_reader.h
+    proto_utils.cpp
+    proto_utils.h
+    sharder.cpp
+    sharder.h
+    spin_latch.h
+    string_utils.cpp
+    string_utils.h
+    thread_utils.h
+    txn_holder.h
+    types.h)

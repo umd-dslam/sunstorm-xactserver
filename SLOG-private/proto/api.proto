@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+import "proto/modules.proto";
+import "proto/transaction.proto";
+
+package slog.api;
+
+/***********************************************
+                    REQUESTS
+***********************************************/
+
+message Request {
+    uint32 stream_id = 1;
+    oneof type {
+        TransactionRequest txn = 2;
+        StatsRequest stats = 3;
+        WriteMetricsRequest metrics = 4;
+    }
+}
+
+message TransactionRequest {
+    Transaction txn = 1;
+}
+
+message StatsRequest {
+    ModuleId module = 1;
+    // Level of details, starting from 0
+    uint32 level = 2;
+}
+
+message WriteMetricsRequest {
+    bytes prefix = 1;
+}
+
+/***********************************************
+                    RESPONSES
+***********************************************/
+
+message Response {
+    uint32 stream_id = 1;
+    oneof type {
+        TransactionResponse txn = 2;
+        StatsResponse stats = 3;
+        WriteMetricsResponse metrics = 4;
+    }
+}
+
+// For debugging and testing purposes
+message TransactionResponse {
+    Transaction txn = 1;
+}
+
+message StatsResponse {
+    bytes stats_json = 1;
+}
+
+message WriteMetricsResponse {
+}

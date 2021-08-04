@@ -1,0 +1,137 @@
+syntax = "proto3";
+package slog;
+
+enum TransactionType {
+    UNKNOWN = 0;
+    SINGLE_HOME = 1;
+    MULTI_HOME_OR_LOCK_ONLY = 2;
+}
+
+enum TransactionStatus {
+    NOT_STARTED = 0;
+    COMMITTED = 1;
+    ABORTED = 2;
+}
+
+enum KeyType {
+    READ = 0;
+    WRITE = 1;
+}
+
+message MasterMetadata {
+    uint32 master = 1;
+    uint32 counter = 2;
+}
+
+message ValueEntry {
+    bytes value = 1;
+    bytes new_value = 2;
+    KeyType type = 3;
+    oneof optional {
+        MasterMetadata metadata = 4;
+    }
+}
+
+message KeyValueEntry {
+    bytes key = 1;
+    ValueEntry value_entry = 2;
+}
+
+enum TransactionEvent {
+    ALL = 0; // Special value used to select all events
+    ENTER_SERVER = 1;
+    EXIT_SERVER_TO_FORWARDER = 2;
+    ENTER_FORWARDER = 3;
+    EXIT_FORWARDER_TO_SEQUENCER = 4;
+    EXIT_FORWARDER_TO_MULTI_HOME_ORDERER = 5;
+    ENTER_MULTI_HOME_ORDERER = 6;
+    ENTER_MULTI_HOME_ORDERER_IN_BATCH = 7;
+    EXIT_MULTI_HOME_ORDERER_IN_BATCH = 8;
+    EXIT_MULTI_HOME_ORDERER = 9;
+    ENTER_SEQUENCER = 10;
+    ENTER_SEQUENCER_IN_BATCH = 11;
+    EXIT_SEQUENCER_IN_BATCH = 12;
+    ENTER_INTERLEAVER_IN_BATCH = 13;
+    EXIT_INTERLEAVER = 14;
+    ENTER_SCHEDULER = 15;
+    ENTER_SCHEDULER_LO = 16;
+    ENTER_LOCK_MANAGER = 17;
+    DISPATCHED = 18;
+    DISPATCHED_FAST = 19;
+    DISPATCHED_SLOW = 20;
+    ENTER_WORKER = 21;
+    EXIT_WORKER = 22;
+    RETURN_TO_SERVER = 23;
+    EXIT_SERVER_TO_CLIENT = 24;
+}
+
+message TransactionEventInfo {
+    // Event name
+    TransactionEvent event = 1;
+    // When the event took place
+    int64 time = 2;
+    // Where the event took place
+    int32 machine = 3;
+    // Home of the LockOnlyTxn when the event took place
+    int32 home = 4;
+}
+
+message TransactionInternal {
+    // unique transaction id, multi-home and lock only
+    // txns share this id
+    uint64 id = 1;
+    TransactionType type = 2;
+    int32 home = 3;
+    uint32 coordinating_server = 4;
+    int32 sequencer_delay_ms = 5;
+    repeated uint32 involved_partitions = 6;
+    repeated uint32 active_partitions = 7;
+    repeated uint32 involved_replicas = 8;
+
+    // for recording time of different events of txn
+    repeated TransactionEventInfo events = 9;
+
+    // positions in the global log
+    repeated int64 global_log_positions = 10;
+}
+
+message RemasterProcedure {
+    uint32 new_master = 1;
+    // The lock only for the new master will create a new key
+    bool is_new_master_lock_only = 2;
+}
+
+message Procedure {
+    // First element is always the name of the procedure
+    repeated bytes args = 1;
+}
+
+message Procedures {
+    repeated Procedure procedures = 1;
+}
+
+message Transaction {
+    TransactionInternal internal = 1;
+
+    oneof program {
+        /*
+        Procedures:
+        GET key1
+        SET key2 value2
+        DEL key4
+        COPY key1 key3
+        */
+        Procedures code = 2;
+        /*
+        Remaster transactions will move the keys in the write_set to the new master.
+        MasterMetadata must still be correct for the keys.
+        */
+        RemasterProcedure remaster = 3;
+    } 
+
+    repeated KeyValueEntry keys = 4;
+    repeated bytes deleted_keys = 5;
+
+    TransactionStatus status = 6;
+    string abort_reason = 7;
+}
