@@ -1,3 +1,4 @@
 [submodule "SLOG"]
 	path = SLOG
-	url = https://github.com/ctring/SLOG.git
+	url = https://github.com/ctring/SLOG-private.git
+	branch = slogora
