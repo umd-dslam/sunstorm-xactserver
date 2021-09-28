@@ -1,8 +1,0 @@
-Dockerfile
-build
-.vscode
-.deps
-.dockerignore
-*.dat
-venv
-tmp

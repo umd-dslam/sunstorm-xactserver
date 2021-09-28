@@ -1,9 +1,0 @@
-syntax = "proto3";
-
-package slog;
-
-message Datum {
-    bytes key = 1;
-    bytes record = 2;
-    uint32 master = 3;
-}
