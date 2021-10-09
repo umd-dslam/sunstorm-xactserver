@@ -19,6 +19,7 @@ OBJS = \
 	multixact.o \
 	parallel.o \
 	rmgr.o \
+	rwset.o \
 	slru.o \
 	subtrans.o \
 	timeline.o \

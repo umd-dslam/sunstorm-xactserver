@@ -23,6 +23,7 @@
 #include "access/commit_ts.h"
 #include "access/multixact.h"
 #include "access/parallel.h"
+#include "access/rwset.h"
 #include "access/subtrans.h"
 #include "access/transam.h"
 #include "access/twophase.h"
@@ -2092,6 +2093,9 @@ CommitTransaction(void)
 			 TransStateAsString(s->state));
 	Assert(s->parent == NULL);
 
+	SendRWSetAndWaitForCommit();
+	CleanUpRWSet();
+
 	/*
 	 * Do pre-commit processing that involves calling user-defined code, such
 	 * as triggers.  SECURITY_RESTRICTED_OPERATION contexts must not queue an
@@ -2606,6 +2610,8 @@ AbortTransaction(void)
 
 	/* Prevent cancel/die interrupt while cleaning up */
 	HOLD_INTERRUPTS();
+
+	CleanUpRWSet();
 
 	/* Make sure we have a valid memory context and resource owner */
 	AtAbort_Memory();
