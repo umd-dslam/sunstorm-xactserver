@@ -2096,6 +2096,8 @@ RI_QueryKey
 RTEKind
 RWConflict
 RWConflictPoolHeader
+RWSet
+RWSetData
 RandomState
 Range
 RangeBound
@@ -2176,6 +2178,7 @@ RelocationBufferInfo
 RelptrFreePageBtree
 RelptrFreePageManager
 RelptrFreePageSpanLeader
+RemoteXactHook
 RenameStmt
 ReopenPtrType
 ReorderBuffer

@@ -2076,7 +2076,7 @@ CommitTransaction(void)
 	TransactionState s = CurrentTransactionState;
 	TransactionId latestXid;
 	bool		is_parallel_worker;
-	RemoteXactHook* remote_xact = GetRemoteXactHook();
+	RemoteXactHook *remote_xact = GetRemoteXactHook();
 
 	is_parallel_worker = (s->blockState == TBLOCK_PARALLEL_INPROGRESS);
 
