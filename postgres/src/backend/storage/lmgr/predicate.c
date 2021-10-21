@@ -193,6 +193,7 @@
 #include "postgres.h"
 
 #include "access/parallel.h"
+#include "access/remotexact.h"
 #include "access/slru.h"
 #include "access/subtrans.h"
 #include "access/transam.h"
@@ -2647,6 +2648,8 @@ PredicateLockTID(Relation relation, ItemPointer tid, Snapshot snapshot,
 									 ItemPointerGetBlockNumber(tid),
 									 ItemPointerGetOffsetNumber(tid));
 	PredicateLockAcquire(&tag);
+
+	GetRemoteXactHook()->collect_read_tid(relation, tid, tuple_xid);
 }
 
 

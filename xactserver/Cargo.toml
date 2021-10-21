@@ -1,0 +1,9 @@
+[package]
+name = "xactserver"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0"
+bytes = { version = "1.0.1", features = ['serde'] }
+zenith_utils = { git = "https://github.com/zenithdb/zenith.git", package = "zenith_utils" }
