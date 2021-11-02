@@ -2604,6 +2604,8 @@ PredicateLockPage(Relation relation, BlockNumber blkno, Snapshot snapshot)
 									relation->rd_id,
 									blkno);
 	PredicateLockAcquire(&tag);
+
+	GetRemoteXactHook()->collect_scan_page_id(relation, blkno);
 }
 
 /*
