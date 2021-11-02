@@ -2578,6 +2578,8 @@ PredicateLockRelation(Relation relation, Snapshot snapshot)
 										relation->rd_node.dbNode,
 										relation->rd_id);
 	PredicateLockAcquire(&tag);
+
+	GetRemoteXactHook()->collect_scan_rel_id(relation);
 }
 
 /*
