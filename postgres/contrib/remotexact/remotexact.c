@@ -81,7 +81,7 @@ rx_collect_seq_scan_rel_id(Relation relation) {
 }
 
 static void
-rx_collect_scan_page_id(Relation relation, BlockNumber blkno) {
+rx_collect_index_scan_page_id(Relation relation, BlockNumber blkno) {
 	StringInfo buf = NULL;
 
 	if (CurrentReadWriteSet == NULL)
@@ -178,7 +178,7 @@ static const RemoteXactHook remote_xact_hook =
 {
 	.collect_read_tid = rx_collect_read_tid,
 	.collect_seq_scan_rel_id = rx_collect_seq_scan_rel_id,
-	.collect_scan_page_id = rx_collect_scan_page_id,
+	.collect_index_scan_page_id = rx_collect_index_scan_page_id,
 	.clear_rwset = rx_clear_rwset,
 	.send_rwset_and_wait = rx_send_rwset_and_wait
 };

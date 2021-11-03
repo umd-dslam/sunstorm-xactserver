@@ -21,7 +21,7 @@ default_collect_seq_scan_rel_id(Relation relation)
 }
 
 static void 
-default_collect_scan_page_id(Relation relation, BlockNumber blkno)
+default_collect_index_scan_page_id(Relation relation, BlockNumber blkno)
 {
 }
 
@@ -38,7 +38,7 @@ default_send_rwset_and_wait(void)
 static const RemoteXactHook default_hook = {
 	.collect_read_tid = default_collect_read_tid,
 	.collect_seq_scan_rel_id = default_collect_seq_scan_rel_id,
-	.collect_scan_page_id = default_collect_scan_page_id,
+	.collect_index_scan_page_id = default_collect_index_scan_page_id,
 	.clear_rwset = default_clear_rwset,
 	.send_rwset_and_wait = default_send_rwset_and_wait
 };
