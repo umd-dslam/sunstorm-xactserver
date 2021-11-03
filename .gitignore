@@ -1,5 +1,6 @@
 build/
 .vscode
 
-/target
-/tmp_install
+target/
+tmp_install/
+data/

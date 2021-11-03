@@ -66,6 +66,36 @@ rx_collect_read_tid(Relation relation, ItemPointer tid, TransactionId tuple_xid)
 }
 
 static void
+rx_collect_seq_scan_rel_id(Relation relation) {
+	StringInfo buf = NULL;
+
+	if (CurrentReadWriteSet == NULL)
+		init_read_write_set();
+
+	buf = &(CurrentReadWriteSet->buf);
+	
+	pq_sendint32(buf, relation->rd_node.dbNode);
+	pq_sendint32(buf, relation->rd_id);
+	pq_sendint32(buf, -1);
+	pq_sendint16(buf, -1);
+}
+
+static void
+rx_collect_index_scan_page_id(Relation relation, BlockNumber blkno) {
+	StringInfo buf = NULL;
+
+	if (CurrentReadWriteSet == NULL)
+		init_read_write_set();
+
+	buf = &(CurrentReadWriteSet->buf);
+	
+	pq_sendint32(buf, relation->rd_node.dbNode);
+	pq_sendint32(buf, relation->rd_id);
+	pq_sendint32(buf, blkno);
+	pq_sendint16(buf, -1);
+}
+
+static void
 rx_clear_rwset(void)
 {
 	if (CurrentReadWriteSet == NULL)
@@ -147,6 +177,8 @@ rx_send_rwset_and_wait(void)
 static const RemoteXactHook remote_xact_hook =
 {
 	.collect_read_tid = rx_collect_read_tid,
+	.collect_seq_scan_rel_id = rx_collect_seq_scan_rel_id,
+	.collect_index_scan_page_id = rx_collect_index_scan_page_id,
 	.clear_rwset = rx_clear_rwset,
 	.send_rwset_and_wait = rx_send_rwset_and_wait
 };

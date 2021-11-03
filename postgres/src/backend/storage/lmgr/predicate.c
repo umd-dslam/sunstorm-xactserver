@@ -2578,6 +2578,8 @@ PredicateLockRelation(Relation relation, Snapshot snapshot)
 										relation->rd_node.dbNode,
 										relation->rd_id);
 	PredicateLockAcquire(&tag);
+
+	GetRemoteXactHook()->collect_seq_scan_rel_id(relation);
 }
 
 /*
@@ -2602,6 +2604,8 @@ PredicateLockPage(Relation relation, BlockNumber blkno, Snapshot snapshot)
 									relation->rd_id,
 									blkno);
 	PredicateLockAcquire(&tag);
+
+	GetRemoteXactHook()->collect_index_scan_page_id(relation, blkno);
 }
 
 /*
