@@ -27,7 +27,7 @@ pub struct PgWatcher {
 impl PgWatcher {
     pub fn new(addr: &str, local_log_chan: mpsc::Sender<Bytes>) -> PgWatcher {
         PgWatcher {
-            addr: String::from(addr),
+            addr: addr.to_owned(),
             local_log_chan,
         }
     }
@@ -35,14 +35,14 @@ impl PgWatcher {
     pub fn thread_main(&self) -> anyhow::Result<()> {
         let listener = TcpListener::bind(&self.addr).context("failed to start postgres watcher")?;
 
-        info!("watching postgres at {}", self.addr);
+        info!("watching postgres on {}", self.addr);
 
         let mut join_handles = Vec::new();
         for stream in listener.incoming() {
             let stream = match stream {
                 Ok(stream) => stream,
                 Err(e) => {
-                    error!("failed to establish a new postgres connection: {:#}", e);
+                    error!("failed to establish a new postgres connection: {}", e);
                     continue;
                 }
             };
@@ -57,8 +57,8 @@ impl PgWatcher {
                     let pg_backend =
                         PostgresBackend::new(stream, AuthType::Trust, None, true).unwrap();
 
-                    if let Err(err) = pg_backend.run(&mut handler) {
-                        error!("postgres backend exited with error: {:#}", err);
+                    if let Err(e) = pg_backend.run(&mut handler) {
+                        error!("postgres backend exited with error: {}", e);
                     }
                 })
                 .unwrap();
@@ -66,7 +66,7 @@ impl PgWatcher {
             join_handles.push(handle);
         }
 
-        for handle in join_handles.into_iter() {
+        for handle in join_handles {
             handle.join().unwrap();
         }
 

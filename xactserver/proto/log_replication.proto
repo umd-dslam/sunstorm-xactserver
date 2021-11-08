@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package xactserver;
+
+service LogReplication {
+  rpc Subscribe(Subscription) returns (stream LogEntry) {}
+}
+
+message Subscription {
+}
+
+message LogEntry {
+  bytes data = 1;
+}
