@@ -20,7 +20,7 @@ default_collect_seq_scan_rel_id(Relation relation)
 {
 }
 
-static void 
+static void
 default_collect_index_scan_page_id(Relation relation, BlockNumber blkno)
 {
 }
