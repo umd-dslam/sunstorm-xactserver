@@ -9,4 +9,5 @@ bytes = { version = "1.0.1", features = ['serde'] }
 clap = "2.33.0"
 env_logger = "0.9.0"
 log = "0.4.14"
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "sync"] }
 zenith_utils = { git = "https://github.com/zenithdb/zenith.git", package = "zenith_utils" }
