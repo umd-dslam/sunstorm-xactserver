@@ -16,7 +16,7 @@ use proto::{LogEntry, Subscription};
 /// A `LocalLogManager` receives transactions from the postgres backends in the [`PgWatcher`]
 /// and appends them to the local log. It also exposes a subscription server to which other
 /// peer servers can subscribe for the log.
-/// 
+///
 /// [`PgWatcher`]: crate::PgWatcher
 ///
 pub struct LocalLogManager {
@@ -86,10 +86,10 @@ impl LocalLogManager {
         &self,
         xact_log_appended: watch::Receiver<i32>,
     ) -> JoinHandle<anyhow::Result<()>> {
-        let svc = LogReplicationServer::new(LogReplicationHandler::new(
-            Arc::clone(&self.xact_log),
+        let svc = LogReplicationServer::new(LogReplicationHandler {
+            xact_log: Arc::clone(&self.xact_log),
             xact_log_appended,
-        ));
+        });
         let addr = self.addr.clone();
 
         tokio::spawn(async move {
@@ -109,16 +109,6 @@ struct LogReplicationHandler {
 }
 
 impl LogReplicationHandler {
-    fn new(
-        xact_log: Arc<RwLock<XactLog>>,
-        xact_log_appended: watch::Receiver<i32>,
-    ) -> LogReplicationHandler {
-        LogReplicationHandler {
-            xact_log,
-            xact_log_appended,
-        }
-    }
-
     // This function runs in a dedicated asynchronous task. Whenever a new log entry is appended
     // to the local log, the log management task sends a signal to this task, upon which this task
     // wakes up and streams new log entries to the remote subscribers.

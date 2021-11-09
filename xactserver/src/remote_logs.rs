@@ -69,7 +69,7 @@ impl RemoteLogsManager {
                         }
                     }
                 }
-                
+
                 sleep(Duration::from_secs(1)).await;
             }
         })
