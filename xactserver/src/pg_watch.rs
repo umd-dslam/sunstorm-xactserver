@@ -33,8 +33,7 @@ impl PgWatcher {
     }
 
     pub fn thread_main(&self) -> anyhow::Result<()> {
-        let listener =
-            TcpListener::bind(&self.addr).with_context(|| "failed to start postgres watcher")?;
+        let listener = TcpListener::bind(&self.addr).context("failed to start postgres watcher")?;
 
         info!("watching postgres at {}", self.addr);
 
@@ -54,7 +53,7 @@ impl PgWatcher {
             // Create a new postgres backend for each new connection from postgres
             let handle = std::thread::Builder::new()
                 .spawn(move || {
-                    let mut handler = PgWatcherHandler::new(local_log_chan);
+                    let mut handler = PgWatcherHandler { local_log_chan };
                     let pg_backend =
                         PostgresBackend::new(stream, AuthType::Trust, None, true).unwrap();
 
@@ -77,12 +76,6 @@ impl PgWatcher {
 
 struct PgWatcherHandler {
     local_log_chan: mpsc::Sender<Bytes>,
-}
-
-impl PgWatcherHandler {
-    fn new(local_log_chan: mpsc::Sender<Bytes>) -> PgWatcherHandler {
-        PgWatcherHandler { local_log_chan }
-    }
 }
 
 impl postgres_backend::Handler for PgWatcherHandler {
