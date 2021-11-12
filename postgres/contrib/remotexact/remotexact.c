@@ -6,12 +6,16 @@
 #include "fmgr.h"
 #include "libpq-fe.h"
 #include "libpq/pqformat.h"
+#include "utils/guc.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
 
 PG_MODULE_MAGIC;
 
 void		_PG_init(void);
+
+/* GUCs */
+char	   *xactserver_connstring;
 
 typedef struct
 {
@@ -66,14 +70,15 @@ rx_collect_read_tid(Relation relation, ItemPointer tid, TransactionId tuple_xid)
 }
 
 static void
-rx_collect_seq_scan_rel_id(Relation relation) {
-	StringInfo buf = NULL;
+rx_collect_seq_scan_rel_id(Relation relation)
+{
+	StringInfo	buf = NULL;
 
 	if (CurrentReadWriteSet == NULL)
 		init_read_write_set();
 
 	buf = &(CurrentReadWriteSet->buf);
-	
+
 	pq_sendint32(buf, relation->rd_node.dbNode);
 	pq_sendint32(buf, relation->rd_id);
 	pq_sendint32(buf, -1);
@@ -81,14 +86,15 @@ rx_collect_seq_scan_rel_id(Relation relation) {
 }
 
 static void
-rx_collect_index_scan_page_id(Relation relation, BlockNumber blkno) {
-	StringInfo buf = NULL;
+rx_collect_index_scan_page_id(Relation relation, BlockNumber blkno)
+{
+	StringInfo	buf = NULL;
 
 	if (CurrentReadWriteSet == NULL)
 		init_read_write_set();
 
 	buf = &(CurrentReadWriteSet->buf);
-	
+
 	pq_sendint32(buf, relation->rd_node.dbNode);
 	pq_sendint32(buf, relation->rd_id);
 	pq_sendint32(buf, blkno);
@@ -127,7 +133,7 @@ connect_to_txn_server(void)
 		return true;
 	}
 
-	XactServerConn = PQconnectdb("postgresql://localhost:8888");
+	XactServerConn = PQconnectdb(xactserver_connstring);
 
 	if (PQstatus(XactServerConn) == CONNECTION_BAD)
 	{
@@ -186,6 +192,19 @@ static const RemoteXactHook remote_xact_hook =
 void
 _PG_init(void)
 {
-	SetRemoteXactHook(&remote_xact_hook);
-	ereport(LOG, errmsg("[remotexact] initialized"));
+	DefineCustomStringVariable("remotexact.connstring",
+							   "connection string to the transaction server",
+							   NULL,
+							   &xactserver_connstring,
+							   "postgresql://127.0.0.1:10000",
+							   PGC_POSTMASTER,
+							   0,	/* no flags required */
+							   NULL, NULL, NULL);
+
+	if (xactserver_connstring && xactserver_connstring[0]) {
+		SetRemoteXactHook(&remote_xact_hook);
+
+		ereport(LOG, errmsg("[remotexact] initialized"));
+		ereport(LOG, errmsg("[remotexact] xactserver connection string \"%s\"", xactserver_connstring));
+	}
 }

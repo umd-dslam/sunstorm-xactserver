@@ -28,8 +28,8 @@ fn main() -> anyhow::Result<()> {
         )
         .get_matches();
 
-    let listen_pg = args.value_of("listen-pg").unwrap_or("127.0.0.1:8888");
-    let listen_peer = args.value_of("listen-peer").unwrap_or("127.0.0.1:10000");
+    let listen_pg = args.value_of("listen-pg").unwrap_or("127.0.0.1:10000");
+    let listen_peer = args.value_of("listen-peer").unwrap_or("127.0.0.1:23000");
     let peers = args.values_of("peers").unwrap_or_default().collect();
 
     // Create log managers
