@@ -1,8 +1,25 @@
 # Slogora
 
-To populate submodule after clone:
+## Run locally
+
+Run `make` to build.
+
+Start transaction server:
 
 ```
-git submodule init
-git submodule update
+$ target/debug/xactserver
+```
+
+Initialize the database:
+
+```
+$ export PGDATA=$HOME/data/postgresql
+$ mkdir -p $PGDATA
+$ tmp_install/bin/initdb
+```
+
+Start PostgreSQL:
+
+```
+$ postgres -c shared_preload_libraries=remotexact
 ```
