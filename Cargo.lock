@@ -812,9 +812,26 @@ dependencies = [
  "fallible-iterator",
  "futures",
  "log",
- "postgres-protocol",
+ "postgres-protocol 0.6.1 (git+https://github.com/zenithdb/rust-postgres.git?rev=9eb0dbfbeb6a6c1b79099b9f7ae4a8c021877858)",
  "tokio",
- "tokio-postgres",
+ "tokio-postgres 0.7.1 (git+https://github.com/zenithdb/rust-postgres.git?rev=9eb0dbfbeb6a6c1b79099b9f7ae4a8c021877858)",
+]
+
+[[package]]
+name = "postgres-protocol"
+version = "0.6.1"
+source = "git+https://github.com/zenithdb/rust-postgres.git?branch=replication#a0d067b66447951d1276a53fb09886539c3fa094"
+dependencies = [
+ "base64 0.13.0",
+ "byteorder",
+ "bytes",
+ "fallible-iterator",
+ "hmac",
+ "md-5",
+ "memchr",
+ "rand",
+ "sha2",
+ "stringprep",
 ]
 
 [[package]]
@@ -838,11 +855,21 @@ dependencies = [
 [[package]]
 name = "postgres-types"
 version = "0.2.1"
+source = "git+https://github.com/zenithdb/rust-postgres.git?branch=replication#a0d067b66447951d1276a53fb09886539c3fa094"
+dependencies = [
+ "bytes",
+ "fallible-iterator",
+ "postgres-protocol 0.6.1 (git+https://github.com/zenithdb/rust-postgres.git?branch=replication)",
+]
+
+[[package]]
+name = "postgres-types"
+version = "0.2.1"
 source = "git+https://github.com/zenithdb/rust-postgres.git?rev=9eb0dbfbeb6a6c1b79099b9f7ae4a8c021877858#9eb0dbfbeb6a6c1b79099b9f7ae4a8c021877858"
 dependencies = [
  "bytes",
  "fallible-iterator",
- "postgres-protocol",
+ "postgres-protocol 0.6.1 (git+https://github.com/zenithdb/rust-postgres.git?rev=9eb0dbfbeb6a6c1b79099b9f7ae4a8c021877858)",
 ]
 
 [[package]]
@@ -1362,6 +1389,28 @@ dependencies = [
 [[package]]
 name = "tokio-postgres"
 version = "0.7.1"
+source = "git+https://github.com/zenithdb/rust-postgres.git?branch=replication#a0d067b66447951d1276a53fb09886539c3fa094"
+dependencies = [
+ "async-trait",
+ "byteorder",
+ "bytes",
+ "fallible-iterator",
+ "futures",
+ "log",
+ "parking_lot",
+ "percent-encoding",
+ "phf",
+ "pin-project-lite",
+ "postgres-protocol 0.6.1 (git+https://github.com/zenithdb/rust-postgres.git?branch=replication)",
+ "postgres-types 0.2.1 (git+https://github.com/zenithdb/rust-postgres.git?branch=replication)",
+ "socket2",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "tokio-postgres"
+version = "0.7.1"
 source = "git+https://github.com/zenithdb/rust-postgres.git?rev=9eb0dbfbeb6a6c1b79099b9f7ae4a8c021877858#9eb0dbfbeb6a6c1b79099b9f7ae4a8c021877858"
 dependencies = [
  "async-trait",
@@ -1374,8 +1423,8 @@ dependencies = [
  "percent-encoding",
  "phf",
  "pin-project-lite",
- "postgres-protocol",
- "postgres-types",
+ "postgres-protocol 0.6.1 (git+https://github.com/zenithdb/rust-postgres.git?rev=9eb0dbfbeb6a6c1b79099b9f7ae4a8c021877858)",
+ "postgres-types 0.2.1 (git+https://github.com/zenithdb/rust-postgres.git?rev=9eb0dbfbeb6a6c1b79099b9f7ae4a8c021877858)",
  "socket2",
  "tokio",
  "tokio-util",
@@ -1792,6 +1841,7 @@ dependencies = [
  "log",
  "prost",
  "tokio",
+ "tokio-postgres 0.7.1 (git+https://github.com/zenithdb/rust-postgres.git?branch=replication)",
  "tokio-stream",
  "tonic",
  "tonic-build",

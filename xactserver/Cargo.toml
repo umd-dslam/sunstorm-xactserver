@@ -15,6 +15,7 @@ tonic = "0.6"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "sync"] }
 tokio-stream = "0.1"
 zenith_utils = { git = "https://github.com/zenithdb/zenith.git", package = "zenith_utils" }
+tokio_postgres = { git = "https://github.com/zenithdb/rust-postgres.git", branch = "replication", package = "tokio-postgres" }
 
 [build-dependencies]
 tonic-build = "0.6"

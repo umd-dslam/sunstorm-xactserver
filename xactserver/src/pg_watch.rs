@@ -10,6 +10,7 @@ use std::net::TcpListener;
 use tokio::sync::mpsc;
 use zenith_utils::postgres_backend::{self, AuthType, PostgresBackend};
 use zenith_utils::pq_proto::{BeMessage, FeMessage};
+// use mliu_postgres::{Client, NoTls};
 
 /// A `PgWatcher` listens for new connections from a postgres instance. For each
 /// new connection, a [`PostgresBackend`] is created in a new thread. This postgres
@@ -96,7 +97,7 @@ impl postgres_backend::Handler for PgWatcherHandler {
                         if let FeMessage::CopyData(buf) = message {
                             // Pass the transaction buffer to the local log manager.
                             // This is a blocking send because we're not inside an
-                            // asynchronous environment
+                            // asynchronous environment\
                             self.local_log_chan.blocking_send(buf)?;
                         } else {
                             continue;

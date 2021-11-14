@@ -115,6 +115,7 @@
 #include "postmaster/pgarch.h"
 #include "postmaster/postmaster.h"
 #include "postmaster/syslogger.h"
+#include "postmaster/remoteworker.h"
 #include "replication/logicallauncher.h"
 #include "replication/walsender.h"
 #include "storage/fd.h"
@@ -2182,6 +2183,12 @@ retry1:
 									valptr),
 							 errhint("Valid values are: \"false\", 0, \"true\", 1, \"database\".")));
 			}
+			else if (strncmp(nameptr, "remote", 6) == 0)
+			{
+				/* Remote Transaction Connection */
+				ereport(LOG, (errmsg("##remote: Wow a remote transaction connection!")));
+				am_remoteworker = true;
+			}
 			else if (strncmp(nameptr, "_pq_.", 5) == 0)
 			{
 				/*
@@ -2213,6 +2220,13 @@ retry1:
 					pg_clean_ascii(tmp_app_name);
 
 					port->application_name = tmp_app_name;
+
+					if (strncmp(valptr, "#remotexact", 11) == 0)
+					{
+						/* Remote Transaction Connection */
+						ereport(LOG, (errmsg("# Wow a remote transaction connection!")));
+						am_remoteworker = true;
+					}
 				}
 			}
 			offset = valoffset + strlen(valptr) + 1;
@@ -2288,9 +2302,12 @@ retry1:
 	 * can make sense to first make a basebackup and then stream changes
 	 * starting from that.
 	 */
+	/* A Remote Worker does not need database name */
 	if (am_walsender && !am_db_walsender)
 		port->database_name[0] = '\0';
-
+	// if (am_remoteworker)
+	// 	port->database_name[0] = '\0';
+		
 	/*
 	 * Done putting stuff in TopMemoryContext.
 	 */
