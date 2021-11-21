@@ -1,3 +1,5 @@
+use crate::transaction::Transaction;
+
 use bytes::Bytes;
 use log::{error, info};
 use std::sync::{Arc, RwLock};
@@ -70,12 +72,19 @@ impl LocalLogManager {
 
         tokio::spawn(async move {
             // Continuously listen for new transactions from the postgres watcher
-            while let Some(buf) = pg_chan.recv().await {
+            while let Some(mut buf) = pg_chan.recv().await {
                 let mut xact_log = xact_log.write().unwrap();
 
                 xact_log.append(buf.to_vec());
+                
+                // TODO: This is temporary for testing
+                match Transaction::parse(&mut buf) {
+                    Ok(xact) => info!("received\n{:#?}", xact),
+                    Err(e) => error!("parsing error: {:?}", e),
+                }
 
                 // Notify all replication tasks about the new transaction
+                // TODO: send a more meaningful value
                 xact_log_appended.send(1)?
             }
             Ok(())

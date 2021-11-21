@@ -2076,7 +2076,7 @@ CommitTransaction(void)
 	TransactionState s = CurrentTransactionState;
 	TransactionId latestXid;
 	bool		is_parallel_worker;
-	RemoteXactHook *remote_xact = GetRemoteXactHook();
+	const RemoteXactHook *remote_xact = GetRemoteXactHook();
 
 	is_parallel_worker = (s->blockState == TBLOCK_PARALLEL_INPROGRESS);
 
@@ -2095,7 +2095,9 @@ CommitTransaction(void)
 	Assert(s->parent == NULL);
 
 	remote_xact->send_rwset_and_wait();
-	remote_xact->clear_rwset();
+
+	/* Clean up remote xact data */
+	AtEOXact_RemoteXact();
 
 	/*
 	 * Do pre-commit processing that involves calling user-defined code, such
@@ -2612,7 +2614,8 @@ AbortTransaction(void)
 	/* Prevent cancel/die interrupt while cleaning up */
 	HOLD_INTERRUPTS();
 
-	GetRemoteXactHook()->clear_rwset();
+	/* Clean up remote xact data */
+	AtEOXact_RemoteXact();
 
 	/* Make sure we have a valid memory context and resource owner */
 	AtAbort_Memory();

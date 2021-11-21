@@ -6,7 +6,9 @@
 #include "fmgr.h"
 #include "libpq-fe.h"
 #include "libpq/pqformat.h"
+#include "storage/predicate.h"
 #include "utils/guc.h"
+#include "utils/hsearch.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
 
@@ -15,41 +17,92 @@ PG_MODULE_MAGIC;
 void		_PG_init(void);
 
 /* GUCs */
-char	   *xactserver_connstring;
+char	   *remotexact_connstring;
 
-typedef struct
+typedef struct RWSetHeader
 {
-	MemoryContext memctx;
-	StringInfoData buf;
-} RWSetData;
+	Oid			dbid;
+	TransactionId xid;
+} RWSetHeader;
 
-typedef RWSetData *RWSet;
+typedef struct RWSetReadRelationKey
+{
+	Oid			relid;
+} RWSetReadRelationKey;
 
-RWSet		CurrentReadWriteSet = NULL;
+typedef struct RWSetReadRelation
+{
+	RWSetReadRelationKey key;
+
+	bool		is_index;
+	int			csn;
+	int			nitems;
+	StringInfoData pages;
+	StringInfoData tuples;
+} RWSetReadRelation;
+
+typedef struct RWSet
+{
+	MemoryContext context;
+
+	RWSetHeader header;
+	HTAB	   *readRelations;
+} RWSet;
+
+typedef RWSet *RWSetPtr;
+
+RWSetPtr	CurrentReadWriteSet = NULL;
 PGconn	   *XactServerConn;
 bool		Connected = false;
+
+static void init_read_write_set(void);
+
+static void rx_collect_read_tuple(Relation relation, ItemPointer tid, TransactionId tuple_xid);
+static void rx_collect_seq_scan_relation(Relation relation);
+static void rx_collect_index_scan_page(Relation relation, BlockNumber blkno);
+static void rx_clear_rwset(void);
+static void rx_send_rwset_and_wait(void);
+
+static RWSetReadRelation *get_read_relation(Oid relid);
+static bool connect_to_txn_server(void);
 
 static void
 init_read_write_set(void)
 {
-	MemoryContext oldcontext;
+	MemoryContext old_context;
+	HASHCTL		hash_ctl;
 
 	Assert(!CurrentReadWriteSet);
 	Assert(MemoryContextIsValid(TopTransactionContext));
 
-	oldcontext = MemoryContextSwitchTo(TopTransactionContext);
+	old_context = MemoryContextSwitchTo(TopTransactionContext);
 
-	CurrentReadWriteSet = (RWSet) palloc(sizeof(RWSetData));
-	CurrentReadWriteSet->memctx = TopTransactionContext;
-	initStringInfo(&(CurrentReadWriteSet->buf));
+	CurrentReadWriteSet = (RWSetPtr) palloc(sizeof(RWSet));
+	CurrentReadWriteSet->context = TopTransactionContext;
 
-	MemoryContextSwitchTo(oldcontext);
+	CurrentReadWriteSet->header.dbid = 0;
+	CurrentReadWriteSet->header.xid = InvalidTransactionId;
+
+	hash_ctl.hcxt = CurrentReadWriteSet->context;
+	hash_ctl.keysize = sizeof(RWSetReadRelationKey);
+	hash_ctl.entrysize = sizeof(RWSetReadRelation);
+	CurrentReadWriteSet->readRelations = hash_create("read relations",
+													 max_predicate_locks_per_xact,
+													 &hash_ctl,
+													 HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+
+	MemoryContextSwitchTo(old_context);
 }
 
 static void
-rx_collect_read_tid(Relation relation, ItemPointer tid, TransactionId tuple_xid)
+rx_collect_read_tuple(Relation relation, ItemPointer tid, TransactionId tuple_xid)
 {
+	RWSetReadRelation *read_relation;
 	StringInfo	buf = NULL;
+
+	/*
+	 * TODO: Assert the type of current relation. Do the same with other rx_collect_* functions
+	 */
 
 	/*
 	 * Ignore current tuple if this relation is an index or current xact wrote
@@ -61,55 +114,153 @@ rx_collect_read_tid(Relation relation, ItemPointer tid, TransactionId tuple_xid)
 	if (CurrentReadWriteSet == NULL)
 		init_read_write_set();
 
-	buf = &(CurrentReadWriteSet->buf);
+	/* TODO: can dbid change across statements? */
+	CurrentReadWriteSet->header.dbid = relation->rd_node.dbNode;
 
-	pq_sendint32(buf, relation->rd_node.dbNode);
-	pq_sendint32(buf, relation->rd_id);
+	read_relation = get_read_relation(relation->rd_id);
+	read_relation->is_index = false;
+	read_relation->nitems++;
+
+	buf = &read_relation->tuples;
 	pq_sendint32(buf, ItemPointerGetBlockNumber(tid));
 	pq_sendint16(buf, ItemPointerGetOffsetNumber(tid));
 }
 
 static void
-rx_collect_seq_scan_rel_id(Relation relation)
+rx_collect_seq_scan_relation(Relation relation)
 {
-	StringInfo	buf = NULL;
+	RWSetReadRelation *read_relation;
 
 	if (CurrentReadWriteSet == NULL)
 		init_read_write_set();
 
-	buf = &(CurrentReadWriteSet->buf);
+	CurrentReadWriteSet->header.dbid = relation->rd_node.dbNode;
 
-	pq_sendint32(buf, relation->rd_node.dbNode);
-	pq_sendint32(buf, relation->rd_id);
-	pq_sendint32(buf, -1);
-	pq_sendint16(buf, -1);
+	read_relation = get_read_relation(relation->rd_id);
+	read_relation->is_index = false;
+
+	/* TODO: change this after CSN is introduced */
+	read_relation->csn = 1;
 }
 
 static void
-rx_collect_index_scan_page_id(Relation relation, BlockNumber blkno)
+rx_collect_index_scan_page(Relation relation, BlockNumber blkno)
 {
+	RWSetReadRelation *read_relation;
 	StringInfo	buf = NULL;
 
 	if (CurrentReadWriteSet == NULL)
 		init_read_write_set();
 
-	buf = &(CurrentReadWriteSet->buf);
+	CurrentReadWriteSet->header.dbid = relation->rd_node.dbNode;
 
-	pq_sendint32(buf, relation->rd_node.dbNode);
-	pq_sendint32(buf, relation->rd_id);
+	read_relation = get_read_relation(relation->rd_id);
+	read_relation->is_index = true;
+	read_relation->nitems++;
+
+	buf = &read_relation->pages;
 	pq_sendint32(buf, blkno);
-	pq_sendint16(buf, -1);
+	pq_sendint32(buf, 1); /* TODO: change this after CSN is introduced */
 }
 
 static void
 rx_clear_rwset(void)
 {
+	CurrentReadWriteSet = NULL;
+}
+
+static void
+rx_send_rwset_and_wait(void)
+{
+	RWSetHeader *header;
+	RWSetReadRelation *read_relation;
+	HASH_SEQ_STATUS status;
+	int			readLen = 0;
+	StringInfo	items = NULL;
+	StringInfoData buf;
+
 	if (CurrentReadWriteSet == NULL)
 		return;
 
-	pfree(CurrentReadWriteSet->buf.data);
-	pfree(CurrentReadWriteSet);
-	CurrentReadWriteSet = NULL;
+	if (!connect_to_txn_server())
+		return;
+
+	initStringInfo(&buf);
+
+	/* Assemble the header */
+	header = &CurrentReadWriteSet->header;
+	pq_sendint32(&buf, header->dbid);
+	pq_sendint32(&buf, header->xid);
+
+	/* Cursor now points to where the read section length is stored */
+	buf.cursor = buf.len;
+	/* Read section length will be updated later */
+	pq_sendint32(&buf, 0);
+
+	/* Assemble the read set */
+	hash_seq_init(&status, CurrentReadWriteSet->readRelations);
+	while ((read_relation = (RWSetReadRelation *) hash_seq_search(&status)) != NULL)
+	{
+		readLen -= buf.len;
+
+		if (read_relation->is_index)
+		{
+			pq_sendbyte(&buf, 'I');
+			pq_sendint32(&buf, read_relation->key.relid);
+			pq_sendint32(&buf, read_relation->nitems);
+			items = &read_relation->pages;
+		}
+		else
+		{
+			pq_sendbyte(&buf, 'T');
+			pq_sendint32(&buf, read_relation->key.relid);
+			pq_sendint32(&buf, read_relation->nitems);
+			pq_sendint32(&buf, read_relation->csn);
+			items = &read_relation->tuples;
+		}
+
+		pq_sendbytes(&buf, items->data, items->len);
+		readLen += buf.len;
+	}
+
+	/* Update read section length in the buffer */
+	*(int *) (buf.data + buf.cursor) = pg_hton32(readLen);
+
+	/* Send the buffer to the xact server */
+	if (PQputCopyData(XactServerConn, buf.data, buf.len) <= 0 || PQflush(XactServerConn))
+	{
+		ereport(WARNING, errmsg("[remotexact] failed to send read/write set"));
+	}
+}
+
+static RWSetReadRelation *
+get_read_relation(Oid relid)
+{
+	RWSetReadRelationKey key;
+	RWSetReadRelation *relation;
+	bool		found;
+	MemoryContext old_context;
+
+	Assert(CurrentReadWriteSet);
+
+	key.relid = relid;
+
+	relation = (RWSetReadRelation *) hash_search(CurrentReadWriteSet->readRelations,
+												 &key, HASH_ENTER, &found);
+	/* Initialize a new relation entry if not found */
+	if (!found)
+	{
+		old_context = MemoryContextSwitchTo(CurrentReadWriteSet->context);
+
+		relation->nitems = 0;
+		relation->csn = 0;
+		relation->is_index = false;
+		initStringInfo(&relation->pages);
+		initStringInfo(&relation->tuples);
+
+		MemoryContextSwitchTo(old_context);
+	}
+	return relation;
 }
 
 static bool
@@ -133,7 +284,7 @@ connect_to_txn_server(void)
 		return true;
 	}
 
-	XactServerConn = PQconnectdb(xactserver_connstring);
+	XactServerConn = PQconnectdb(remotexact_connstring);
 
 	if (PQstatus(XactServerConn) == CONNECTION_BAD)
 	{
@@ -146,6 +297,7 @@ connect_to_txn_server(void)
 		return Connected;
 	}
 
+	/* TODO: send a more useful starting message */
 	res = PQexec(XactServerConn, "start");
 	if (PQresultStatus(res) != PGRES_COPY_BOTH)
 	{
@@ -161,30 +313,11 @@ connect_to_txn_server(void)
 	return Connected;
 }
 
-static void
-rx_send_rwset_and_wait(void)
-{
-	StringInfo	buf;
-
-	if (CurrentReadWriteSet == NULL)
-		return;
-
-	if (!connect_to_txn_server())
-		return;
-
-	buf = &CurrentReadWriteSet->buf;
-
-	if (PQputCopyData(XactServerConn, buf->data, buf->len) <= 0 || PQflush(XactServerConn))
-	{
-		ereport(WARNING, errmsg("[remotexact] failed to send read/write set"));
-	}
-}
-
 static const RemoteXactHook remote_xact_hook =
 {
-	.collect_read_tid = rx_collect_read_tid,
-	.collect_seq_scan_rel_id = rx_collect_seq_scan_rel_id,
-	.collect_index_scan_page_id = rx_collect_index_scan_page_id,
+	.collect_read_tuple = rx_collect_read_tuple,
+	.collect_seq_scan_relation = rx_collect_seq_scan_relation,
+	.collect_index_scan_page = rx_collect_index_scan_page,
 	.clear_rwset = rx_clear_rwset,
 	.send_rwset_and_wait = rx_send_rwset_and_wait
 };
@@ -195,16 +328,17 @@ _PG_init(void)
 	DefineCustomStringVariable("remotexact.connstring",
 							   "connection string to the transaction server",
 							   NULL,
-							   &xactserver_connstring,
+							   &remotexact_connstring,
 							   "postgresql://127.0.0.1:10000",
 							   PGC_POSTMASTER,
 							   0,	/* no flags required */
 							   NULL, NULL, NULL);
 
-	if (xactserver_connstring && xactserver_connstring[0]) {
+	if (remotexact_connstring && remotexact_connstring[0])
+	{
 		SetRemoteXactHook(&remote_xact_hook);
 
 		ereport(LOG, errmsg("[remotexact] initialized"));
-		ereport(LOG, errmsg("[remotexact] xactserver connection string \"%s\"", xactserver_connstring));
+		ereport(LOG, errmsg("[remotexact] xactserver connection string \"%s\"", remotexact_connstring));
 	}
 }
