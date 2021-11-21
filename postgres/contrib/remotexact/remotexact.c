@@ -192,7 +192,7 @@ rx_send_rwset_and_wait(void)
 	pq_sendint32(&buf, header->dbid);
 	pq_sendint32(&buf, header->xid);
 
-	/* Cursor now points to where the read section length is stored */
+	/* Cursor now points to where the length of the read section is stored */
 	buf.cursor = buf.len;
 	/* Read section length will be updated later */
 	pq_sendint32(&buf, 0);
@@ -220,13 +220,14 @@ rx_send_rwset_and_wait(void)
 		}
 
 		pq_sendbytes(&buf, items->data, items->len);
+
 		readLen += buf.len;
 	}
 
-	/* Update read section length in the buffer */
+	/* Update the length of the read section */
 	*(int *) (buf.data + buf.cursor) = pg_hton32(readLen);
 
-	/* Send the buffer to the xact server */
+	/* Actually send the buffer to the xact server */
 	if (PQputCopyData(XactServerConn, buf.data, buf.len) <= 0 || PQflush(XactServerConn))
 	{
 		ereport(WARNING, errmsg("[remotexact] failed to send read/write set"));
