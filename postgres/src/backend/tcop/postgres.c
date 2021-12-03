@@ -60,7 +60,6 @@
 #include "postmaster/autovacuum.h"
 #include "postmaster/interrupt.h"
 #include "postmaster/postmaster.h"
-#include "postmaster/remoteworker.h"
 #include "replication/logicallauncher.h"
 #include "replication/logicalworker.h"
 #include "replication/slot.h"
@@ -3991,9 +3990,6 @@ PostgresMain(int argc, char *argv[],
 	 */
 	if (am_walsender)
 		WalSndSignals();
-	// else if (am_remoteworker)
-	// 	// RmtWkrSignals();
-	// 	;
 	else
 	{
 		pqsignal(SIGHUP, SignalHandlerForConfigReload);
@@ -4115,8 +4111,6 @@ PostgresMain(int argc, char *argv[],
 	/* Perform initialization specific to a WAL sender process. */
 	if (am_walsender)
 		InitWalSender();
-	else if (am_remoteworker)
-		InitRemoteWorker();
 
 	/*
 	 * process any libraries that should be preloaded at backend start (this
@@ -4245,8 +4239,6 @@ PostgresMain(int argc, char *argv[],
 
 		if (am_walsender)
 			WalSndErrorCleanup();
-		if (am_remoteworker)
-			// RmtWkrErrorCleanup();
 
 		PortalErrorCleanup();
 		SPICleanup();
@@ -4488,12 +4480,6 @@ PostgresMain(int argc, char *argv[],
 					if (am_walsender)
 					{
 						if (!exec_replication_command(query_string))
-							exec_simple_query(query_string);
-					}
-					else if (am_remoteworker)
-					{
-						ereport(LOG, (errmsg("## MLIU remote worker received a command")));
-						if (!exec_remoteworker_command(query_string))
 							exec_simple_query(query_string);
 					}
 					else
