@@ -27,7 +27,7 @@ impl PgDispatcher {
             // Continuously listen for new tuple data from the postgres watcher
             while let Some(mut buf) = txn_rx.recv().await {
                 let ip_port: Vec<&str> = self.addr.split(":").collect();
-                let conn_str = format!("host={} port={} user=postgres application_name=#remotexact", ip_port[0], ip_port[1]);
+                let conn_str = format!("host={} port={} user=postgres application_name=xactserver", ip_port[0], ip_port[1]);
                 
                 println!("connecting to local pg, conn_str: {}", conn_str);
                 let (client, conn) = connect(&conn_str, NoTls).await.unwrap();
