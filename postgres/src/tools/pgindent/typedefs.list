@@ -2097,7 +2097,10 @@ RTEKind
 RWConflict
 RWConflictPoolHeader
 RWSet
-RWSetData
+RWSetPtr
+RWSetHeader
+RWSetReadRelation
+RWSetReadRelationKey
 RandomState
 Range
 RangeBound
