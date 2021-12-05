@@ -2579,7 +2579,7 @@ PredicateLockRelation(Relation relation, Snapshot snapshot)
 										relation->rd_id);
 	PredicateLockAcquire(&tag);
 
-	GetRemoteXactHook()->collect_seq_scan_rel_id(relation);
+	GetRemoteXactHook()->collect_seq_scan_relation(relation);
 }
 
 /*
@@ -2605,7 +2605,7 @@ PredicateLockPage(Relation relation, BlockNumber blkno, Snapshot snapshot)
 									blkno);
 	PredicateLockAcquire(&tag);
 
-	GetRemoteXactHook()->collect_index_scan_page_id(relation, blkno);
+	GetRemoteXactHook()->collect_index_scan_page(relation, blkno);
 }
 
 /*
@@ -2653,7 +2653,7 @@ PredicateLockTID(Relation relation, ItemPointer tid, Snapshot snapshot,
 									 ItemPointerGetOffsetNumber(tid));
 	PredicateLockAcquire(&tag);
 
-	GetRemoteXactHook()->collect_read_tid(relation, tid, tuple_xid);
+	GetRemoteXactHook()->collect_read_tuple(relation, tid, tuple_xid);
 }
 
 

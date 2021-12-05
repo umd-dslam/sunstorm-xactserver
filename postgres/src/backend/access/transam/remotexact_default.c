@@ -11,17 +11,17 @@
 #include "access/remotexact.h"
 
 static void
-default_collect_read_tid(Relation relation, ItemPointer tid, TransactionId tuple_xid)
+default_collect_read_tuple(Relation relation, ItemPointer tid, TransactionId tuple_xid)
 {
 }
 
 static void
-default_collect_seq_scan_rel_id(Relation relation)
+default_collect_seq_scan_relation(Relation relation)
 {
 }
 
 static void
-default_collect_index_scan_page_id(Relation relation, BlockNumber blkno)
+default_collect_index_scan_page(Relation relation, BlockNumber blkno)
 {
 }
 
@@ -36,14 +36,14 @@ default_send_rwset_and_wait(void)
 }
 
 static const RemoteXactHook default_hook = {
-	.collect_read_tid = default_collect_read_tid,
-	.collect_seq_scan_rel_id = default_collect_seq_scan_rel_id,
-	.collect_index_scan_page_id = default_collect_index_scan_page_id,
+	.collect_read_tuple = default_collect_read_tuple,
+	.collect_seq_scan_relation = default_collect_seq_scan_relation,
+	.collect_index_scan_page = default_collect_index_scan_page,
 	.clear_rwset = default_clear_rwset,
 	.send_rwset_and_wait = default_send_rwset_and_wait
 };
 
-static RemoteXactHook *remote_xact_hook = &default_hook;
+static const RemoteXactHook *remote_xact_hook = &default_hook;
 
 void
 SetRemoteXactHook(const RemoteXactHook *hook)
@@ -52,8 +52,14 @@ SetRemoteXactHook(const RemoteXactHook *hook)
 	remote_xact_hook = hook;
 }
 
-RemoteXactHook *
+const RemoteXactHook *
 GetRemoteXactHook(void)
 {
 	return remote_xact_hook;
+}
+
+void
+AtEOXact_RemoteXact(void)
+{
+	remote_xact_hook->clear_rwset();
 }
