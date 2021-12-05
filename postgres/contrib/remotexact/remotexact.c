@@ -11,6 +11,7 @@
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
 #include "utils/rel.h"
+#include "miscadmin.h"
 
 PG_MODULE_MAGIC;
 
@@ -326,6 +327,9 @@ static const RemoteXactHook remote_xact_hook =
 void
 _PG_init(void)
 {
+	if (!process_shared_preload_libraries_in_progress)
+ 		return;
+
 	DefineCustomStringVariable("remotexact.connstring",
 							   "connection string to the transaction server",
 							   NULL,
