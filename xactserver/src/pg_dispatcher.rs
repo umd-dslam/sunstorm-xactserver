@@ -15,8 +15,6 @@ impl PgDispatcher {
     }
 
     pub fn thread_main(&self, txn_rx: mpsc::Receiver<Bytes>) -> anyhow::Result<()> {
-        // obviously wrong cannot make a connection as soon as xactserver starts this thread
-        // must wait till first remote txn comes in
         let rt = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .enable_all()
