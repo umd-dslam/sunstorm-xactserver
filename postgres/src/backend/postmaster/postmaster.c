@@ -115,7 +115,6 @@
 #include "postmaster/pgarch.h"
 #include "postmaster/postmaster.h"
 #include "postmaster/syslogger.h"
-#include "postmaster/remoteworker.h"
 #include "replication/logicallauncher.h"
 #include "replication/walsender.h"
 #include "storage/fd.h"
@@ -2291,7 +2290,7 @@ retry1:
 	 */
 	if (am_walsender && !am_db_walsender)
 		port->database_name[0] = '\0';
-		
+
 	/*
 	 * Done putting stuff in TopMemoryContext.
 	 */

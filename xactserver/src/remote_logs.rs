@@ -68,7 +68,9 @@ impl RemoteLogsManager {
                         while let Ok(Some(log_entry)) = stream.message().await {
                             let mut data = Bytes::from(log_entry.data);
 
-                            txn_tx.send(data.clone()).await.unwrap();
+                            if let Err(e) = txn_tx.send(data.clone()).await {
+                                error!("send remote log entry to pg_dispatcher failed with: {}", e);
+                            }
 
                             while let Some(tup) = get_tuple(&mut data) {
                                 println!("{:?}", tup);

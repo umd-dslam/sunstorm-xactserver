@@ -96,7 +96,7 @@ impl postgres_backend::Handler for PgWatcherHandler {
                         if let FeMessage::CopyData(buf) = message {
                             // Pass the transaction buffer to the local log manager.
                             // This is a blocking send because we're not inside an
-                            // asynchronous environment\
+                            // asynchronous environment
                             self.local_log_chan.blocking_send(buf)?;
                         } else {
                             continue;

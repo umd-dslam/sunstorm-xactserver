@@ -1,6 +1,7 @@
 use tokio_postgres::{connect, NoTls};
 use tokio::sync::mpsc;
 use bytes::{Buf, Bytes};
+use log::{error};
 
 pub struct PgDispatcher {
     addr: String,
@@ -24,19 +25,21 @@ impl PgDispatcher {
 
         rt.block_on(async move {
             let mut txn_rx = txn_rx;
-            // Continuously listen for new tuple data from the postgres watcher
+            // Continuously listen for new tuple data from the remote log manager
             while let Some(mut buf) = txn_rx.recv().await {
                 let ip_port: Vec<&str> = self.addr.split(":").collect();
                 let conn_str = format!("host={} port={} user=postgres application_name=xactserver", ip_port[0], ip_port[1]);
                 
                 println!("connecting to local pg, conn_str: {}", conn_str);
+
+                // TODO(mliu) should only connect once and retry if the connection is broken
                 let (client, conn) = connect(&conn_str, NoTls).await.unwrap();
 
                 // The connection object performs the actual communication with the database,
                 // so spawn it off to run on its own.
                 tokio::spawn(async move {
                     if let Err(e) = conn.await {
-                        eprintln!("connection error: {}", e);
+                        error!("connection error: {}", e);
                     }
                 });
 
@@ -45,13 +48,13 @@ impl PgDispatcher {
                 // Copy buf to a new vec<u8> because tokio_postgres does not 
                 // know how to convert bytes::Bytes to postgres type
                 let mut txn_data: Vec<u8> = Vec::new();
-                while buf.has_remaining() {
-                    txn_data.push(buf.get_u8());
-                }
+                txn_data.resize(buf.len(), 0);
+                buf.copy_to_slice(&mut txn_data);
 
-                // Create extension remotexact if not already created
-                client.execute("CREATE EXTENSION IF NOT EXISTS remotexact", &[]).await.unwrap();
-                client.query("SELECT print_bytes($1::bytea);", &[&txn_data]).await.unwrap();
+                // TODO(mliu) should retry, just printing the error out for now
+                if let Err(e) = client.query("SELECT print_bytes($1::bytea);", &[&txn_data]).await {
+                    error!("calling postgres UDF failed with error: {}", e);
+                }
             }
         });
         Ok(())

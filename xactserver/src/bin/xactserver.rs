@@ -24,7 +24,7 @@ fn main() -> anyhow::Result<()> {
             Arg::with_name("connect-pg")
                 .long("connect-pg")
                 .takes_value(true)
-                .help("ip:port to connect to for sending remote transactions to a PostgreSQL instance")
+                .help("ip:port to connect and send transactions from a remote region to a PostgreSQL instance")
         )
         .arg(
             Arg::with_name("peers")
@@ -38,19 +38,21 @@ fn main() -> anyhow::Result<()> {
     let listen_peer = args.value_of("listen-peer").unwrap_or("127.0.0.1:23000");
     let connect_pg = args.value_of("connect-pg").unwrap_or("127.0.0.1:5432");
     let peers = args.values_of("peers").unwrap_or_default().collect();
-
-    // Create a pg dispatcher to dispatch received remote txn
-    let (remotexact_tx, remotexact_rx) = mpsc::channel(100);
-    let pg_dispatcher = PgDispatcher::new(connect_pg);
    
+    
+    
     // Create log managers
     let local_log_man = LocalLogManager::new(listen_peer);
-    let remote_logs_man = RemoteLogsManager::new(peers, remotexact_tx);
+    let (remote_log_tx, remote_log_rx) = mpsc::channel(100);
+    let remote_logs_man = RemoteLogsManager::new(peers, remote_log_tx);
 
     // Create a postgres watcher with a channel for sending txn
     // to the local log manager
     let (local_log_tx, local_log_rx) = mpsc::channel(100);
     let pg_watcher = PgWatcher::new(listen_pg, local_log_tx);
+
+    // Create a pg dispatcher to dispatch received remote txn
+    let pg_dispatcher = PgDispatcher::new(connect_pg);
 
     let mut join_handles = Vec::new();
 
@@ -75,7 +77,7 @@ fn main() -> anyhow::Result<()> {
     join_handles.push(
         thread::Builder::new()
             .name("postgres dispatcher".into())
-            .spawn(move || pg_dispatcher.thread_main(remotexact_rx))?,
+            .spawn(move || pg_dispatcher.thread_main(remote_log_rx))?,
     );
 
     for handle in join_handles {
