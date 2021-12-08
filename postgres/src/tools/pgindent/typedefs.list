@@ -2097,10 +2097,10 @@ RTEKind
 RWConflict
 RWConflictPoolHeader
 RWSet
-RWSetPtr
 RWSetHeader
-RWSetReadRelation
-RWSetReadRelationKey
+RWSetPage
+RWSetRelation
+RWSetTuple
 RandomState
 Range
 RangeBound
@@ -2268,6 +2268,9 @@ RuleLock
 RuleStmt
 RunningTransactions
 RunningTransactionsData
+RxReorderBuffer
+RxReorderBufferRelation
+RxReorderBufferRelationKey
 SC_HANDLE
 SECURITY_ATTRIBUTES
 SECURITY_STATUS
