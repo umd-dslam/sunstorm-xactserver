@@ -82,7 +82,7 @@ impl postgres_backend::Handler for PgWatcherHandler {
     fn process_query(
         &mut self,
         pgb: &mut PostgresBackend,
-        _query_string: Bytes,
+        _query_string: &str,
     ) -> anyhow::Result<()> {
         // Switch to COPY BOTH mode
         pgb.write_message(&BeMessage::CopyBothResponse)?;
