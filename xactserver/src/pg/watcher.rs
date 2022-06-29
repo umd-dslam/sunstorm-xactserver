@@ -21,14 +21,11 @@ use zenith_utils::pq_proto::{BeMessage, FeMessage};
 ///
 pub struct PgWatcher {
     addr: String,
-    xactserver_tx: mpsc::Sender<(XsMessage, oneshot::Sender<bool>)>,
+    xactserver_tx: mpsc::Sender<XsMessage>,
 }
 
 impl PgWatcher {
-    pub fn new(
-        addr: &str,
-        xactserver_tx: mpsc::Sender<(XsMessage, oneshot::Sender<bool>)>,
-    ) -> PgWatcher {
+    pub fn new(addr: &str, xactserver_tx: mpsc::Sender<XsMessage>) -> PgWatcher {
         PgWatcher {
             addr: addr.to_owned(),
             xactserver_tx,
@@ -78,7 +75,7 @@ impl PgWatcher {
 }
 
 struct PgWatcherHandler {
-    xactserver_tx: mpsc::Sender<(XsMessage, oneshot::Sender<bool>)>,
+    xactserver_tx: mpsc::Sender<XsMessage>,
 }
 
 impl postgres_backend::Handler for PgWatcherHandler {
@@ -97,12 +94,14 @@ impl postgres_backend::Handler for PgWatcherHandler {
                 Ok(message) => {
                     if let Some(message) = message {
                         if let FeMessage::CopyData(buf) = message {
-                            let (resp_tx, _) = oneshot::channel();
+                            let (commit_tx, _) = oneshot::channel();
                             // Pass the transaction buffer to the xactserver.
                             // This is a blocking send because we're not inside an
                             // asynchronous environment
-                            self.xactserver_tx
-                                .blocking_send((XsMessage::LocalXact(buf), resp_tx))?;
+                            self.xactserver_tx.blocking_send(XsMessage::LocalXact {
+                                data: buf,
+                                commit_tx,
+                            })?;
                         } else {
                             continue;
                         }

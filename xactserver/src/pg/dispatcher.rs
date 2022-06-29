@@ -1,6 +1,6 @@
 use bytes::Buf;
 use log::error;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 use tokio_postgres::{connect, NoTls};
 
 use crate::XsMessage;
@@ -16,20 +16,15 @@ impl PgDispatcher {
         }
     }
 
-    pub fn thread_main(
-        &self,
-        dispatch_rx: mpsc::Receiver<(XsMessage, oneshot::Sender<bool>)>,
-    ) -> anyhow::Result<()> {
-        let rt = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
+    pub fn thread_main(&self, xactserver_rx: mpsc::Receiver<XsMessage>) -> anyhow::Result<()> {
+        let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?;
 
         rt.block_on(async move {
-            let mut dispatch_rx = dispatch_rx;
-            // Continuously listen for new tuple data from the remote log manager
-            while let Some((msg, resp_tx)) = dispatch_rx.recv().await {
-                if let XsMessage::SurrogateXact(mut buf) = msg {
+            let mut xactserver_rx = xactserver_rx;
+            while let Some(msg) = xactserver_rx.recv().await {
+                if let XsMessage::SurrogateXact { mut data, vote_tx } = msg {
                     let ip_port: Vec<&str> = self.addr.split(":").collect();
                     let conn_str = format!(
                         "host={} port={} user=postgres application_name=xactserver",
@@ -54,8 +49,8 @@ impl PgDispatcher {
                     // Copy buf to a new vec<u8> because tokio_postgres does not
                     // know how to convert bytes::Bytes to postgres type
                     let mut txn_data: Vec<u8> = Vec::new();
-                    txn_data.resize(buf.len(), 0);
-                    buf.copy_to_slice(&mut txn_data);
+                    txn_data.resize(data.len(), 0);
+                    data.copy_to_slice(&mut txn_data);
 
                     // TODO(mliu) should retry, just printing the error out for now
                     if let Err(e) = client
@@ -64,7 +59,7 @@ impl PgDispatcher {
                     {
                         error!("calling postgres UDF failed with error: {}", e);
                     }
-                    resp_tx.send(true).unwrap();
+                    vote_tx.send(true).unwrap();
                 }
             }
         });

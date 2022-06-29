@@ -7,9 +7,16 @@ pub use node::Node;
 pub use xactserver::XactServer;
 
 use bytes::Bytes;
+use tokio::sync::oneshot;
 
 #[derive(Debug)]
 pub enum XsMessage {
-    LocalXact(Bytes),
-    SurrogateXact(Bytes),
+    LocalXact {
+        data: Bytes,
+        commit_tx: oneshot::Sender<bool>,
+    },
+    SurrogateXact {
+        data: Bytes,
+        vote_tx: oneshot::Sender<bool>,
+    },
 }

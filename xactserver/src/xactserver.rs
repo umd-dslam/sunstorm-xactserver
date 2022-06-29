@@ -4,14 +4,11 @@ use crate::XsMessage;
 
 pub struct XactServer {
     peers: Vec<String>,
-    dispatcher_tx: mpsc::Sender<(XsMessage, oneshot::Sender<bool>)>,
+    dispatcher_tx: mpsc::Sender<XsMessage>,
 }
 
 impl XactServer {
-    pub fn new(
-        peers: Vec<&str>,
-        dispatcher_tx: mpsc::Sender<(XsMessage, oneshot::Sender<bool>)>,
-    ) -> XactServer {
+    pub fn new(peers: Vec<&str>, dispatcher_tx: mpsc::Sender<XsMessage>) -> XactServer {
         XactServer {
             peers: peers.iter().map(|s| (*s).to_owned()).collect(),
             dispatcher_tx,
@@ -20,8 +17,8 @@ impl XactServer {
 
     pub fn thread_main(
         &self,
-        watcher_rx: mpsc::Receiver<(XsMessage, oneshot::Sender<bool>)>,
-        node_rx: mpsc::Receiver<XsMessage>,
+        local_rx: mpsc::Receiver<XsMessage>,
+        remote_rx: mpsc::Receiver<XsMessage>,
     ) -> anyhow::Result<()> {
         let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
