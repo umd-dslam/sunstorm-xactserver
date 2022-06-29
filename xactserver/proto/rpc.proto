@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package xactserver;
+
+message PrepareRequest {
+
+}
+
+message PrepareResponse {
+
+}
+
+message VoteRequest {
+    
+}
+
+message VoteResponse {
+    
+}
+
+service XactCoordination {
+    rpc Prepare(PrepareRequest) returns (PrepareResponse);
+    rpc Vote(VoteRequest) returns (VoteResponse);
+}
+

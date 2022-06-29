@@ -3,32 +3,35 @@
 //! This module contains [`PgWatcher`] which watches for new transaction data from the
 //! `remotexact` plugin in postgres.
 //!  
+use crate::XsMessage;
 use anyhow::Context;
-use bytes::Bytes;
 use log::{debug, error, info};
 use std::net::TcpListener;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use zenith_utils::postgres_backend::{self, AuthType, PostgresBackend};
 use zenith_utils::pq_proto::{BeMessage, FeMessage};
 
 /// A `PgWatcher` listens for new connections from a postgres instance. For each
 /// new connection, a [`PostgresBackend`] is created in a new thread. This postgres
 /// backend will receive the transaction read/write set and forward this data to
-/// [`LocalLogManager`].
+/// [`XactServer`].
 ///
 /// [`PostgresBackend`]: zenith_utils::postgres_backend::PostgresBackend
-/// [`LocalLogManager`]: crate::LocalLogManager
+/// [`XactServer`]: crate::XactServer
 ///
 pub struct PgWatcher {
     addr: String,
-    local_log_chan: mpsc::Sender<Bytes>,
+    xactserver_tx: mpsc::Sender<(XsMessage, oneshot::Sender<bool>)>,
 }
 
 impl PgWatcher {
-    pub fn new(addr: &str, local_log_chan: mpsc::Sender<Bytes>) -> PgWatcher {
+    pub fn new(
+        addr: &str,
+        xactserver_tx: mpsc::Sender<(XsMessage, oneshot::Sender<bool>)>,
+    ) -> PgWatcher {
         PgWatcher {
             addr: addr.to_owned(),
-            local_log_chan,
+            xactserver_tx,
         }
     }
 
@@ -47,13 +50,13 @@ impl PgWatcher {
                 }
             };
 
-            // Create a new sender for the local log channel for the new postgres backend
-            let local_log_chan = self.local_log_chan.clone();
+            // Create a new sender to the xactserver for the new postgres backend
+            let xactserver_tx = self.xactserver_tx.clone();
 
             // Create a new postgres backend for each new connection from postgres
             let handle = std::thread::Builder::new()
                 .spawn(move || {
-                    let mut handler = PgWatcherHandler { local_log_chan };
+                    let mut handler = PgWatcherHandler { xactserver_tx };
                     let pg_backend =
                         PostgresBackend::new(stream, AuthType::Trust, None, true).unwrap();
 
@@ -75,7 +78,7 @@ impl PgWatcher {
 }
 
 struct PgWatcherHandler {
-    local_log_chan: mpsc::Sender<Bytes>,
+    xactserver_tx: mpsc::Sender<(XsMessage, oneshot::Sender<bool>)>,
 }
 
 impl postgres_backend::Handler for PgWatcherHandler {
@@ -94,10 +97,12 @@ impl postgres_backend::Handler for PgWatcherHandler {
                 Ok(message) => {
                     if let Some(message) = message {
                         if let FeMessage::CopyData(buf) = message {
-                            // Pass the transaction buffer to the local log manager.
+                            let (resp_tx, _) = oneshot::channel();
+                            // Pass the transaction buffer to the xactserver.
                             // This is a blocking send because we're not inside an
                             // asynchronous environment
-                            self.local_log_chan.blocking_send(buf)?;
+                            self.xactserver_tx
+                                .blocking_send((XsMessage::LocalXact(buf), resp_tx))?;
                         } else {
                             continue;
                         }
