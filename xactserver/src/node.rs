@@ -13,12 +13,12 @@ use proto::{PrepareRequest, PrepareResponse, VoteRequest, VoteResponse};
 use crate::XsMessage;
 
 pub struct Node {
-    addr: String,
+    addr: SocketAddr,
     xactserver_tx: mpsc::Sender<XsMessage>,
 }
 
 impl Node {
-    pub fn new(addr: &str, xactserver_tx: mpsc::Sender<XsMessage>) -> Node {
+    pub fn new(addr: &SocketAddr, xactserver_tx: mpsc::Sender<XsMessage>) -> Node {
         Node {
             addr: addr.to_owned(),
             xactserver_tx,
@@ -33,7 +33,7 @@ impl Node {
 
         info!("node listening on {}", self.addr);
 
-        let addr: SocketAddr = self.addr.parse()?;
+        let addr = self.addr.clone();
         let svc = XactCoordinationServer::new(self);
         rt.block_on(Server::builder().add_service(svc).serve(addr))?;
 

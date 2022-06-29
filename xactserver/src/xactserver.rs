@@ -1,16 +1,17 @@
-use tokio::sync::{mpsc, oneshot};
+use std::net::SocketAddr;
+use tokio::sync::mpsc;
 
 use crate::XsMessage;
 
 pub struct XactServer {
-    peers: Vec<String>,
+    peers: Vec<SocketAddr>,
     dispatcher_tx: mpsc::Sender<XsMessage>,
 }
 
 impl XactServer {
-    pub fn new(peers: Vec<&str>, dispatcher_tx: mpsc::Sender<XsMessage>) -> XactServer {
+    pub fn new(peers: &Vec<SocketAddr>, dispatcher_tx: mpsc::Sender<XsMessage>) -> XactServer {
         XactServer {
-            peers: peers.iter().map(|s| (*s).to_owned()).collect(),
+            peers: peers.to_owned(),
             dispatcher_tx,
         }
     }
