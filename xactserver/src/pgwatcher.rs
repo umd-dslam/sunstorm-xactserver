@@ -26,7 +26,7 @@ pub struct PgWatcher {
 
 impl PgWatcher {
     pub fn new(addr: &str, xactserver_tx: mpsc::Sender<XsMessage>) -> PgWatcher {
-        PgWatcher {
+        Self {
             addr: addr.to_owned(),
             xactserver_tx,
         }

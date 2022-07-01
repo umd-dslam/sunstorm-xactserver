@@ -3,7 +3,8 @@ syntax = "proto3";
 package xactserver;
 
 message PrepareRequest {
-
+    uint64 xact_id = 1;
+    bytes data = 2;
 }
 
 message PrepareResponse {

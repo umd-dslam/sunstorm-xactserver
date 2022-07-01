@@ -4,12 +4,8 @@ use tokio::sync::mpsc;
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 
-mod proto {
-    tonic::include_proto!("xactserver");
-}
-use proto::xact_coordination_server::{XactCoordination, XactCoordinationServer};
-use proto::{PrepareRequest, PrepareResponse, VoteRequest, VoteResponse};
-
+use crate::proto::xact_coordination_server::{XactCoordination, XactCoordinationServer};
+use crate::proto::{PrepareRequest, PrepareResponse, VoteRequest, VoteResponse};
 use crate::XsMessage;
 
 pub struct Node {
@@ -19,7 +15,7 @@ pub struct Node {
 
 impl Node {
     pub fn new(addr: &SocketAddr, xactserver_tx: mpsc::Sender<XsMessage>) -> Node {
-        Node {
+        Self {
             addr: addr.to_owned(),
             xactserver_tx,
         }
@@ -47,10 +43,14 @@ impl XactCoordination for Node {
         &self,
         request: Request<PrepareRequest>,
     ) -> Result<Response<PrepareResponse>, Status> {
+        self.xactserver_tx
+            .send(XsMessage::Prepare(request.into_inner()))
+            .await
+            .unwrap();
         Ok(Response::new(PrepareResponse {}))
     }
 
-    async fn vote(&self, request: Request<VoteRequest>) -> Result<Response<VoteResponse>, Status> {
+    async fn vote(&self, _request: Request<VoteRequest>) -> Result<Response<VoteResponse>, Status> {
         Ok(Response::new(VoteResponse {}))
     }
 }

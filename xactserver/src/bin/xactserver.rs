@@ -2,8 +2,7 @@ use clap::{CommandFactory, ErrorKind, Parser};
 use std::net::SocketAddr;
 use std::thread;
 use tokio::sync::mpsc;
-use xactserver::pg::{PgDispatcher, PgWatcher};
-use xactserver::{Node, XactServer};
+use xactserver::{Node, NodeId, PgWatcher, XactManager};
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -14,25 +13,41 @@ struct Args {
     #[clap(long, value_parser, default_value = "127.0.0.1:5432")]
     connect_pg: String,
 
-    #[clap(short, long, value_parser)]
-    peers: Vec<SocketAddr>,
+    #[clap(long, value_parser, default_value = "127.0.0.1:23000")]
+    nodes: String,
 
-    #[clap(long, value_parser)]
-    id: i32,
+    #[clap(long, value_parser, default_value = "0")]
+    node_id: NodeId,
 }
 
 fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let args = Args::parse();
-    let listen_peer = args.peers.get(args.id as usize).unwrap_or_else(|| {
+    let nodes: Vec<SocketAddr> = args
+        .nodes
+        .split(",")
+        .map(|addr| {
+            addr.parse().unwrap_or_else(|err| {
+                Args::command()
+                    .error(
+                        ErrorKind::InvalidValue,
+                        format!("Invalid value '{}' for '--nodes': {}", addr, err),
+                    )
+                    .exit();
+            })
+        })
+        .collect();
+    let listen_peer = nodes.get(args.node_id as usize).unwrap_or_else(|| {
         Args::command()
-            .error(ErrorKind::InvalidValue, "id is out of bound")
+            .error(
+                ErrorKind::InvalidValue,
+                "Invalid value for '--node-id': out of bound",
+            )
             .exit();
     });
 
     let (watcher_tx, watcher_rx) = mpsc::channel(100);
-    let (dispatcher_tx, dispatcher_rx) = mpsc::channel(100);
     let (node_tx, node_rx) = mpsc::channel(100);
 
     let mut join_handles = Vec::new();
@@ -40,15 +55,8 @@ fn main() -> anyhow::Result<()> {
     let pg_watcher = PgWatcher::new(&args.listen_pg, watcher_tx);
     join_handles.push(
         thread::Builder::new()
-            .name("postgres watcher".into())
+            .name("pg watcher".into())
             .spawn(move || pg_watcher.thread_main())?,
-    );
-
-    let pg_dispatcher = PgDispatcher::new(&args.connect_pg);
-    join_handles.push(
-        thread::Builder::new()
-            .name("postgres dispatcher".into())
-            .spawn(move || pg_dispatcher.thread_main(dispatcher_rx))?,
     );
 
     let node = Node::new(listen_peer, node_tx);
@@ -58,11 +66,11 @@ fn main() -> anyhow::Result<()> {
             .spawn(move || node.thread_main())?,
     );
 
-    let xactserver = XactServer::new(&args.peers, dispatcher_tx);
+    let mut manager = XactManager::new(args.node_id, &nodes);
     join_handles.push(
         thread::Builder::new()
-            .name("xactserver".into())
-            .spawn(move || xactserver.thread_main(watcher_rx, node_rx))?,
+            .name("xact manager".into())
+            .spawn(move || manager.thread_main(watcher_rx, node_rx))?,
     );
 
     for handle in join_handles {
