@@ -8,10 +8,10 @@ use xactserver::{Node, NodeId, PgWatcher, XactManager};
 #[clap(author, version, about, long_about = None)]
 struct Args {
     #[clap(long, value_parser, default_value = "127.0.0.1:10000")]
-    listen_pg: String,
+    listen_pg: SocketAddr,
 
-    #[clap(long, value_parser, default_value = "127.0.0.1:5432")]
-    connect_pg: String,
+    #[clap(long, value_parser, default_value = "127.0.0.1:55432")]
+    connect_pg: SocketAddr,
 
     #[clap(long, value_parser, default_value = "127.0.0.1:23000")]
     nodes: String,
@@ -52,7 +52,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut join_handles = Vec::new();
 
-    let pg_watcher = PgWatcher::new(&args.listen_pg, watcher_tx);
+    let pg_watcher = PgWatcher::new(args.listen_pg, watcher_tx);
     join_handles.push(
         thread::Builder::new()
             .name("pg watcher".into())
@@ -66,7 +66,7 @@ fn main() -> anyhow::Result<()> {
             .spawn(move || node.thread_main())?,
     );
 
-    let mut manager = XactManager::new(args.node_id, &nodes);
+    let mut manager = XactManager::new(args.node_id, &nodes, args.connect_pg);
     join_handles.push(
         thread::Builder::new()
             .name("xact manager".into())

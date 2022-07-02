@@ -50,7 +50,11 @@ impl XactCoordination for Node {
         Ok(Response::new(PrepareResponse {}))
     }
 
-    async fn vote(&self, _request: Request<VoteRequest>) -> Result<Response<VoteResponse>, Status> {
+    async fn vote(&self, request: Request<VoteRequest>) -> Result<Response<VoteResponse>, Status> {
+        self.xactserver_tx
+            .send(XsMessage::Vote(request.into_inner()))
+            .await
+            .unwrap();
         Ok(Response::new(VoteResponse {}))
     }
 }

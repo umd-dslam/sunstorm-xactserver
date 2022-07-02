@@ -6,7 +6,7 @@
 use crate::XsMessage;
 use anyhow::Context;
 use log::{debug, error, info};
-use std::net::TcpListener;
+use std::net::{SocketAddr, TcpListener};
 use tokio::sync::{mpsc, oneshot};
 use zenith_utils::postgres_backend::{self, AuthType, PostgresBackend};
 use zenith_utils::pq_proto::{BeMessage, FeMessage};
@@ -20,22 +20,23 @@ use zenith_utils::pq_proto::{BeMessage, FeMessage};
 /// [`XactServer`]: crate::XactServer
 ///
 pub struct PgWatcher {
-    addr: String,
+    listen_pg: SocketAddr,
     xactserver_tx: mpsc::Sender<XsMessage>,
 }
 
 impl PgWatcher {
-    pub fn new(addr: &str, xactserver_tx: mpsc::Sender<XsMessage>) -> PgWatcher {
+    pub fn new(listen_pg: SocketAddr, xactserver_tx: mpsc::Sender<XsMessage>) -> Self {
         Self {
-            addr: addr.to_owned(),
+            listen_pg,
             xactserver_tx,
         }
     }
 
     pub fn thread_main(&self) -> anyhow::Result<()> {
-        let listener = TcpListener::bind(&self.addr).context("failed to start postgres watcher")?;
+        let listener =
+            TcpListener::bind(self.listen_pg).context("failed to start postgres watcher")?;
 
-        info!("watching postgres on {}", self.addr);
+        info!("watching postgres on {}", self.listen_pg);
 
         let mut join_handles = Vec::new();
         for stream in listener.incoming() {

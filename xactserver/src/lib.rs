@@ -1,7 +1,7 @@
 pub mod manager;
 pub mod node;
 pub mod pgwatcher;
-pub mod transaction;
+pub mod xact;
 mod proto {
     tonic::include_proto!("xactserver");
 }
@@ -25,4 +25,5 @@ pub enum XsMessage {
         commit_tx: oneshot::Sender<bool>,
     },
     Prepare(proto::PrepareRequest),
+    Vote(proto::VoteRequest),
 }

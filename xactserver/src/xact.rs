@@ -1,6 +1,67 @@
 use anyhow::{bail, Context};
 use bytes::{Buf, Bytes};
 use std::mem::size_of;
+use tokio::sync::oneshot;
+
+use crate::{NodeId, XactId};
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum XactStatus {
+    Waiting,
+    Commit,
+    Abort,
+}
+
+pub struct XactState {
+    pub id: XactId,
+    pub data: Vec<u8>,
+    status: XactStatus,
+    coordinator: NodeId,
+    commit_votes: Vec<NodeId>,
+    target_nvotes: usize,
+
+    commit_tx: Option<oneshot::Sender<bool>>,
+}
+
+impl XactState {
+    pub fn new(
+        id: XactId,
+        data: Vec<u8>,
+        coordinator: NodeId,
+        target_nvotes: usize,
+        commit_tx: Option<oneshot::Sender<bool>>,
+    ) -> Self {
+        Self {
+            id,
+            data,
+            status: if target_nvotes == 0 {
+                XactStatus::Commit
+            } else {
+                XactStatus::Waiting
+            },
+            coordinator,
+            commit_votes: Vec::new(),
+            target_nvotes,
+            commit_tx,
+        }
+    }
+
+    pub fn status(&self) -> XactStatus {
+        self.status
+    }
+
+    pub fn add_vote(&mut self, from: NodeId, abort: bool) -> XactStatus {
+        if abort {
+            self.status = XactStatus::Abort;
+        } else if from != self.coordinator && !self.commit_votes.contains(&from) {
+            self.commit_votes.push(from);
+            if self.commit_votes.len() == self.target_nvotes {
+                self.status = XactStatus::Commit;
+            }
+        }
+        self.status
+    }
+}
 
 type Oid = u32;
 
@@ -12,7 +73,7 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    pub fn parse(buf: &mut Bytes) -> anyhow::Result<Transaction> {
+    pub fn decode(buf: &mut Bytes) -> anyhow::Result<Transaction> {
         const HEADER_SZ: usize = size_of::<Oid>() + size_of::<u32>() + size_of::<u32>();
 
         if buf.remaining() < HEADER_SZ {
@@ -40,11 +101,11 @@ impl Transaction {
             let ctx = || {
                 let i = i;
                 format!(
-                    "failed to parse relation {} [dbid: {}, xid: {}, readlen: {}]",
+                    "failed to decode relation {} [dbid: {}, xid: {}, readlen: {}]",
                     i, dbid, xid, readlen
                 )
             };
-            let r = Relation::parse(&mut readbuf).with_context(ctx)?;
+            let r = Relation::decode(&mut readbuf).with_context(ctx)?;
             relations.push(r);
             i += 1;
         }
@@ -83,16 +144,16 @@ pub struct Page {
 }
 
 impl Relation {
-    pub fn parse(buf: &mut Bytes) -> anyhow::Result<Relation> {
+    pub fn decode(buf: &mut Bytes) -> anyhow::Result<Relation> {
         let rel_type = buf.get_u8();
         match rel_type {
-            b'T' => Relation::parse_table(buf),
-            b'I' => Relation::parse_index(buf),
+            b'T' => Relation::decode_table(buf),
+            b'I' => Relation::decode_index(buf),
             _ => bail!("invalid relation type: {}", rel_type),
         }
     }
 
-    fn parse_table(buf: &mut Bytes) -> anyhow::Result<Relation> {
+    fn decode_table(buf: &mut Bytes) -> anyhow::Result<Relation> {
         const TABLE_HEADER_SZ: usize = size_of::<Oid>() + size_of::<u32>() + size_of::<u32>();
 
         if buf.remaining() < TABLE_HEADER_SZ {
@@ -110,11 +171,11 @@ impl Relation {
             let ctx = || {
                 let i = i;
                 format!(
-                    "failed to parse tuple {} in Table(relid: {}, ntuples: {}, csn: {})",
+                    "failed to decode tuple {} in Table(relid: {}, ntuples: {}, csn: {})",
                     i, relid, ntuples, csn
                 )
             };
-            let t = Relation::parse_tuple(buf).with_context(ctx)?;
+            let t = Relation::decode_tuple(buf).with_context(ctx)?;
             tuples.push(t);
         }
 
@@ -125,7 +186,7 @@ impl Relation {
         })
     }
 
-    fn parse_tuple(buf: &mut Bytes) -> anyhow::Result<Tuple> {
+    fn decode_tuple(buf: &mut Bytes) -> anyhow::Result<Tuple> {
         const TUPLE_SZ: usize = size_of::<u32>() + size_of::<u16>();
 
         if buf.remaining() < TUPLE_SZ {
@@ -141,7 +202,7 @@ impl Relation {
         Ok(Tuple { blocknum, offset })
     }
 
-    fn parse_index(buf: &mut Bytes) -> anyhow::Result<Relation> {
+    fn decode_index(buf: &mut Bytes) -> anyhow::Result<Relation> {
         const INDEX_HEADER_SZ: usize = size_of::<Oid>() + size_of::<u32>();
 
         if buf.remaining() < INDEX_HEADER_SZ {
@@ -158,18 +219,18 @@ impl Relation {
             let ctx = || {
                 let i = i;
                 format!(
-                    "failed to parse page {} in Index(relid: {}, npages: {})",
+                    "failed to decode page {} in Index(relid: {}, npages: {})",
                     i, relid, npages
                 )
             };
-            let p = Relation::parse_page(buf).with_context(ctx)?;
+            let p = Relation::decode_page(buf).with_context(ctx)?;
             pages.push(p);
         }
 
         Ok(Relation::Index { oid: relid, pages })
     }
 
-    fn parse_page(buf: &mut Bytes) -> anyhow::Result<Page> {
+    fn decode_page(buf: &mut Bytes) -> anyhow::Result<Page> {
         const PAGE_SZ: usize = size_of::<u32>() + size_of::<u32>();
 
         if buf.remaining() < PAGE_SZ {
