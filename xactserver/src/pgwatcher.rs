@@ -21,45 +21,45 @@ use zenith_utils::pq_proto::{BeMessage, FeMessage};
 ///
 pub struct PgWatcher {
     listen_pg: SocketAddr,
-    xactserver_tx: mpsc::Sender<XsMessage>,
+    xact_manager_tx: mpsc::Sender<XsMessage>,
 }
 
 impl PgWatcher {
-    pub fn new(listen_pg: SocketAddr, xactserver_tx: mpsc::Sender<XsMessage>) -> Self {
+    pub fn new(listen_pg: SocketAddr, xact_manager_tx: mpsc::Sender<XsMessage>) -> Self {
         Self {
             listen_pg,
-            xactserver_tx,
+            xact_manager_tx,
         }
     }
 
     pub fn thread_main(&self) -> anyhow::Result<()> {
         let listener =
-            TcpListener::bind(self.listen_pg).context("failed to start postgres watcher")?;
+            TcpListener::bind(self.listen_pg).context("Failed to start postgres watcher")?;
 
-        info!("watching postgres on {}", self.listen_pg);
+        info!("Watching postgres on {}", self.listen_pg);
 
         let mut join_handles = Vec::new();
         for stream in listener.incoming() {
             let stream = match stream {
                 Ok(stream) => stream,
                 Err(e) => {
-                    error!("failed to establish a new postgres connection: {}", e);
+                    error!("Failed to establish a new postgres connection: {}", e);
                     continue;
                 }
             };
 
             // Create a new sender to the xactserver for the new postgres backend
-            let xactserver_tx = self.xactserver_tx.clone();
+            let xact_manager_tx = self.xact_manager_tx.clone();
 
             // Create a new postgres backend for each new connection from postgres
             let handle = std::thread::Builder::new()
                 .spawn(move || {
-                    let mut handler = PgWatcherHandler { xactserver_tx };
+                    let mut handler = PgWatcherHandler { xact_manager_tx };
                     let pg_backend =
                         PostgresBackend::new(stream, AuthType::Trust, None, true).unwrap();
 
                     if let Err(e) = pg_backend.run(&mut handler) {
-                        error!("postgres backend exited with error: {}", e);
+                        error!("Postgres backend exited with error: {}", e);
                     }
                 })
                 .unwrap();
@@ -76,7 +76,7 @@ impl PgWatcher {
 }
 
 struct PgWatcherHandler {
-    xactserver_tx: mpsc::Sender<XsMessage>,
+    xact_manager_tx: mpsc::Sender<XsMessage>,
 }
 
 impl postgres_backend::Handler for PgWatcherHandler {
@@ -88,7 +88,7 @@ impl postgres_backend::Handler for PgWatcherHandler {
         // Switch to COPY BOTH mode
         pgb.write_message(&BeMessage::CopyBothResponse)?;
 
-        debug!("new postgres connection established");
+        debug!("New postgres connection established");
 
         loop {
             match pgb.read_message() {
@@ -99,7 +99,7 @@ impl postgres_backend::Handler for PgWatcherHandler {
                             // Pass the transaction buffer to the xactserver.
                             // This is a blocking send because we're not inside an
                             // asynchronous environment
-                            self.xactserver_tx.blocking_send(XsMessage::LocalXact {
+                            self.xact_manager_tx.blocking_send(XsMessage::LocalXact {
                                 data: buf,
                                 commit_tx,
                             })?;
@@ -107,7 +107,7 @@ impl postgres_backend::Handler for PgWatcherHandler {
                             continue;
                         }
                     } else {
-                        debug!("postgres connection closed");
+                        debug!("Postgres connection closed");
                         break;
                     }
                 }

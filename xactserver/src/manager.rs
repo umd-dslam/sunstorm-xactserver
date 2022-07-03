@@ -157,7 +157,7 @@ impl XactManager {
             connect_pg.ip(),
             connect_pg.port(),
         );
-        info!("connecting to local pg, conn_str: {}", conn_str);
+        info!("Connecting to local pg, conn_str: {}", conn_str);
         let (client, conn) = tokio_postgres::connect(&conn_str, tokio_postgres::NoTls)
             .await
             .unwrap();
@@ -166,7 +166,7 @@ impl XactManager {
         // so spawn it off to run on its own.
         tokio::spawn(async move {
             if let Err(e) = conn.await {
-                error!("connection error: {}", e);
+                error!("Connection error: {}", e);
             }
         });
 
@@ -180,7 +180,7 @@ impl XactManager {
             .query("SELECT print_bytes($1::bytea);", &[&data.as_ref()])
             .await
         {
-            error!("calling postgres UDF failed with error: {}", e);
+            error!("Calling postgres UDF failed with error: {}", e);
         }
 
         // TODO: This is sending one-by-one to all other peers, but we want to send

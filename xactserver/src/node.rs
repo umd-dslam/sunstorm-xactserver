@@ -10,14 +10,14 @@ use crate::XsMessage;
 
 pub struct Node {
     addr: SocketAddr,
-    xactserver_tx: mpsc::Sender<XsMessage>,
+    xact_manager_tx: mpsc::Sender<XsMessage>,
 }
 
 impl Node {
-    pub fn new(addr: &SocketAddr, xactserver_tx: mpsc::Sender<XsMessage>) -> Node {
+    pub fn new(addr: &SocketAddr, xact_manager_tx: mpsc::Sender<XsMessage>) -> Node {
         Self {
             addr: addr.to_owned(),
-            xactserver_tx,
+            xact_manager_tx,
         }
     }
 
@@ -26,7 +26,7 @@ impl Node {
             .enable_all()
             .build()?;
 
-        info!("node listening on {}", self.addr);
+        info!("Node listening on {}", self.addr);
 
         let addr = self.addr.clone();
         let svc = XactCoordinationServer::new(self);
@@ -42,7 +42,7 @@ impl XactCoordination for Node {
         &self,
         request: Request<PrepareRequest>,
     ) -> Result<Response<PrepareResponse>, Status> {
-        self.xactserver_tx
+        self.xact_manager_tx
             .send(XsMessage::Prepare(request.into_inner()))
             .await
             .unwrap();
@@ -50,7 +50,7 @@ impl XactCoordination for Node {
     }
 
     async fn vote(&self, request: Request<VoteRequest>) -> Result<Response<VoteResponse>, Status> {
-        self.xactserver_tx
+        self.xact_manager_tx
             .send(XsMessage::Vote(request.into_inner()))
             .await
             .unwrap();
