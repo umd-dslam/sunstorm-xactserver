@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use log::{error, info};
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -74,11 +75,11 @@ impl XactManager {
                 let new_xact_id = self.next_xact_id();
                 let new_xact_state = Arc::new(Mutex::new(XactState::new(
                     new_xact_id,
-                    data.into_iter().collect(),
+                    data,
                     self.shared.node_id,
                     self.shared.peers.len() - 1,
                     Some(commit_tx),
-                )));
+                )?));
                 // TODO: assert that the returned value is None
                 self.xact_state.insert(new_xact_id, new_xact_state.clone());
 
@@ -90,11 +91,11 @@ impl XactManager {
             XsMessage::Prepare(prepare_req) => {
                 let new_xact_state = Arc::new(Mutex::new(XactState::new(
                     prepare_req.xact_id,
-                    prepare_req.data,
+                    Bytes::from(prepare_req.data),
                     prepare_req.from,
                     self.shared.peers.len() - 1,
                     None,
-                )));
+                )?));
 
                 self.xact_state
                     .entry(prepare_req.xact_id)
@@ -134,7 +135,7 @@ impl XactManager {
         let request = PrepareRequest {
             from: shared.node_id,
             xact_id,
-            data,
+            data: data.into_iter().collect(),
         };
         for (i, peer) in shared.peers.iter().enumerate() {
             if i as NodeId != shared.node_id {
@@ -176,7 +177,7 @@ impl XactManager {
 
         // TODO(mliu) should retry, just printing the error out for now
         if let Err(e) = client
-            .query("SELECT print_bytes($1::bytea);", &[&data])
+            .query("SELECT print_bytes($1::bytea);", &[&data.as_ref()])
             .await
         {
             error!("calling postgres UDF failed with error: {}", e);

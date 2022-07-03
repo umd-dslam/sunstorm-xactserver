@@ -14,7 +14,8 @@ pub enum XactStatus {
 
 pub struct XactState {
     pub id: XactId,
-    pub data: Vec<u8>,
+    pub data: Bytes,
+    pub rwset: RWSet,
     status: XactStatus,
     coordinator: NodeId,
     commit_votes: Vec<NodeId>,
@@ -26,14 +27,16 @@ pub struct XactState {
 impl XactState {
     pub fn new(
         id: XactId,
-        data: Vec<u8>,
+        data: Bytes,
         coordinator: NodeId,
         target_nvotes: usize,
         commit_tx: Option<oneshot::Sender<bool>>,
-    ) -> Self {
-        Self {
+    ) -> anyhow::Result<Self> {
+        let rwset = RWSet::decode(data.clone()).context("Failed to decode read/write set")?;
+        Ok(Self {
             id,
             data,
+            rwset,
             status: if target_nvotes == 0 {
                 XactStatus::Commit
             } else {
@@ -43,7 +46,7 @@ impl XactState {
             commit_votes: Vec::new(),
             target_nvotes,
             commit_tx,
-        }
+        })
     }
 
     pub fn status(&self) -> XactStatus {
@@ -68,19 +71,17 @@ type Oid = u32;
 #[derive(Debug)]
 pub struct RWSet {
     header: RWSetHeader,
-    relations: Vec<Relation>,
-    writes: Vec<u8>,
+    relations: Option<Vec<Relation>>,
+    remainder: Bytes,
 }
 
 impl RWSet {
-    pub fn decode(buf: &mut Bytes) -> anyhow::Result<RWSet> {
-        let header = RWSetHeader::decode(buf).context("Failed to decode header")?;
-        let relations = Self::decode_relations(buf).context("Failed to decode relations")?;
-        let writes = Self::decode_writes(buf).context("Failed to decode writes")?;
+    fn decode(mut buf: Bytes) -> anyhow::Result<RWSet> {
+        let header = RWSetHeader::decode(&mut buf).context("Failed to decode header")?;
         Ok(Self {
             header,
-            relations,
-            writes,
+            relations: None,
+            remainder: buf,
         })
     }
 
@@ -106,8 +107,12 @@ impl RWSet {
         Ok(relations)
     }
 
-    fn decode_writes(buf: &mut Bytes) -> anyhow::Result<Vec<u8>> {
-        Ok(vec![])
+    /// Decode everything on demand for debugging
+    pub fn decode_all(&mut self) -> anyhow::Result<&Self> {
+        self.relations = Some(
+            Self::decode_relations(&mut self.remainder).context("Failed to decode relations")?,
+        );
+        Ok(self)
     }
 }
 
@@ -133,7 +138,7 @@ impl RWSetHeader {
 }
 
 #[derive(Debug)]
-pub enum Relation {
+enum Relation {
     Table {
         oid: u32,
         csn: u32,
@@ -146,19 +151,19 @@ pub enum Relation {
 }
 
 #[derive(Debug)]
-pub struct Tuple {
+struct Tuple {
     blocknum: u32,
     offset: u16,
 }
 
 #[derive(Debug)]
-pub struct Page {
+struct Page {
     blocknum: u32,
     csn: u32,
 }
 
 impl Relation {
-    pub fn decode(buf: &mut Bytes) -> anyhow::Result<Relation> {
+    fn decode(buf: &mut Bytes) -> anyhow::Result<Relation> {
         match get_u8(buf).context("Failed to decode relation type")? {
             b'T' => Relation::decode_table(buf).context("Failed to decode table"),
             b'I' => Relation::decode_index(buf).context("Failed to decode index"),
