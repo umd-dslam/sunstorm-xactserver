@@ -23,7 +23,6 @@ impl Node {
 
     pub fn thread_main(self) -> anyhow::Result<()> {
         let rt = tokio::runtime::Builder::new_current_thread()
-            .worker_threads(1)
             .enable_all()
             .build()?;
 

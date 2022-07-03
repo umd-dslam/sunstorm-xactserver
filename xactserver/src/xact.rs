@@ -1,4 +1,4 @@
-use anyhow::{bail, Context};
+use anyhow::{bail, ensure, Context};
 use bytes::{Buf, Bytes};
 use std::mem::size_of;
 use tokio::sync::oneshot;
@@ -66,54 +66,68 @@ impl XactState {
 type Oid = u32;
 
 #[derive(Debug)]
-pub struct Transaction {
-    dbid: Oid,
-    xid: u32,
+pub struct RWSet {
+    header: RWSetHeader,
     relations: Vec<Relation>,
+    writes: Vec<u8>,
 }
 
-impl Transaction {
-    pub fn decode(buf: &mut Bytes) -> anyhow::Result<Transaction> {
-        const HEADER_SZ: usize = size_of::<Oid>() + size_of::<u32>() + size_of::<u32>();
+impl RWSet {
+    pub fn decode(buf: &mut Bytes) -> anyhow::Result<RWSet> {
+        let header = RWSetHeader::decode(buf).context("Failed to decode header")?;
+        let relations = Self::decode_relations(buf).context("Failed to decode relations")?;
+        let writes = Self::decode_writes(buf).context("Failed to decode writes")?;
+        Ok(Self {
+            header,
+            relations,
+            writes,
+        })
+    }
 
-        if buf.remaining() < HEADER_SZ {
-            bail!(
-                "header too short, expected: {}, remaining: {}",
-                HEADER_SZ,
-                buf.remaining()
-            );
-        }
-        let dbid = buf.get_u32();
-        let xid = buf.get_u32();
-        let readlen = buf.get_u32() as usize;
-
-        if buf.remaining() < readlen {
-            bail!(
-                "read section too short, expected: {}, remaining: {}",
-                readlen,
-                buf.remaining()
-            );
-        }
-        let mut readbuf = buf.split_to(readlen);
-        let mut relations = vec![];
-        let mut i = 0;
-        while readbuf.has_remaining() {
-            let ctx = || {
-                let i = i;
+    fn decode_relations(buf: &mut Bytes) -> anyhow::Result<Vec<Relation>> {
+        let relations_len = get_u32(buf).context("Failed to decode length")? as usize;
+        ensure!(
+            buf.remaining() >= relations_len,
+            "Relations section too short. Expected: {}. Remaining: {}",
+            relations_len,
+            buf.remaining(),
+        );
+        let mut relations_buf = buf.split_to(relations_len);
+        let mut relations = Vec::new();
+        while relations_buf.has_remaining() {
+            let r = Relation::decode(&mut relations_buf).with_context(|| {
                 format!(
-                    "failed to decode relation {} [dbid: {}, xid: {}, readlen: {}]",
-                    i, dbid, xid, readlen
+                    "Failed to decode relation. Relations decoded: {}",
+                    relations.len()
                 )
-            };
-            let r = Relation::decode(&mut readbuf).with_context(ctx)?;
+            })?;
             relations.push(r);
-            i += 1;
         }
+        Ok(relations)
+    }
 
-        Ok(Transaction {
+    fn decode_writes(buf: &mut Bytes) -> anyhow::Result<Vec<u8>> {
+        Ok(vec![])
+    }
+}
+
+#[derive(Debug)]
+struct RWSetHeader {
+    dbid: Oid,
+    xid: u32,
+    region_set: u64,
+}
+
+impl RWSetHeader {
+    pub fn decode(buf: &mut Bytes) -> anyhow::Result<RWSetHeader> {
+        let dbid = get_u32(buf).context("Failed to decode 'dbid'")?;
+        let xid = get_u32(buf).context("Failed to decode 'xid'")?;
+        let region_set = get_u64(buf).context("Failed to decode 'region_set'")?;
+
+        Ok(Self {
             dbid,
             xid,
-            relations,
+            region_set,
         })
     }
 }
@@ -145,38 +159,22 @@ pub struct Page {
 
 impl Relation {
     pub fn decode(buf: &mut Bytes) -> anyhow::Result<Relation> {
-        let rel_type = buf.get_u8();
-        match rel_type {
-            b'T' => Relation::decode_table(buf),
-            b'I' => Relation::decode_index(buf),
-            _ => bail!("invalid relation type: {}", rel_type),
+        match get_u8(buf).context("Failed to decode relation type")? {
+            b'T' => Relation::decode_table(buf).context("Failed to decode table"),
+            b'I' => Relation::decode_index(buf).context("Failed to decode index"),
+            other => bail!("Invalid relation type: {}", other),
         }
     }
 
     fn decode_table(buf: &mut Bytes) -> anyhow::Result<Relation> {
-        const TABLE_HEADER_SZ: usize = size_of::<Oid>() + size_of::<u32>() + size_of::<u32>();
-
-        if buf.remaining() < TABLE_HEADER_SZ {
-            bail!(
-                "table header length too short, expected: {}, remaining: {}",
-                TABLE_HEADER_SZ,
-                buf.remaining()
-            );
-        }
-        let relid = buf.get_u32();
-        let ntuples = buf.get_u32();
-        let csn = buf.get_u32();
+        let relid = get_u32(buf).context("Failed to decode 'relid'")?;
+        let ntuples = get_u32(buf).context("Failed to decode 'ntuples'")?;
+        let csn = get_u32(buf).context("Failed to decode 'csn'")?;
         let mut tuples = vec![];
-        for i in 0..ntuples {
-            let ctx = || {
-                let i = i;
-                format!(
-                    "failed to decode tuple {} in Table(relid: {}, ntuples: {}, csn: {})",
-                    i, relid, ntuples, csn
-                )
-            };
-            let t = Relation::decode_tuple(buf).with_context(ctx)?;
-            tuples.push(t);
+        for _ in 0..ntuples {
+            tuples.push(Relation::decode_tuple(buf).with_context(|| {
+                format!("Failed to decode tuple. Tuples decoded: {}", tuples.len())
+            })?);
         }
 
         Ok(Relation::Table {
@@ -187,62 +185,48 @@ impl Relation {
     }
 
     fn decode_tuple(buf: &mut Bytes) -> anyhow::Result<Tuple> {
-        const TUPLE_SZ: usize = size_of::<u32>() + size_of::<u16>();
-
-        if buf.remaining() < TUPLE_SZ {
-            bail!(
-                "tuple too short, expected: {}, remaining: {}",
-                TUPLE_SZ,
-                buf.remaining()
-            );
-        }
-        let blocknum = buf.get_u32();
-        let offset = buf.get_u16();
+        let blocknum = get_u32(buf).context("Failed to decode 'blocknum'")?;
+        let offset = get_u16(buf).context("Failed to decode 'offset'")?;
 
         Ok(Tuple { blocknum, offset })
     }
 
     fn decode_index(buf: &mut Bytes) -> anyhow::Result<Relation> {
-        const INDEX_HEADER_SZ: usize = size_of::<Oid>() + size_of::<u32>();
-
-        if buf.remaining() < INDEX_HEADER_SZ {
-            bail!(
-                "table header length too short, expected: {}, remaining: {}",
-                INDEX_HEADER_SZ,
-                buf.remaining()
-            );
-        }
-        let relid = buf.get_u32();
-        let npages = buf.get_u32();
+        let relid = get_u32(buf).context("Failed to decode 'relid'")?;
+        let npages = get_u32(buf).context("Failed to decode 'npages'")?;
         let mut pages = vec![];
-        for i in 0..npages {
-            let ctx = || {
-                let i = i;
-                format!(
-                    "failed to decode page {} in Index(relid: {}, npages: {})",
-                    i, relid, npages
-                )
-            };
-            let p = Relation::decode_page(buf).with_context(ctx)?;
-            pages.push(p);
+        for _ in 0..npages {
+            pages.push(Relation::decode_page(buf).with_context(|| {
+                format!("Failed to decode page. Pages decoded: {}", pages.len())
+            })?);
         }
 
         Ok(Relation::Index { oid: relid, pages })
     }
 
     fn decode_page(buf: &mut Bytes) -> anyhow::Result<Page> {
-        const PAGE_SZ: usize = size_of::<u32>() + size_of::<u32>();
-
-        if buf.remaining() < PAGE_SZ {
-            bail!(
-                "page too short, expected: {}, remaining: {}",
-                PAGE_SZ,
-                buf.remaining()
-            );
-        }
-        let blocknum = buf.get_u32();
-        let csn = buf.get_u32();
+        let blocknum = get_u32(buf).context("Failed to decode 'blocknum'")?;
+        let csn = get_u32(buf).context("Failed to decode 'csn'")?;
 
         Ok(Page { blocknum, csn })
     }
 }
+
+macro_rules! new_get_num_fn {
+    ($name:ident, $type: ident) => {
+        fn $name(buf: &mut Bytes) -> anyhow::Result<$type> {
+            ensure!(
+                buf.remaining() >= size_of::<$type>(),
+                "Required bytes: {}. Remaining bytes: {}",
+                size_of::<$type>(),
+                buf.remaining(),
+            );
+            Ok(buf.$name())
+        }
+    };
+}
+
+new_get_num_fn!(get_u8, u8);
+new_get_num_fn!(get_u16, u16);
+new_get_num_fn!(get_u32, u32);
+new_get_num_fn!(get_u64, u64);
