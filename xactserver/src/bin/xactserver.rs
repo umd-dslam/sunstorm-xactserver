@@ -63,14 +63,26 @@ fn main() -> anyhow::Result<()> {
     join_handles.push(
         thread::Builder::new()
             .name("network node".into())
-            .spawn(move || node.thread_main())?,
+            .spawn(move || {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()?
+                    .block_on(node.run())?;
+                Ok(())
+            })?,
     );
 
-    let mut manager = XactManager::new(args.node_id, &nodes, args.connect_pg);
+    let manager = XactManager::new(args.node_id, &nodes, args.connect_pg, watcher_rx, node_rx);
     join_handles.push(
         thread::Builder::new()
             .name("xact manager".into())
-            .spawn(move || manager.thread_main(watcher_rx, node_rx))?,
+            .spawn(move || {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()?
+                    .block_on(manager.run())?;
+                Ok(())
+            })?,
     );
 
     for handle in join_handles {

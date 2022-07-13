@@ -21,16 +21,12 @@ impl Node {
         }
     }
 
-    pub fn thread_main(self) -> anyhow::Result<()> {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
-
+    pub async fn run(self) -> anyhow::Result<()> {
         info!("Node listening on {}", self.addr);
 
         let addr = self.addr.clone();
         let svc = XactCoordinationServer::new(self);
-        rt.block_on(Server::builder().add_service(svc).serve(addr))?;
+        Server::builder().add_service(svc).serve(addr).await?;
 
         Ok(())
     }

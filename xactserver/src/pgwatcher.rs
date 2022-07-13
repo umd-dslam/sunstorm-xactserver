@@ -32,7 +32,7 @@ impl PgWatcher {
         }
     }
 
-    pub fn thread_main(&self) -> anyhow::Result<()> {
+    pub fn thread_main(self) -> anyhow::Result<()> {
         let listener =
             TcpListener::bind(self.listen_pg).context("Failed to start postgres watcher")?;
 

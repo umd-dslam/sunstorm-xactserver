@@ -18,47 +18,47 @@ struct SharedState {
 
 pub struct XactManager {
     shared: Arc<SharedState>,
+    local_rx: mpsc::Receiver<XsMessage>,
+    remote_rx: mpsc::Receiver<XsMessage>,
     xact_state: HashMap<XactId, Arc<Mutex<XactState>>>,
     xact_id_counter: XactId,
 }
 
 impl XactManager {
-    pub fn new(node_id: NodeId, peers: &Vec<SocketAddr>, connect_pg: SocketAddr) -> Self {
+    pub fn new(
+        node_id: NodeId,
+        peers: &Vec<SocketAddr>,
+        connect_pg: SocketAddr,
+        local_rx: mpsc::Receiver<XsMessage>,
+        remote_rx: mpsc::Receiver<XsMessage>,
+    ) -> Self {
         Self {
             shared: Arc::new(SharedState {
                 node_id,
                 peers: peers.to_owned(),
                 connect_pg,
             }),
+            local_rx,
+            remote_rx,
             xact_state: HashMap::new(),
             xact_id_counter: 1,
         }
     }
 
-    pub fn thread_main(
-        &mut self,
-        mut local_rx: mpsc::Receiver<XsMessage>,
-        mut remote_rx: mpsc::Receiver<XsMessage>,
-    ) -> anyhow::Result<()> {
-        let rt = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()?;
-
-        rt.block_on(async move {
-            loop {
-                tokio::select! {
-                    Some(msg) = local_rx.recv() => {
-                        self.process_message(msg).unwrap();
-                    }
-                    Some(msg) = remote_rx.recv() => {
-                        self.process_message(msg).unwrap();
-                    }
-                    else => {
-                        break;
-                    }
+    pub async fn run(mut self) -> anyhow::Result<()> {
+        loop {
+            tokio::select! {
+                Some(msg) = self.local_rx.recv() => {
+                    self.process_message(msg).unwrap();
+                }
+                Some(msg) = self.remote_rx.recv() => {
+                    self.process_message(msg).unwrap();
+                }
+                else => {
+                    break;
                 }
             }
-        });
+        }
 
         Ok(())
     }
