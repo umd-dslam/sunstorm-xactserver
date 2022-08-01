@@ -2,7 +2,8 @@ use clap::{CommandFactory, ErrorKind, Parser};
 use std::net::SocketAddr;
 use std::thread;
 use tokio::sync::mpsc;
-use xactserver::{Node, NodeId, PgWatcher, XactManager};
+use xactserver::pg::PgWatcher;
+use xactserver::{Node, NodeId, XactManager};
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]

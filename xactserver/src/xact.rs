@@ -1,8 +1,8 @@
 use anyhow::{bail, ensure, Context};
 use bytes::{Buf, Bytes};
 use std::mem::size_of;
-use tokio::sync::oneshot;
 
+use crate::pg::PgXactController;
 use crate::{NodeId, XactId};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -20,8 +20,7 @@ pub struct XactState {
     coordinator: NodeId,
     commit_votes: Vec<NodeId>,
     target_nvotes: usize,
-
-    commit_tx: Option<oneshot::Sender<bool>>,
+    controller: PgXactController,
 }
 
 impl XactState {
@@ -30,7 +29,7 @@ impl XactState {
         data: Bytes,
         coordinator: NodeId,
         target_nvotes: usize,
-        commit_tx: Option<oneshot::Sender<bool>>,
+        controller: PgXactController,
     ) -> anyhow::Result<Self> {
         let rwset = RWSet::decode(data.clone()).context("Failed to decode read/write set")?;
         Ok(Self {
@@ -45,8 +44,12 @@ impl XactState {
             coordinator,
             commit_votes: Vec::new(),
             target_nvotes,
-            commit_tx,
+            controller,
         })
+    }
+
+    pub async fn validate(&mut self) -> anyhow::Result<bool> {
+        self.controller.execute().await
     }
 
     pub fn status(&self) -> XactStatus {
@@ -137,6 +140,7 @@ impl RWSetHeader {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 enum Relation {
     Table {
@@ -150,12 +154,14 @@ enum Relation {
     },
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 struct Tuple {
     blocknum: u32,
     offset: u16,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 struct Page {
     blocknum: u32,

@@ -1,10 +1,12 @@
+use anyhow::{anyhow, bail, Context};
 use bytes::Bytes;
-use log::{error, info};
+use log::info;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc;
+use std::sync::Arc;
+use tokio::sync::{mpsc, oneshot};
 
+use crate::pg::PgXactController;
 use crate::proto::xact_coordination_client::XactCoordinationClient;
 use crate::proto::{PrepareRequest, Vote, VoteRequest};
 use crate::xact::{XactState, XactStatus};
@@ -12,15 +14,15 @@ use crate::{NodeId, XactId, XsMessage, NODE_ID_BITS};
 
 struct SharedState {
     node_id: NodeId,
-    peers: Vec<SocketAddr>,
     connect_pg: SocketAddr,
+    peers: Vec<SocketAddr>,
 }
 
 pub struct XactManager {
     shared: Arc<SharedState>,
     local_rx: mpsc::Receiver<XsMessage>,
     remote_rx: mpsc::Receiver<XsMessage>,
-    xact_state: HashMap<XactId, Arc<Mutex<XactState>>>,
+    xact_state_msg_tx: HashMap<XactId, mpsc::Sender<XsMessage>>,
     xact_id_counter: XactId,
 }
 
@@ -35,12 +37,12 @@ impl XactManager {
         Self {
             shared: Arc::new(SharedState {
                 node_id,
-                peers: peers.to_owned(),
                 connect_pg,
+                peers: peers.to_owned(),
             }),
             local_rx,
             remote_rx,
-            xact_state: HashMap::new(),
+            xact_state_msg_tx: HashMap::new(),
             xact_id_counter: 1,
         }
     }
@@ -49,10 +51,10 @@ impl XactManager {
         loop {
             tokio::select! {
                 Some(msg) = self.local_rx.recv() => {
-                    self.process_message(msg).unwrap();
+                    self.process_message(msg).await?;
                 }
                 Some(msg) = self.remote_rx.recv() => {
-                    self.process_message(msg).unwrap();
+                    self.process_message(msg).await?;
                 }
                 else => {
                     break;
@@ -69,76 +71,96 @@ impl XactManager {
         xact_id
     }
 
-    fn process_message(&mut self, msg: XsMessage) -> anyhow::Result<()> {
-        match msg {
-            XsMessage::LocalXact { data, commit_tx } => {
-                let new_xact_id = self.next_xact_id();
-                let new_xact_state = Arc::new(Mutex::new(XactState::new(
-                    new_xact_id,
-                    data,
-                    self.shared.node_id,
-                    self.shared.peers.len() - 1,
-                    Some(commit_tx),
-                )?));
-                // TODO: assert that the returned value is None
-                self.xact_state.insert(new_xact_id, new_xact_state.clone());
-
-                tokio::spawn(XactManager::handle_local_xact_msg(
-                    self.shared.clone(),
-                    new_xact_state,
-                ));
+    async fn process_message(&mut self, msg: XsMessage) -> anyhow::Result<()> {
+        // Get the sender for the xact state manager
+        let msg_tx = match msg {
+            XsMessage::LocalXact { .. } => {
+                let xact_id = self.next_xact_id();
+                self.new_xact_state_manager(xact_id)?
             }
-            XsMessage::Prepare(prepare_req) => {
-                let new_xact_state = Arc::new(Mutex::new(XactState::new(
-                    prepare_req.xact_id,
-                    Bytes::from(prepare_req.data),
-                    prepare_req.from,
-                    self.shared.peers.len() - 1,
-                    None,
-                )?));
-
-                self.xact_state
-                    .entry(prepare_req.xact_id)
-                    .or_insert(new_xact_state.clone());
-
-                tokio::spawn(XactManager::handle_prepare_msg(
-                    self.shared.clone(),
-                    new_xact_state,
-                ));
+            XsMessage::Prepare(ref prepare_req) => {
+                self.new_xact_state_manager(prepare_req.xact_id)?
             }
-            XsMessage::Vote(vote_req) => {
-                let cur_xact_state = self.xact_state.get(&vote_req.xact_id).unwrap();
-
-                tokio::spawn(XactManager::handle_vote_msg(
-                    self.shared.clone(),
-                    cur_xact_state.clone(),
-                    vote_req,
-                ));
+            XsMessage::Vote(ref vote_req) => {
+                self.xact_state_msg_tx
+                    .get(&vote_req.xact_id)
+                    .ok_or(anyhow!(
+                        "No xact state manager running for xact id {}",
+                        vote_req.xact_id
+                    ))?
             }
-        }
+        };
+        // Forward the message to the xact state manager
+        msg_tx.send(msg).await?;
         Ok(())
     }
 
-    async fn handle_local_xact_msg(shared: Arc<SharedState>, xact: Arc<Mutex<XactState>>) {
-        let (xact_id, data) = {
-            let xact = xact.lock().unwrap();
-            // Return if the xact status has already been decided
-            if xact.status() != XactStatus::Waiting {
-                return;
-            }
+    fn new_xact_state_manager(&mut self, id: XactId) -> anyhow::Result<&mpsc::Sender<XsMessage>> {
+        if self.xact_state_msg_tx.contains_key(&id) {
+            bail!("Xact state manager already exists for xact {}", id);
+        }
+        let (msg_tx, msg_rx) = mpsc::channel(2);
+        // Start a new xact state manager
+        let xact_state_man = XactStateManager::new(self.shared.clone());
+        tokio::spawn(xact_state_man.run(id, msg_rx));
+        // Save and return the sender of the new xact state manager
+        Ok(self.xact_state_msg_tx.entry(id).or_insert(msg_tx))
+    }
+}
 
-            (xact.id, xact.data.clone())
-        };
+struct XactStateManager {
+    shared: Arc<SharedState>,
+    xact_state: Option<XactState>,
+}
 
-        // TODO: This is sending one-by-one to all other peers, but we want to send
-        //       to just relevant peers, in parallel.
+impl XactStateManager {
+    fn new(shared: Arc<SharedState>) -> Self {
+        Self {
+            shared,
+            xact_state: None,
+        }
+    }
+
+    async fn run(mut self, id: XactId, mut msg_rx: mpsc::Receiver<XsMessage>) {
+        while let Some(msg) = msg_rx.recv().await {
+            let res: anyhow::Result<()> = match msg {
+                XsMessage::LocalXact { data, commit_tx } => {
+                    self.handle_local_xact_msg(id, data, commit_tx).await
+                }
+                XsMessage::Prepare(prepare_req) => self.handle_prepare_msg(prepare_req).await,
+                XsMessage::Vote(vote_req) => self.handle_vote_msg(vote_req).await,
+            };
+
+            res.context(format!("Xact id: {}", id)).unwrap();
+        }
+    }
+
+    async fn handle_local_xact_msg(
+        &mut self,
+        id: XactId,
+        data: Bytes,
+        commit_tx: oneshot::Sender<bool>,
+    ) -> anyhow::Result<()> {
+        if self.xact_state.is_some() {
+            bail!("Xact state is not empty");
+        }
+        self.xact_state = Some(XactState::new(
+            id,
+            data.clone(),
+            self.shared.node_id,
+            self.shared.peers.len() - 1,
+            PgXactController::new_local(commit_tx),
+        )?);
+
         let request = PrepareRequest {
-            from: shared.node_id,
-            xact_id,
+            from: self.shared.node_id,
+            xact_id: id,
             data: data.into_iter().collect(),
         };
-        for (i, peer) in shared.peers.iter().enumerate() {
-            if i as NodeId != shared.node_id {
+        // TODO: This is sending one-by-one to all other peers, but we want to send
+        //       to just relevant peers, in parallel.
+        for (i, peer) in self.shared.peers.iter().enumerate() {
+            if i as NodeId != self.shared.node_id {
                 let peer_url = format!("http://{}", peer.to_string());
                 let mut client = XactCoordinationClient::connect(peer_url).await.unwrap();
                 client
@@ -147,51 +169,41 @@ impl XactManager {
                     .unwrap();
             }
         }
+        Ok(())
     }
 
-    async fn handle_prepare_msg(shared: Arc<SharedState>, xact: Arc<Mutex<XactState>>) {
-        // TODO: Avoid making connection every time
-        let connect_pg = &shared.connect_pg;
-        let conn_str = format!(
-            "host={} port={} user=cloud_admin dbname=postgres application_name=xactserver",
-            connect_pg.ip(),
-            connect_pg.port(),
-        );
-        info!("Connecting to local pg, conn_str: {}", conn_str);
-        let (client, conn) = tokio_postgres::connect(&conn_str, tokio_postgres::NoTls)
-            .await
-            .unwrap();
-
-        // The connection object performs the actual communication with the database,
-        // so spawn it off to run on its own.
-        tokio::spawn(async move {
-            if let Err(e) = conn.await {
-                error!("Connection error: {}", e);
-            }
-        });
-
-        let (xact_id, data) = {
-            let xact = xact.lock().unwrap();
-            (xact.id, xact.data.clone())
-        };
-
-        // TODO(mliu) should retry, just printing the error out for now
-        if let Err(e) = client
-            .query("SELECT print_bytes($1::bytea);", &[&data.as_ref()])
-            .await
-        {
-            error!("Calling postgres UDF failed with error: {}", e);
+    async fn handle_prepare_msg(&mut self, prepare_req: PrepareRequest) -> anyhow::Result<()> {
+        if self.xact_state.is_some() {
+            bail!("Xact state is not empty");
         }
-
+        let xact_id = prepare_req.xact_id;
+        let data = Bytes::from(prepare_req.data);
+        let new_xact_state = XactState::new(
+            xact_id,
+            data.clone(),
+            prepare_req.from,
+            self.shared.peers.len() - 1,
+            PgXactController::new_surrogate(xact_id, self.shared.connect_pg, data.clone()),
+        )?;
+        let vote = if self
+            .xact_state
+            .get_or_insert(new_xact_state)
+            .validate()
+            .await?
+        {
+            Vote::Commit
+        } else {
+            Vote::Abort
+        };
         // TODO: This is sending one-by-one to all other peers, but we want to send
         //       to just relevant peers, in parallel.
         let request = VoteRequest {
-            from: shared.node_id,
+            from: self.shared.node_id,
             xact_id,
-            vote: Vote::Commit as i32,
+            vote: vote as i32,
         };
-        for (i, peer) in shared.peers.iter().enumerate() {
-            if i as NodeId != shared.node_id {
+        for (i, peer) in self.shared.peers.iter().enumerate() {
+            if i as NodeId != self.shared.node_id {
                 let peer_url = format!("http://{}", peer.to_string());
                 let mut client = XactCoordinationClient::connect(peer_url).await.unwrap();
                 client
@@ -200,19 +212,21 @@ impl XactManager {
                     .unwrap();
             }
         }
+        Ok(())
     }
 
-    async fn handle_vote_msg(
-        _shared: Arc<SharedState>,
-        xact: Arc<Mutex<XactState>>,
-        vote: VoteRequest,
-    ) {
-        let mut xact = xact.lock().unwrap();
-        let status = xact.add_vote(vote.from, vote.vote == Vote::Abort as i32);
-        if status == XactStatus::Commit {
-            info!("Commit transaction {}", xact.id);
-        } else if status == XactStatus::Abort {
-            info!("Abort transaction {}", xact.id);
-        }
+    async fn handle_vote_msg(&mut self, vote: VoteRequest) -> anyhow::Result<()> {
+        self.xact_state
+            .as_mut()
+            .ok_or(anyhow!("Xact state does not exist"))
+            .and_then(|xact| {
+                let status = xact.add_vote(vote.from, vote.vote == Vote::Abort as i32);
+                if status == XactStatus::Commit {
+                    info!("Commit transaction {}", xact.id);
+                } else if status == XactStatus::Abort {
+                    info!("Abort transaction {}", xact.id);
+                }
+                Ok(())
+            })
     }
 }

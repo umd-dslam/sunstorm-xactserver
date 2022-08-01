@@ -1,6 +1,6 @@
 pub mod manager;
 pub mod node;
-pub mod pgwatcher;
+pub mod pg;
 pub mod xact;
 mod proto {
     tonic::include_proto!("xactserver");
@@ -8,7 +8,6 @@ mod proto {
 
 pub use manager::XactManager;
 pub use node::Node;
-pub use pgwatcher::PgWatcher;
 
 use bytes::Bytes;
 use tokio::sync::oneshot;
