@@ -17,35 +17,30 @@ pub struct XactState {
     pub data: Bytes,
     pub rwset: RWSet,
     status: XactStatus,
-    coordinator: NodeId,
     commit_votes: Vec<NodeId>,
     target_nvotes: usize,
     controller: PgXactController,
 }
 
 impl XactState {
-    pub fn new(
+    pub async fn new(
         id: XactId,
         data: Bytes,
-        coordinator: NodeId,
         target_nvotes: usize,
         controller: PgXactController,
     ) -> anyhow::Result<Self> {
         let rwset = RWSet::decode(data.clone()).context("Failed to decode read/write set")?;
-        Ok(Self {
+        let mut new_xact_state = Self {
             id,
             data,
             rwset,
-            status: if target_nvotes == 0 {
-                XactStatus::Commit
-            } else {
-                XactStatus::Waiting
-            },
-            coordinator,
+            status: XactStatus::Waiting,
             commit_votes: Vec::new(),
             target_nvotes,
             controller,
-        })
+        };
+        new_xact_state.try_commit().await?;
+        Ok(new_xact_state)
     }
 
     pub async fn validate(&mut self) -> anyhow::Result<bool> {
@@ -56,16 +51,29 @@ impl XactState {
         self.status
     }
 
-    pub fn add_vote(&mut self, from: NodeId, abort: bool) -> XactStatus {
+    pub async fn add_vote(&mut self, from: NodeId, abort: bool) -> anyhow::Result<XactStatus> {
         if abort {
-            self.status = XactStatus::Abort;
-        } else if from != self.coordinator && !self.commit_votes.contains(&from) {
+            self.rollback().await?;
+        } else if !self.commit_votes.contains(&from) {
             self.commit_votes.push(from);
-            if self.commit_votes.len() == self.target_nvotes {
-                self.status = XactStatus::Commit;
-            }
+            self.try_commit().await?;
         }
-        self.status
+        Ok(self.status)
+    }
+
+    async fn rollback(&mut self) -> anyhow::Result<()> {
+        self.controller.rollback().await?;
+        self.status = XactStatus::Abort;
+        Ok(())
+    }
+
+    async fn try_commit(&mut self) -> anyhow::Result<()> {
+        if self.commit_votes.len() < self.target_nvotes {
+            return Ok(());
+        }
+        self.controller.commit().await?;
+        self.status = XactStatus::Commit;
+        Ok(())
     }
 }
 

@@ -144,13 +144,15 @@ impl XactStateManager {
         if self.xact_state.is_some() {
             bail!("Xact state is not empty");
         }
-        self.xact_state = Some(XactState::new(
-            id,
-            data.clone(),
-            self.shared.node_id,
-            self.shared.peers.len() - 1,
-            PgXactController::new_local(commit_tx),
-        )?);
+        self.xact_state = Some(
+            XactState::new(
+                id,
+                data.clone(),
+                self.shared.peers.len() - 1,
+                PgXactController::new_local(commit_tx),
+            )
+            .await?,
+        );
 
         let request = PrepareRequest {
             from: self.shared.node_id,
@@ -181,10 +183,10 @@ impl XactStateManager {
         let new_xact_state = XactState::new(
             xact_id,
             data.clone(),
-            prepare_req.from,
             self.shared.peers.len() - 1,
             PgXactController::new_surrogate(xact_id, self.shared.connect_pg, data.clone()),
-        )?;
+        )
+        .await?;
         let vote = if self
             .xact_state
             .get_or_insert(new_xact_state)
@@ -216,17 +218,19 @@ impl XactStateManager {
     }
 
     async fn handle_vote_msg(&mut self, vote: VoteRequest) -> anyhow::Result<()> {
-        self.xact_state
-            .as_mut()
-            .ok_or(anyhow!("Xact state does not exist"))
-            .and_then(|xact| {
-                let status = xact.add_vote(vote.from, vote.vote == Vote::Abort as i32);
+        match self.xact_state.as_mut() {
+            None => bail!("Xact state does not exist"),
+            Some(xact) => {
+                let status = xact
+                    .add_vote(vote.from, vote.vote == Vote::Abort as i32)
+                    .await?;
                 if status == XactStatus::Commit {
                     info!("Commit transaction {}", xact.id);
                 } else if status == XactStatus::Abort {
                     info!("Abort transaction {}", xact.id);
                 }
                 Ok(())
-            })
+            }
+        }
     }
 }
