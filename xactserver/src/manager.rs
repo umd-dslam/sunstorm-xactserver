@@ -6,48 +6,54 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
+use crate::node::client;
 use crate::pg::PgXactController;
-use crate::proto::xact_coordination_client::XactCoordinationClient;
 use crate::proto::{PrepareRequest, Vote, VoteRequest};
 use crate::xact::{XactState, XactStatus};
 use crate::{NodeId, XactId, XsMessage, NODE_ID_BITS};
 
-struct SharedState {
+pub struct XactManager {
     node_id: NodeId,
     connect_pg: SocketAddr,
-    peers: Vec<SocketAddr>,
-}
-
-pub struct XactManager {
-    shared: Arc<SharedState>,
+    peer_addrs: Vec<SocketAddr>,
     local_rx: mpsc::Receiver<XsMessage>,
     remote_rx: mpsc::Receiver<XsMessage>,
     xact_state_msg_tx: HashMap<XactId, mpsc::Sender<XsMessage>>,
     xact_id_counter: XactId,
+    peers: Option<Arc<client::Nodes>>,
 }
 
 impl XactManager {
     pub fn new(
         node_id: NodeId,
-        peers: &Vec<SocketAddr>,
         connect_pg: SocketAddr,
+        peer_addrs: Vec<SocketAddr>,
         local_rx: mpsc::Receiver<XsMessage>,
         remote_rx: mpsc::Receiver<XsMessage>,
     ) -> Self {
         Self {
-            shared: Arc::new(SharedState {
-                node_id,
-                connect_pg,
-                peers: peers.to_owned(),
-            }),
+            node_id,
+            peer_addrs,
+            connect_pg,
             local_rx,
             remote_rx,
             xact_state_msg_tx: HashMap::new(),
             xact_id_counter: 1,
+            peers: None,
         }
     }
 
     pub async fn run(mut self) -> anyhow::Result<()> {
+        self.peers = Some(Arc::new(
+            client::Nodes::connect(
+                self.peer_addrs
+                    .iter()
+                    .map(|addr| format!("http://{}", addr.to_string()))
+                    .collect(),
+            )
+            .await?,
+        ));
+
         loop {
             tokio::select! {
                 Some(msg) = self.local_rx.recv() => {
@@ -66,7 +72,7 @@ impl XactManager {
     }
 
     fn next_xact_id(&mut self) -> XactId {
-        let xact_id = (self.xact_id_counter << NODE_ID_BITS) | (self.shared.node_id as u64);
+        let xact_id = (self.xact_id_counter << NODE_ID_BITS) | (self.node_id as u64);
         self.xact_id_counter += 1;
         xact_id
     }
@@ -101,7 +107,11 @@ impl XactManager {
         }
         let (msg_tx, msg_rx) = mpsc::channel(2);
         // Start a new xact state manager
-        let xact_state_man = XactStateManager::new(self.shared.clone());
+        let xact_state_man = XactStateManager::new(
+            self.node_id,
+            self.connect_pg,
+            self.peers.as_ref().unwrap().clone(),
+        );
         tokio::spawn(xact_state_man.run(id, msg_rx));
         // Save and return the sender of the new xact state manager
         Ok(self.xact_state_msg_tx.entry(id).or_insert(msg_tx))
@@ -109,14 +119,18 @@ impl XactManager {
 }
 
 struct XactStateManager {
-    shared: Arc<SharedState>,
+    node_id: NodeId,
+    connect_pg: SocketAddr,
+    peers: Arc<client::Nodes>,
     xact_state: Option<XactState>,
 }
 
 impl XactStateManager {
-    fn new(shared: Arc<SharedState>) -> Self {
+    fn new(node_id: NodeId, connect_pg: SocketAddr, peers: Arc<client::Nodes>) -> Self {
         Self {
-            shared,
+            node_id,
+            connect_pg,
+            peers,
             xact_state: None,
         }
     }
@@ -148,27 +162,25 @@ impl XactStateManager {
             XactState::new(
                 id,
                 data.clone(),
-                self.shared.peers.len() - 1,
+                self.peers.size() - 1,
                 PgXactController::new_local(commit_tx),
             )
             .await?,
         );
 
         let request = PrepareRequest {
-            from: self.shared.node_id,
+            from: self.node_id,
             xact_id: id,
             data: data.into_iter().collect(),
         };
+
         // TODO: This is sending one-by-one to all other peers, but we want to send
-        //       to just relevant peers, in parallel.
-        for (i, peer) in self.shared.peers.iter().enumerate() {
-            if i as NodeId != self.shared.node_id {
-                let peer_url = format!("http://{}", peer.to_string());
-                let mut client = XactCoordinationClient::connect(peer_url).await.unwrap();
-                client
-                    .prepare(tonic::Request::new(request.clone()))
-                    .await
-                    .unwrap();
+        //  to just relevant peers, in parallel.
+        for i in 0..self.peers.size() {
+            let node_id = i as NodeId;
+            if node_id != self.node_id {
+                let mut client = self.peers.get(node_id).await?;
+                client.prepare(tonic::Request::new(request.clone())).await?;
             }
         }
         Ok(())
@@ -183,8 +195,8 @@ impl XactStateManager {
         let new_xact_state = XactState::new(
             xact_id,
             data.clone(),
-            self.shared.peers.len() - 1,
-            PgXactController::new_surrogate(xact_id, self.shared.connect_pg, data.clone()),
+            self.peers.size() - 1,
+            PgXactController::new_surrogate(xact_id, self.connect_pg, data.clone()),
         )
         .await?;
         let vote = if self
@@ -197,21 +209,20 @@ impl XactStateManager {
         } else {
             Vote::Abort
         };
-        // TODO: This is sending one-by-one to all other peers, but we want to send
-        //       to just relevant peers, in parallel.
+
         let request = VoteRequest {
-            from: self.shared.node_id,
+            from: self.node_id,
             xact_id,
             vote: vote as i32,
         };
-        for (i, peer) in self.shared.peers.iter().enumerate() {
-            if i as NodeId != self.shared.node_id {
-                let peer_url = format!("http://{}", peer.to_string());
-                let mut client = XactCoordinationClient::connect(peer_url).await.unwrap();
-                client
-                    .vote(tonic::Request::new(request.clone()))
-                    .await
-                    .unwrap();
+
+        // TODO: This is sending one-by-one to all other peers, but we want to send
+        //       to just relevant peers, in parallel.
+        for i in 0..self.peers.size() {
+            let node_id = i as NodeId;
+            if node_id != self.node_id {
+                let mut client = self.peers.get(node_id).await?;
+                client.vote(tonic::Request::new(request.clone())).await?;
             }
         }
         Ok(())

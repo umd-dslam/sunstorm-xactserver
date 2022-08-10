@@ -108,26 +108,29 @@ impl SurrogateXact {
         });
 
         let client = self.client.get_or_insert(client);
-        // TODO: Not doing much for now
-        client.batch_execute("BEGIN").await?;
+        // TODO: Not doing anything for now
+        // client.batch_execute("BEGIN").await?;
         client
             .execute("SELECT print_bytes($1::bytea);", &[&self.data.as_ref()])
             .await
-            .context("failed to print bytes")?;
-        client
-            .batch_execute(format!("PREPARE TRANSACTION '{}'", self.xact_id).as_str())
-            .await
-            .context("failed to prepare transaction")?;
+            .context("Failed to print bytes")?;
+        info!("[Dummy] Prepared transaction {}", self.xact_id);
+        // client
+        //     .batch_execute(format!("PREPARE TRANSACTION '{}'", self.xact_id).as_str())
+        //     .await
+        //     .context("Failed to prepare transaction")?;
         Ok(true)
     }
 
     async fn commit(&self) -> anyhow::Result<()> {
         match self.client {
-            Some(ref client) => {
-                client
-                    .batch_execute(format!("COMMIT PREPARED '{}'", self.xact_id).as_str())
-                    .await
-                    .context("failed to commit prepared transaction")?;
+            Some(ref _client) => {
+                // TODO: Not doing anything for now
+                // client
+                //     .batch_execute(format!("COMMIT PREPARED '{}'", self.xact_id).as_str())
+                //     .await
+                //     .context("Failed to commit prepared transaction")?;
+                info!("[Dummy] Commit prepared transaction {}", self.xact_id);
             }
             None => {
                 bail!("Connection does not exist");
@@ -138,10 +141,12 @@ impl SurrogateXact {
 
     async fn rollback(&self) -> anyhow::Result<()> {
         match self.client {
-            Some(ref client) => {
-                client
-                    .batch_execute(format!("ROLLBACK PREPARED '{}'", self.xact_id).as_str())
-                    .await?;
+            Some(ref _client) => {
+                // TODO: Not doing anything for now
+                // client
+                //     .batch_execute(format!("ROLLBACK PREPARED '{}'", self.xact_id).as_str())
+                //     .await?;
+                info!("[Dummy] Rollback prepared transaction {}", self.xact_id);
             }
             None => {
                 bail!("Connection does not exist");

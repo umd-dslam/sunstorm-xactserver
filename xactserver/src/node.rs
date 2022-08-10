@@ -53,3 +53,67 @@ impl XactCoordination for Node {
         Ok(Response::new(VoteResponse {}))
     }
 }
+
+pub mod client {
+    use anyhow::anyhow;
+    use async_trait::async_trait;
+    use futures::stream::{self, StreamExt, TryStreamExt};
+
+    use crate::proto::xact_coordination_client::XactCoordinationClient;
+    use crate::NodeId;
+
+    pub struct Nodes {
+        conn_pools: Vec<bb8::Pool<ConnectionManager>>,
+    }
+
+    impl Nodes {
+        pub async fn connect(urls: Vec<String>) -> anyhow::Result<Self> {
+            let nbufferred = urls.len();
+            let conn_pools = stream::iter(urls)
+                .map(|url| bb8::Pool::builder().build(ConnectionManager(url.clone())))
+                .buffered(nbufferred)
+                .try_collect()
+                .await?;
+
+            Ok(Self { conn_pools })
+        }
+
+        pub async fn get(
+            &self,
+            id: NodeId,
+        ) -> anyhow::Result<bb8::PooledConnection<'_, ConnectionManager>> {
+            let pool = self.conn_pools.get(id as usize).ok_or_else(|| {
+                anyhow!(
+                    "Node id {} is out of range (0 - {})",
+                    id,
+                    self.conn_pools.len()
+                )
+            })?;
+            Ok(pool.get().await?)
+        }
+
+        pub fn size(&self) -> usize {
+            self.conn_pools.len()
+        }
+    }
+
+    pub struct ConnectionManager(String);
+
+    #[async_trait]
+    impl bb8::ManageConnection for ConnectionManager {
+        type Connection = XactCoordinationClient<tonic::transport::Channel>;
+        type Error = tonic::transport::Error;
+
+        async fn connect(&self) -> anyhow::Result<Self::Connection, Self::Error> {
+            Ok(XactCoordinationClient::connect(self.0.clone()).await?)
+        }
+
+        async fn is_valid(&self, _: &mut Self::Connection) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn has_broken(&self, _: &mut Self::Connection) -> bool {
+            false
+        }
+    }
+}

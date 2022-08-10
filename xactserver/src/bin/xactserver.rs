@@ -25,7 +25,7 @@ fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let args = Args::parse();
-    let nodes: Vec<SocketAddr> = args
+    let node_addresses: Vec<SocketAddr> = args
         .nodes
         .split(",")
         .map(|addr| {
@@ -39,14 +39,16 @@ fn main() -> anyhow::Result<()> {
             })
         })
         .collect();
-    let listen_peer = nodes.get(args.node_id as usize).unwrap_or_else(|| {
-        Args::command()
-            .error(
-                ErrorKind::InvalidValue,
-                "Invalid value for '--node-id': out of bound",
-            )
-            .exit();
-    });
+    let listen_peer = node_addresses
+        .get(args.node_id as usize)
+        .unwrap_or_else(|| {
+            Args::command()
+                .error(
+                    ErrorKind::InvalidValue,
+                    "Invalid value for '--node-id': out of bound",
+                )
+                .exit();
+        });
 
     let (watcher_tx, watcher_rx) = mpsc::channel(100);
     let (node_tx, node_rx) = mpsc::channel(100);
@@ -73,7 +75,13 @@ fn main() -> anyhow::Result<()> {
             })?,
     );
 
-    let manager = XactManager::new(args.node_id, &nodes, args.connect_pg, watcher_rx, node_rx);
+    let manager = XactManager::new(
+        args.node_id,
+        args.connect_pg,
+        node_addresses,
+        watcher_rx,
+        node_rx,
+    );
     join_handles.push(
         thread::Builder::new()
             .name("xact manager".into())

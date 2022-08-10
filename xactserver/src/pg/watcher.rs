@@ -95,7 +95,7 @@ impl postgres_backend::Handler for PgWatcherHandler {
                 Ok(message) => {
                     if let Some(message) = message {
                         if let FeMessage::CopyData(buf) = message {
-                            let (commit_tx, _) = oneshot::channel();
+                            let (commit_tx, commit_rx) = oneshot::channel();
                             // Pass the transaction buffer to the xactserver.
                             // This is a blocking send because we're not inside an
                             // asynchronous environment
@@ -103,6 +103,11 @@ impl postgres_backend::Handler for PgWatcherHandler {
                                 data: buf,
                                 commit_tx,
                             })?;
+                            if commit_rx.blocking_recv()? {
+                                info!("Transaction committed");
+                            } else {
+                                info!("Transaction aborted");
+                            }
                         } else {
                             continue;
                         }

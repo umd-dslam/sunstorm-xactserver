@@ -232,7 +232,7 @@ impl Relation {
 }
 
 macro_rules! new_get_num_fn {
-    ($name:ident, $type: ident) => {
+    ($name: ident, $type: ident) => {
         fn $name(buf: &mut Bytes) -> anyhow::Result<$type> {
             ensure!(
                 buf.remaining() >= size_of::<$type>(),
