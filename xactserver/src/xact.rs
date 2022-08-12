@@ -1,12 +1,17 @@
 use anyhow::{bail, ensure, Context};
+use bit_set::BitSet;
 use bytes::{Buf, Bytes};
+use std::convert::TryInto;
 use std::mem::size_of;
+use std::net::SocketAddr;
+use tokio::sync::oneshot;
 
 use crate::pg::PgXactController;
 use crate::{NodeId, XactId};
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum XactStatus {
+    Uninitialized,
     Waiting,
     Commit,
     Abort,
@@ -14,66 +19,96 @@ pub enum XactStatus {
 
 pub struct XactState {
     pub id: XactId,
-    pub data: Bytes,
-    pub rwset: RWSet,
+    rwset: RWSet,
     status: XactStatus,
-    commit_votes: Vec<NodeId>,
-    target_nvotes: usize,
+    participants: BitSet,
+    voted: BitSet,
     controller: PgXactController,
 }
 
 impl XactState {
-    pub async fn new(
+    pub fn new_local(
         id: XactId,
         data: Bytes,
-        target_nvotes: usize,
-        controller: PgXactController,
+        commit_tx: oneshot::Sender<bool>,
     ) -> anyhow::Result<Self> {
-        let rwset = RWSet::decode(data.clone()).context("Failed to decode read/write set")?;
-        let mut new_xact_state = Self {
+        let controller = PgXactController::new_local(commit_tx);
+        Self::new(id, data, controller)
+    }
+
+    pub fn new_surrogate(id: XactId, data: Bytes, connect_pg: SocketAddr) -> anyhow::Result<Self> {
+        let controller = PgXactController::new_surrogate(id, connect_pg, data.clone());
+        Self::new(id, data, controller)
+    }
+
+    fn new(id: XactId, data: Bytes, controller: PgXactController) -> anyhow::Result<Self> {
+        let rwset = RWSet::decode(data).context("Failed to decode read/write set")?;
+        let mut participants = BitSet::new();
+        for i in 0..u64::BITS {
+            if (rwset.header.region_set >> i) & 1 == 1 {
+                participants.insert(i.try_into()?);
+            }
+        }
+        Ok(Self {
             id,
-            data,
             rwset,
-            status: XactStatus::Waiting,
-            commit_votes: Vec::new(),
-            target_nvotes,
+            status: XactStatus::Uninitialized,
+            participants,
+            voted: BitSet::new(),
             controller,
-        };
-        new_xact_state.try_commit().await?;
-        Ok(new_xact_state)
+        })
     }
 
-    pub async fn validate(&mut self) -> anyhow::Result<bool> {
-        self.controller.execute().await
-    }
+    pub async fn initialize(
+        &mut self,
+        coordinator: NodeId,
+        me: NodeId,
+    ) -> anyhow::Result<XactStatus> {
+        ensure!(self.status == XactStatus::Uninitialized);
+        // Execute the transaction and set status to waiting
+        let commit_vote = self.controller.execute().await?;
+        self.status = XactStatus::Waiting;
 
-    pub fn status(&self) -> XactStatus {
-        self.status
+        // Add votes if pass validation
+        self.add_vote(me, !commit_vote).await?;
+        if commit_vote && me != coordinator {
+            self.add_vote(coordinator, false).await?;
+        }
+
+        Ok(self.status)
     }
 
     pub async fn add_vote(&mut self, from: NodeId, abort: bool) -> anyhow::Result<XactStatus> {
+        ensure!(self.status == XactStatus::Waiting);
+        ensure!(self.participants.contains(from));
         if abort {
             self.rollback().await?;
-        } else if !self.commit_votes.contains(&from) {
-            self.commit_votes.push(from);
+        } else if !self.voted.contains(from) {
+            self.voted.insert(from);
             self.try_commit().await?;
         }
         Ok(self.status)
     }
 
     async fn rollback(&mut self) -> anyhow::Result<()> {
+        ensure!(self.status == XactStatus::Waiting);
         self.controller.rollback().await?;
         self.status = XactStatus::Abort;
         Ok(())
     }
 
     async fn try_commit(&mut self) -> anyhow::Result<()> {
-        if self.commit_votes.len() < self.target_nvotes {
+        ensure!(self.status == XactStatus::Waiting);
+        if self.voted == self.participants {
             return Ok(());
         }
         self.controller.commit().await?;
         self.status = XactStatus::Commit;
         Ok(())
+    }
+
+    pub fn participants(&self) -> Vec<NodeId> {
+        self.participants.iter().collect()
     }
 }
 
@@ -97,7 +132,9 @@ impl RWSet {
     }
 
     fn decode_relations(buf: &mut Bytes) -> anyhow::Result<Vec<Relation>> {
-        let relations_len = get_u32(buf).context("Failed to decode length")? as usize;
+        let relations_len = get_u32(buf)
+            .context("Failed to decode length")?
+            .try_into()?;
         ensure!(
             buf.remaining() >= relations_len,
             "Relations section too short. Expected: {}. Remaining: {}",

@@ -8,7 +8,6 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::node::client;
-use crate::pg::PgXactController;
 use crate::proto::{PrepareRequest, Vote, VoteRequest};
 use crate::xact::{XactState, XactStatus};
 use crate::{NodeId, XactId, XsMessage, NODE_ID_BITS};
@@ -152,36 +151,34 @@ impl XactStateManager {
 
     async fn handle_local_xact_msg(
         &mut self,
-        id: XactId,
+        xact_id: XactId,
         data: Bytes,
         commit_tx: oneshot::Sender<bool>,
     ) -> anyhow::Result<()> {
         if self.xact_state.is_some() {
             bail!("Xact state is not empty");
         }
-        self.xact_state = Some(
-            XactState::new(
-                id,
-                data.clone(),
-                self.peers.size() - 1,
-                PgXactController::new_local(commit_tx),
-            )
-            .await?,
-        );
+        let xact_status = self
+            .xact_state
+            .insert(XactState::new_local(xact_id, data.clone(), commit_tx)?)
+            .initialize(self.node_id, self.node_id)
+            .await?;
 
-        let request = PrepareRequest {
-            from: self.node_id as u32,
-            xact_id: id,
-            data: data.into_iter().collect(),
-        };
+        if xact_status == XactStatus::Waiting {
+            let request = PrepareRequest {
+                from: self.node_id as u32,
+                xact_id,
+                data: data.into_iter().collect(),
+            };
 
-        // TODO: This is sending one-by-one to all other peers, but we want to send
-        //  to just relevant peers, in parallel.
-        for i in 0..self.peers.size() {
-            let node_id = i as NodeId;
-            if node_id != self.node_id {
-                let mut client = self.peers.get(node_id).await?;
-                client.prepare(tonic::Request::new(request.clone())).await?;
+            // TODO: This is sending one-by-one to all other peers, but we want to send
+            //  to just relevant peers, in parallel.
+            for i in 0..self.peers.size() {
+                let node_id = i as NodeId;
+                if node_id != self.node_id {
+                    let mut client = self.peers.get(node_id).await?;
+                    client.prepare(tonic::Request::new(request.clone())).await?;
+                }
             }
         }
         Ok(())
@@ -193,22 +190,16 @@ impl XactStateManager {
         }
         let xact_id = prepare_req.xact_id;
         let data = Bytes::from(prepare_req.data);
-        let new_xact_state = XactState::new(
-            xact_id,
-            data.clone(),
-            self.peers.size() - 1,
-            PgXactController::new_surrogate(xact_id, self.connect_pg, data.clone()),
-        )
-        .await?;
-        let vote = if self
+        let xact_status = self
             .xact_state
-            .get_or_insert(new_xact_state)
-            .validate()
-            .await?
-        {
-            Vote::Commit
-        } else {
+            .insert(XactState::new_surrogate(xact_id, data, self.connect_pg)?)
+            .initialize(prepare_req.from.try_into()?, self.node_id)
+            .await?;
+
+        let vote = if xact_status == XactStatus::Abort {
             Vote::Abort
+        } else {
+            Vote::Commit
         };
 
         let request = VoteRequest {
@@ -234,10 +225,7 @@ impl XactStateManager {
             None => bail!("Xact state does not exist"),
             Some(xact) => {
                 let status = xact
-                    .add_vote(
-                        vote.from.try_into().unwrap(),
-                        vote.vote == Vote::Abort as i32,
-                    )
+                    .add_vote(vote.from.try_into()?, vote.vote == Vote::Abort as i32)
                     .await?;
                 if status == XactStatus::Commit {
                     info!("Commit transaction {}", xact.id);

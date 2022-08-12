@@ -24,9 +24,7 @@ impl PgXactController {
 
     pub async fn execute(&mut self) -> anyhow::Result<bool> {
         match self {
-            Self::Local(_) => {
-                bail!("Local transaction is already executed")
-            }
+            Self::Local(_) => Ok(true),
             Self::Surrogate(xact) => xact.execute().await,
         }
     }
