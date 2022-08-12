@@ -2,6 +2,7 @@ use anyhow::{anyhow, bail, Context};
 use bytes::Bytes;
 use log::info;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
@@ -169,7 +170,7 @@ impl XactStateManager {
         );
 
         let request = PrepareRequest {
-            from: self.node_id,
+            from: self.node_id as u32,
             xact_id: id,
             data: data.into_iter().collect(),
         };
@@ -211,7 +212,7 @@ impl XactStateManager {
         };
 
         let request = VoteRequest {
-            from: self.node_id,
+            from: self.node_id as u32,
             xact_id,
             vote: vote as i32,
         };
@@ -233,7 +234,10 @@ impl XactStateManager {
             None => bail!("Xact state does not exist"),
             Some(xact) => {
                 let status = xact
-                    .add_vote(vote.from, vote.vote == Vote::Abort as i32)
+                    .add_vote(
+                        vote.from.try_into().unwrap(),
+                        vote.vote == Vote::Abort as i32,
+                    )
                     .await?;
                 if status == XactStatus::Commit {
                     info!("Commit transaction {}", xact.id);

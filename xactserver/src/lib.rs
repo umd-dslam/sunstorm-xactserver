@@ -12,7 +12,7 @@ pub use node::Node;
 use bytes::Bytes;
 use tokio::sync::oneshot;
 
-pub type NodeId = u32;
+pub type NodeId = usize;
 pub type XactId = u64;
 
 pub const NODE_ID_BITS: i32 = 10;
