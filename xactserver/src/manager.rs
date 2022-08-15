@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::node::client;
+use crate::pg::{LocalXactController, SurrogateXactController};
 use crate::proto::{PrepareRequest, Vote, VoteRequest};
 use crate::xact::{XactState, XactStatus};
 use crate::{NodeId, XactId, XsMessage, NODE_ID_BITS};
@@ -118,11 +119,16 @@ impl XactManager {
     }
 }
 
+enum XactType {
+    Local(XactState<LocalXactController>),
+    Surrogate(XactState<SurrogateXactController>),
+}
+
 struct XactStateManager {
     node_id: NodeId,
     connect_pg: SocketAddr,
     peers: Arc<client::Nodes>,
-    xact_state: Option<XactState>,
+    xact_state: Option<XactType>,
 }
 
 impl XactStateManager {
@@ -137,15 +143,15 @@ impl XactStateManager {
 
     async fn run(mut self, id: XactId, mut msg_rx: mpsc::Receiver<XsMessage>) {
         while let Some(msg) = msg_rx.recv().await {
-            let res: anyhow::Result<()> = match msg {
+            match msg {
                 XsMessage::LocalXact { data, commit_tx } => {
                     self.handle_local_xact_msg(id, data, commit_tx).await
                 }
                 XsMessage::Prepare(prepare_req) => self.handle_prepare_msg(prepare_req).await,
                 XsMessage::Vote(vote_req) => self.handle_vote_msg(vote_req).await,
-            };
-
-            res.context(format!("Xact id: {}", id)).unwrap();
+            }
+            .context(format!("Xact id: {}", id))
+            .unwrap();
         }
     }
 
@@ -158,11 +164,15 @@ impl XactStateManager {
         if self.xact_state.is_some() {
             bail!("Xact state is not empty");
         }
-        let xact_status = self
-            .xact_state
-            .insert(XactState::new_local(xact_id, data.clone(), commit_tx)?)
+        // Create and initialize a new xact state
+        let mut new_xact_state =
+            XactState::<LocalXactController>::new(xact_id, data.clone(), commit_tx)?;
+        let xact_status = new_xact_state
             .initialize(self.node_id, self.node_id)
             .await?;
+
+        // Save the xact state
+        self.xact_state = Some(XactType::Local(new_xact_state));
 
         if xact_status == XactStatus::Waiting {
             let request = PrepareRequest {
@@ -188,13 +198,18 @@ impl XactStateManager {
         if self.xact_state.is_some() {
             bail!("Xact state is not empty");
         }
+
+        // Create and initialize a new xact state
         let xact_id = prepare_req.xact_id;
         let data = Bytes::from(prepare_req.data);
-        let xact_status = self
-            .xact_state
-            .insert(XactState::new_surrogate(xact_id, data, self.connect_pg)?)
+        let mut new_xact_state =
+            XactState::<SurrogateXactController>::new(xact_id, data, self.connect_pg)?;
+        let xact_status = new_xact_state
             .initialize(prepare_req.from.try_into()?, self.node_id)
             .await?;
+
+        // Save the xact state
+        self.xact_state = Some(XactType::Surrogate(new_xact_state));
 
         let vote = if xact_status == XactStatus::Abort {
             Vote::Abort
@@ -223,14 +238,25 @@ impl XactStateManager {
     async fn handle_vote_msg(&mut self, vote: VoteRequest) -> anyhow::Result<()> {
         match self.xact_state.as_mut() {
             None => bail!("Xact state does not exist"),
-            Some(xact) => {
+            Some(XactType::Local(xact)) => {
                 let status = xact
                     .add_vote(vote.from.try_into()?, vote.vote == Vote::Abort as i32)
                     .await?;
                 if status == XactStatus::Commit {
-                    info!("Commit transaction {}", xact.id);
+                    info!("Commit local transaction {}", xact.id);
                 } else if status == XactStatus::Abort {
-                    info!("Abort transaction {}", xact.id);
+                    info!("Abort local transaction {}", xact.id);
+                }
+                Ok(())
+            }
+            Some(XactType::Surrogate(xact)) => {
+                let status = xact
+                    .add_vote(vote.from.try_into()?, vote.vote == Vote::Abort as i32)
+                    .await?;
+                if status == XactStatus::Commit {
+                    info!("Commit surrogate transaction {}", xact.id);
+                } else if status == XactStatus::Abort {
+                    info!("Abort surrogate transaction {}", xact.id);
                 }
                 Ok(())
             }

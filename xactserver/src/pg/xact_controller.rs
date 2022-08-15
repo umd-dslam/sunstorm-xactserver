@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail, Context};
+use async_trait::async_trait;
 use bytes::Bytes;
 use log::{error, info};
 use std::net::SocketAddr;
@@ -6,50 +7,32 @@ use tokio::sync::oneshot;
 
 use crate::XactId;
 
-pub enum PgXactController {
-    Local(LocalXact),
-    Surrogate(SurrogateXact),
+#[async_trait]
+pub trait XactController {
+    async fn execute(&mut self) -> anyhow::Result<bool>;
+    async fn commit(&mut self) -> anyhow::Result<()>;
+    async fn rollback(&mut self) -> anyhow::Result<()>;
 }
 
-impl PgXactController {
-    pub fn new_local(commit_tx: oneshot::Sender<bool>) -> Self {
-        Self::Local(LocalXact {
-            commit_tx: Some(commit_tx),
-        })
-    }
-
-    pub fn new_surrogate(xact_id: XactId, connect_pg: SocketAddr, data: Bytes) -> Self {
-        Self::Surrogate(SurrogateXact::new(xact_id, connect_pg, data))
-    }
-
-    pub async fn execute(&mut self) -> anyhow::Result<bool> {
-        match self {
-            Self::Local(_) => Ok(true),
-            Self::Surrogate(xact) => xact.execute().await,
-        }
-    }
-
-    pub async fn commit(&mut self) -> anyhow::Result<()> {
-        match self {
-            Self::Local(xact) => xact.commit(),
-            Self::Surrogate(xact) => xact.commit().await,
-        }
-    }
-
-    pub async fn rollback(&mut self) -> anyhow::Result<()> {
-        match self {
-            Self::Local(xact) => xact.rollback(),
-            Self::Surrogate(xact) => xact.rollback().await,
-        }
-    }
-}
-
-pub struct LocalXact {
+pub struct LocalXactController {
     commit_tx: Option<oneshot::Sender<bool>>,
 }
 
-impl LocalXact {
-    fn commit(&mut self) -> anyhow::Result<()> {
+impl LocalXactController {
+    pub fn new(commit_tx: oneshot::Sender<bool>) -> Self {
+        Self {
+            commit_tx: Some(commit_tx),
+        }
+    }
+}
+
+#[async_trait]
+impl XactController for LocalXactController {
+    async fn execute(&mut self) -> anyhow::Result<bool> {
+        Ok(true)
+    }
+
+    async fn commit(&mut self) -> anyhow::Result<()> {
         self.commit_tx
             .take()
             .ok_or(anyhow!("Transaction has already committed or rollbacked"))
@@ -59,7 +42,7 @@ impl LocalXact {
             })
     }
 
-    fn rollback(&mut self) -> anyhow::Result<()> {
+    async fn rollback(&mut self) -> anyhow::Result<()> {
         self.commit_tx
             .take()
             .ok_or(anyhow!("Transaction has already committed or rollbacked"))
@@ -70,15 +53,15 @@ impl LocalXact {
     }
 }
 
-pub struct SurrogateXact {
+pub struct SurrogateXactController {
     xact_id: XactId,
     connect_pg: SocketAddr,
     data: Bytes,
     client: Option<tokio_postgres::Client>,
 }
 
-impl SurrogateXact {
-    fn new(xact_id: XactId, connect_pg: SocketAddr, data: Bytes) -> Self {
+impl SurrogateXactController {
+    pub fn new(xact_id: XactId, connect_pg: SocketAddr, data: Bytes) -> Self {
         Self {
             xact_id,
             connect_pg,
@@ -86,7 +69,10 @@ impl SurrogateXact {
             client: None,
         }
     }
+}
 
+#[async_trait]
+impl XactController for SurrogateXactController {
     async fn execute(&mut self) -> anyhow::Result<bool> {
         // TODO: Use a connection pool
         let conn_str = format!(
@@ -94,7 +80,7 @@ impl SurrogateXact {
             self.connect_pg.ip(),
             self.connect_pg.port(),
         );
-        info!("Connecting to local pg, conn_str: {}", conn_str);
+        info!("Connecting to local pg, conn str: {}", conn_str);
         let (client, conn) = tokio_postgres::connect(&conn_str, tokio_postgres::NoTls).await?;
 
         // The connection object performs the actual communication with the database,
@@ -104,23 +90,16 @@ impl SurrogateXact {
                 error!("Connection error: {}", e);
             }
         });
-
         let client = self.client.get_or_insert(client);
         // TODO: Not doing anything for now
-        // client.batch_execute("BEGIN").await?;
         client
             .execute("SELECT print_bytes($1::bytea);", &[&self.data.as_ref()])
             .await
             .context("Failed to print bytes")?;
-        info!("[Dummy] Prepared transaction {}", self.xact_id);
-        // client
-        //     .batch_execute(format!("PREPARE TRANSACTION '{}'", self.xact_id).as_str())
-        //     .await
-        //     .context("Failed to prepare transaction")?;
         Ok(true)
     }
 
-    async fn commit(&self) -> anyhow::Result<()> {
+    async fn commit(&mut self) -> anyhow::Result<()> {
         match self.client {
             Some(ref _client) => {
                 // TODO: Not doing anything for now
@@ -137,7 +116,7 @@ impl SurrogateXact {
         Ok(())
     }
 
-    async fn rollback(&self) -> anyhow::Result<()> {
+    async fn rollback(&mut self) -> anyhow::Result<()> {
         match self.client {
             Some(ref _client) => {
                 // TODO: Not doing anything for now

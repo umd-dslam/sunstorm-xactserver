@@ -2,4 +2,4 @@ mod watcher;
 mod xact_controller;
 
 pub use watcher::PgWatcher;
-pub use xact_controller::PgXactController;
+pub use xact_controller::{LocalXactController, SurrogateXactController, XactController};

@@ -6,7 +6,7 @@ use std::mem::size_of;
 use std::net::SocketAddr;
 use tokio::sync::oneshot;
 
-use crate::pg::PgXactController;
+use crate::pg::{LocalXactController, SurrogateXactController, XactController};
 use crate::{NodeId, XactId};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -17,31 +17,30 @@ pub enum XactStatus {
     Abort,
 }
 
-pub struct XactState {
+pub struct XactState<C: XactController> {
     pub id: XactId,
-    rwset: RWSet,
     status: XactStatus,
     participants: BitSet,
     voted: BitSet,
-    controller: PgXactController,
+    controller: C,
 }
 
-impl XactState {
-    pub fn new_local(
-        id: XactId,
-        data: Bytes,
-        commit_tx: oneshot::Sender<bool>,
-    ) -> anyhow::Result<Self> {
-        let controller = PgXactController::new_local(commit_tx);
-        Self::new(id, data, controller)
+impl XactState<LocalXactController> {
+    pub fn new(id: XactId, data: Bytes, commit_tx: oneshot::Sender<bool>) -> anyhow::Result<Self> {
+        let controller = LocalXactController::new(commit_tx);
+        Self::new_internal(id, data, controller)
     }
+}
 
-    pub fn new_surrogate(id: XactId, data: Bytes, connect_pg: SocketAddr) -> anyhow::Result<Self> {
-        let controller = PgXactController::new_surrogate(id, connect_pg, data.clone());
-        Self::new(id, data, controller)
+impl XactState<SurrogateXactController> {
+    pub fn new(id: XactId, data: Bytes, connect_pg: SocketAddr) -> anyhow::Result<Self> {
+        let controller = SurrogateXactController::new(id, connect_pg, data.clone());
+        Self::new_internal(id, data, controller)
     }
+}
 
-    fn new(id: XactId, data: Bytes, controller: PgXactController) -> anyhow::Result<Self> {
+impl<C: XactController> XactState<C> {
+    fn new_internal(id: XactId, data: Bytes, controller: C) -> anyhow::Result<Self> {
         let rwset = RWSet::decode(data).context("Failed to decode read/write set")?;
         let mut participants = BitSet::new();
         for i in 0..u64::BITS {
@@ -51,7 +50,6 @@ impl XactState {
         }
         Ok(Self {
             id,
-            rwset,
             status: XactStatus::Uninitialized,
             participants,
             voted: BitSet::new(),
@@ -164,6 +162,7 @@ impl RWSet {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 struct RWSetHeader {
     dbid: Oid,
