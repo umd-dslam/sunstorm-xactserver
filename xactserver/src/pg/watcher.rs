@@ -8,15 +8,15 @@ use anyhow::Context;
 use log::{debug, error, info};
 use std::net::{SocketAddr, TcpListener};
 use tokio::sync::{mpsc, oneshot};
-use zenith_utils::postgres_backend::{self, AuthType, PostgresBackend};
-use zenith_utils::pq_proto::{BeMessage, FeMessage};
+use neon_utils::postgres_backend::{self, AuthType, PostgresBackend};
+use neon_utils::pq_proto::{BeMessage, FeMessage};
 
 /// A `PgWatcher` listens for new connections from a postgres instance. For each
 /// new connection, a [`PostgresBackend`] is created in a new thread. This postgres
 /// backend will receive the transaction read/write set and forward this data to
 /// [`XactServer`].
 ///
-/// [`PostgresBackend`]: zenith_utils::postgres_backend::PostgresBackend
+/// [`PostgresBackend`]: neon_utils::postgres_backend::PostgresBackend
 /// [`XactServer`]: crate::XactServer
 ///
 pub struct PgWatcher {

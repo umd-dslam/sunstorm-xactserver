@@ -17,8 +17,8 @@ prost = "0.10"
 tonic = "0.7"
 tokio = { version = "1.19.2", features = ["rt-multi-thread", "macros", "sync"] }
 tokio-stream = "0.1"
-zenith_utils = { git = "https://github.com/zenithdb/zenith.git", package = "utils" }
-tokio_postgres = { git = "https://github.com/zenithdb/rust-postgres.git", branch = "replication", package = "tokio-postgres" }
+neon_utils = { git = "https://github.com/neondatabase/neon.git", package = "utils" }
+tokio_postgres = { git = "https://github.com/neondatabase/rust-postgres.git", branch = "neon", package = "tokio-postgres" }
 
 [build-dependencies]
 tonic-build = "0.7"
