@@ -211,7 +211,7 @@ impl XactStateManager {
         // Save the xact state
         self.xact_state = Some(XactType::Surrogate(new_xact_state));
 
-        let vote = if xact_status == XactStatus::Abort {
+        let vote = if xact_status == XactStatus::Rollbacked {
             Vote::Abort
         } else {
             Vote::Commit
@@ -242,9 +242,9 @@ impl XactStateManager {
                 let status = xact
                     .add_vote(vote.from.try_into()?, vote.vote == Vote::Abort as i32)
                     .await?;
-                if status == XactStatus::Commit {
+                if status == XactStatus::Committed {
                     info!("Commit local transaction {}", xact.id);
-                } else if status == XactStatus::Abort {
+                } else if status == XactStatus::Rollbacked {
                     info!("Abort local transaction {}", xact.id);
                 }
                 Ok(())
@@ -253,9 +253,9 @@ impl XactStateManager {
                 let status = xact
                     .add_vote(vote.from.try_into()?, vote.vote == Vote::Abort as i32)
                     .await?;
-                if status == XactStatus::Commit {
+                if status == XactStatus::Committed {
                     info!("Commit surrogate transaction {}", xact.id);
-                } else if status == XactStatus::Abort {
+                } else if status == XactStatus::Rollbacked {
                     info!("Abort surrogate transaction {}", xact.id);
                 }
                 Ok(())

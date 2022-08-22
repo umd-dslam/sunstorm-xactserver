@@ -9,12 +9,12 @@ use tokio::sync::oneshot;
 use crate::pg::{LocalXactController, SurrogateXactController, XactController};
 use crate::{NodeId, XactId};
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum XactStatus {
     Uninitialized,
     Waiting,
-    Commit,
-    Abort,
+    Committed,
+    Rollbacked,
 }
 
 pub struct XactState<C: XactController> {
@@ -77,8 +77,11 @@ impl<C: XactController> XactState<C> {
     }
 
     pub async fn add_vote(&mut self, from: NodeId, abort: bool) -> anyhow::Result<XactStatus> {
-        ensure!(self.status == XactStatus::Waiting);
+        ensure!(self.status != XactStatus::Committed);
         ensure!(self.participants.contains(from));
+        if self.status != XactStatus::Waiting {
+            return Ok(self.status);
+        }
         if abort {
             self.rollback().await?;
         } else if !self.voted.contains(from) {
@@ -91,17 +94,17 @@ impl<C: XactController> XactState<C> {
     async fn rollback(&mut self) -> anyhow::Result<()> {
         ensure!(self.status == XactStatus::Waiting);
         self.controller.rollback().await?;
-        self.status = XactStatus::Abort;
+        self.status = XactStatus::Rollbacked;
         Ok(())
     }
 
     async fn try_commit(&mut self) -> anyhow::Result<()> {
         ensure!(self.status == XactStatus::Waiting);
-        if self.voted == self.participants {
+        if self.voted != self.participants {
             return Ok(());
         }
         self.controller.commit().await?;
-        self.status = XactStatus::Commit;
+        self.status = XactStatus::Committed;
         Ok(())
     }
 
@@ -285,3 +288,144 @@ new_get_num_fn!(get_u8, u8);
 new_get_num_fn!(get_u16, u16);
 new_get_num_fn!(get_u32, u32);
 new_get_num_fn!(get_u64, u64);
+
+#[cfg(test)]
+mod tests {
+    use async_trait::async_trait;
+
+    use crate::pg::XactController;
+
+    use super::*;
+
+    struct TestXactController {
+        rollback_on_execution: bool,
+        executed: bool,
+        committed: bool,
+        rollbacked: bool,
+    }
+
+    impl TestXactController {
+        fn assert(&self, executed: bool, committed: bool, rollbacked: bool) {
+            assert_eq!(self.executed, executed);
+            assert_eq!(self.committed, committed);
+            assert_eq!(self.rollbacked, rollbacked);
+        }
+    }
+
+    #[async_trait]
+    impl XactController for TestXactController {
+        async fn execute(&mut self) -> anyhow::Result<bool> {
+            self.executed = true;
+            Ok(!self.rollback_on_execution)
+        }
+
+        async fn commit(&mut self) -> anyhow::Result<()> {
+            self.committed = true;
+            Ok(())
+        }
+
+        async fn rollback(&mut self) -> anyhow::Result<()> {
+            self.rollbacked = true;
+            Ok(())
+        }
+    }
+
+    fn new_test_xact_state(
+        parts: Vec<NodeId>,
+        rollback_on_execution: bool,
+    ) -> XactState<TestXactController> {
+        let mut participants = BitSet::new();
+        for p in parts {
+            participants.insert(p);
+        }
+        XactState {
+            id: 100,
+            controller: TestXactController {
+                rollback_on_execution,
+                executed: false,
+                committed: false,
+                rollbacked: false,
+            },
+            status: XactStatus::Uninitialized,
+            participants,
+            voted: BitSet::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_1_participant() -> anyhow::Result<()> {
+        let mut state_1 = new_test_xact_state(vec![0], false);
+        // Initialize with participant 0 (coordinator and myself)
+        assert_eq!(state_1.initialize(0, 0).await?, XactStatus::Committed);
+        state_1.controller.assert(true, true, false);
+
+        let mut state_2 = new_test_xact_state(vec![4], false);
+        // Initialize with participant 4 (myself and coordinator)
+        assert_eq!(state_2.initialize(4, 4).await?, XactStatus::Committed);
+        state_2.controller.assert(true, true, false);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_1_participant_rollbacked() -> anyhow::Result<()> {
+        let mut state_1 = new_test_xact_state(vec![0], true);
+        // Initialize with participant 0 (coordinator and myself)
+        assert_eq!(state_1.initialize(0, 0).await?, XactStatus::Rollbacked);
+        state_1.controller.assert(true, false, true);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_3_participants() -> anyhow::Result<()> {
+        let mut state = new_test_xact_state(vec![1, 3, 5], false);
+
+        // Initialize with participants 1 (coordinator) and 3 (myself)
+        assert_eq!(state.initialize(1, 3).await?, XactStatus::Waiting);
+        state.controller.assert(true, false, false);
+
+        // Participant 3 already voted so nothing change
+        assert_eq!(state.add_vote(3, false).await?, XactStatus::Waiting);
+        state.controller.assert(true, false, false);
+
+        // The last participant votes no abort so the transaction is committed
+        assert_eq!(state.add_vote(5, false).await?, XactStatus::Committed);
+        state.controller.assert(true, true, false);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_3_participants_rollbacked() -> anyhow::Result<()> {
+        let mut state = new_test_xact_state(vec![0, 2, 4], false);
+
+        // Initialize with participants 2 (coordinator and myself)
+        assert_eq!(state.initialize(2, 2).await?, XactStatus::Waiting);
+        state.controller.assert(true, false, false);
+
+        // Participant 0 vote to abort
+        assert_eq!(state.add_vote(0, true).await?, XactStatus::Rollbacked);
+        state.controller.assert(true, false, true);
+
+        // Transaction already rollbacked, further votes have no effect
+        assert_eq!(state.add_vote(4, false).await?, XactStatus::Rollbacked);
+        state.controller.assert(true, false, true);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_wrong_participant() -> anyhow::Result<()> {
+        let mut state_1 = new_test_xact_state(vec![0, 1, 2], false);
+        let res_1 = state_1.initialize(3, 3).await;
+        assert!(res_1.is_err());
+
+        let mut state_2 = new_test_xact_state(vec![0, 1, 2], false);
+        assert_eq!(state_2.initialize(2, 2).await?, XactStatus::Waiting);
+        let res_2 = state_2.add_vote(4, false).await;
+        assert!(res_2.is_err());
+
+        Ok(())
+    }
+}
