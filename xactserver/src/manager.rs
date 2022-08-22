@@ -1,6 +1,6 @@
 use anyhow::{anyhow, bail, Context};
 use bytes::Bytes;
-use log::info;
+use log::{debug, info};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::net::SocketAddr;
@@ -143,6 +143,7 @@ impl XactStateManager {
 
     async fn run(mut self, id: XactId, mut msg_rx: mpsc::Receiver<XsMessage>) {
         while let Some(msg) = msg_rx.recv().await {
+            debug!("New message received");
             match msg {
                 XsMessage::LocalXact { data, commit_tx } => {
                     self.handle_local_xact_msg(id, data, commit_tx).await
@@ -164,9 +165,14 @@ impl XactStateManager {
         if self.xact_state.is_some() {
             bail!("Xact state is not empty");
         }
+
         // Create and initialize a new xact state
         let mut new_xact_state =
             XactState::<LocalXactController>::new(xact_id, data.clone(), commit_tx)?;
+
+        debug!("New local xact: {:#?}", new_xact_state.rwset.decode_rest());
+
+        // Initialize the xact state
         let xact_status = new_xact_state
             .initialize(self.node_id, self.node_id)
             .await?;
@@ -174,21 +180,32 @@ impl XactStateManager {
         // Save the xact state
         self.xact_state = Some(XactType::Local(new_xact_state));
 
-        if xact_status == XactStatus::Waiting {
-            let request = PrepareRequest {
-                from: self.node_id as u32,
-                xact_id,
-                data: data.into_iter().collect(),
-            };
+        match xact_status {
+            XactStatus::Waiting => {
+                let request = PrepareRequest {
+                    from: self.node_id as u32,
+                    xact_id,
+                    data: data.into_iter().collect(),
+                };
 
-            // TODO: This is sending one-by-one to all other peers, but we want to send
-            //  to just relevant peers, in parallel.
-            for i in 0..self.peers.size() {
-                let node_id = i as NodeId;
-                if node_id != self.node_id {
-                    let mut client = self.peers.get(node_id).await?;
-                    client.prepare(tonic::Request::new(request.clone())).await?;
+                // TODO: This is sending one-by-one to all other peers, but we want to send
+                //  to just relevant peers, in parallel.
+                for i in 0..self.peers.size() {
+                    let node_id = i as NodeId;
+                    if node_id != self.node_id {
+                        let mut client = self.peers.get(node_id).await?;
+                        client.prepare(tonic::Request::new(request.clone())).await?;
+                    }
                 }
+            }
+            XactStatus::Committed => {
+                info!("[Dummy] Xact {} committed", xact_id);
+            }
+            XactStatus::Rollbacked => {
+                info!("[Dummy] Xact {} aborted", xact_id);
+            }
+            XactStatus::Uninitialized => {
+                panic!("Unexpected state for xact {}", xact_id);
             }
         }
         Ok(())
@@ -204,6 +221,10 @@ impl XactStateManager {
         let data = Bytes::from(prepare_req.data);
         let mut new_xact_state =
             XactState::<SurrogateXactController>::new(xact_id, data, self.connect_pg)?;
+
+        debug!("New remote xact: {:#?}", new_xact_state.rwset.decode_rest());
+
+        // Initialize the xact state
         let xact_status = new_xact_state
             .initialize(prepare_req.from.try_into()?, self.node_id)
             .await?;

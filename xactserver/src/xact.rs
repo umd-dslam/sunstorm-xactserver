@@ -19,6 +19,7 @@ pub enum XactStatus {
 
 pub struct XactState<C: XactController> {
     pub id: XactId,
+    pub rwset: RWSet,
     status: XactStatus,
     participants: BitSet,
     voted: BitSet,
@@ -50,6 +51,7 @@ impl<C: XactController> XactState<C> {
         }
         Ok(Self {
             id,
+            rwset,
             status: XactStatus::Uninitialized,
             participants,
             voted: BitSet::new(),
@@ -115,11 +117,12 @@ impl<C: XactController> XactState<C> {
 
 type Oid = u32;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct RWSet {
     header: RWSetHeader,
     relations: Option<Vec<Relation>>,
     remainder: Bytes,
+    decoded_all: bool,
 }
 
 impl RWSet {
@@ -129,6 +132,7 @@ impl RWSet {
             header,
             relations: None,
             remainder: buf,
+            decoded_all: false,
         })
     }
 
@@ -157,16 +161,20 @@ impl RWSet {
     }
 
     /// Decode everything on demand for debugging
-    pub fn decode_all(&mut self) -> anyhow::Result<&Self> {
+    pub fn decode_rest(&mut self) -> anyhow::Result<&Self> {
+        if self.decoded_all {
+            return Ok(self);
+        }
         self.relations = Some(
             Self::decode_relations(&mut self.remainder).context("Failed to decode relations")?,
         );
+        self.decoded_all = true;
         Ok(self)
     }
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct RWSetHeader {
     dbid: Oid,
     xid: u32,
@@ -340,6 +348,7 @@ mod tests {
         }
         XactState {
             id: 100,
+            rwset: RWSet::default(),
             controller: TestXactController {
                 rollback_on_execution,
                 executed: false,

@@ -6,10 +6,10 @@
 use crate::XsMessage;
 use anyhow::Context;
 use log::{debug, error, info};
-use std::net::{SocketAddr, TcpListener};
-use tokio::sync::{mpsc, oneshot};
 use neon_utils::postgres_backend::{self, AuthType, PostgresBackend};
 use neon_utils::pq_proto::{BeMessage, FeMessage};
+use std::net::{SocketAddr, TcpListener};
+use tokio::sync::{mpsc, oneshot};
 
 /// A `PgWatcher` listens for new connections from a postgres instance. For each
 /// new connection, a [`PostgresBackend`] is created in a new thread. This postgres
@@ -104,9 +104,9 @@ impl postgres_backend::Handler for PgWatcherHandler {
                                 commit_tx,
                             })?;
                             if commit_rx.blocking_recv()? {
-                                info!("Transaction committed");
+                                info!("[Dummy] Telling postgres to commit transaction");
                             } else {
-                                info!("Transaction aborted");
+                                info!("[Dummy] Telling postgres to abort transaction");
                             }
                         } else {
                             continue;
