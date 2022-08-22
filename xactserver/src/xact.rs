@@ -80,7 +80,12 @@ impl<C: XactController> XactState<C> {
 
     pub async fn add_vote(&mut self, from: NodeId, abort: bool) -> anyhow::Result<XactStatus> {
         ensure!(self.status != XactStatus::Committed);
-        ensure!(self.participants.contains(from));
+        ensure!(
+            self.participants.contains(from),
+            "Node {} is not a participant of xact {}",
+            from,
+            self.id
+        );
         if self.status != XactStatus::Waiting {
             return Ok(self.status);
         }
