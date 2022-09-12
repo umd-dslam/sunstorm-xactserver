@@ -315,6 +315,7 @@ mod tests {
 
     use super::*;
 
+    /// A fake controllers that trivially keeps track of transaction states
     struct TestXactController {
         rollback_on_execution: bool,
         executed: bool,
@@ -349,12 +350,12 @@ mod tests {
     }
 
     fn new_test_xact_state(
-        parts: Vec<NodeId>,
+        participants: Vec<NodeId>,
         rollback_on_execution: bool,
     ) -> XactState<TestXactController> {
-        let mut participants = BitSet::new();
-        for p in parts {
-            participants.insert(p);
+        let mut participant_set = BitSet::new();
+        for p in participants {
+            participant_set.insert(p);
         }
         XactState {
             id: 100,
@@ -366,7 +367,7 @@ mod tests {
                 rollbacked: false,
             },
             status: XactStatus::Uninitialized,
-            participants,
+            participants: participant_set,
             voted: BitSet::new(),
         }
     }
