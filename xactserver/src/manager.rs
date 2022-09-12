@@ -149,7 +149,6 @@ impl XactStateManager {
 
     async fn run(mut self, id: XactId, mut msg_rx: mpsc::Receiver<XsMessage>) {
         while let Some(msg) = msg_rx.recv().await {
-            debug!("New message received");
             match msg {
                 XsMessage::LocalXact { data, commit_tx } => {
                     self.handle_local_xact_msg(id, data, commit_tx).await
@@ -196,13 +195,14 @@ impl XactStateManager {
 
                 // TODO: This is sending one-by-one to all other peers, but we want to send
                 //  to just relevant peers, in parallel.
-                for i in 0..self.peers.size() {
+                for i in 1..self.peers.size() {
                     let node_id = i as NodeId;
                     if node_id != self.node_id {
                         let mut client = self.peers.get(node_id).await?;
                         client.prepare(tonic::Request::new(request.clone())).await?;
                     }
                 }
+                debug!("Waiting for votes from other participants");
             }
             XactStatus::Committed => {
                 info!("[Dummy] Xact {} committed", xact_id);
@@ -252,7 +252,7 @@ impl XactStateManager {
 
         // TODO: This is sending one-by-one to all other peers, but we want to send
         //       to just relevant peers, in parallel.
-        for i in 0..self.peers.size() {
+        for i in 1..self.peers.size() {
             let node_id = i as NodeId;
             if node_id != self.node_id {
                 let mut client = self.peers.get(node_id).await?;
@@ -270,9 +270,9 @@ impl XactStateManager {
                     .add_vote(vote.from.try_into()?, vote.vote == Vote::Abort as i32)
                     .await?;
                 if status == XactStatus::Committed {
-                    info!("Commit local transaction {}", xact.id);
+                    info!("Local xact {} COMMITTED", xact.id);
                 } else if status == XactStatus::Rollbacked {
-                    info!("Abort local transaction {}", xact.id);
+                    info!("Local xact {} ABORTED", xact.id);
                 }
                 Ok(())
             }
@@ -281,9 +281,9 @@ impl XactStateManager {
                     .add_vote(vote.from.try_into()?, vote.vote == Vote::Abort as i32)
                     .await?;
                 if status == XactStatus::Committed {
-                    info!("Commit surrogate transaction {}", xact.id);
+                    info!("Surrogate xact {} COMMITTED", xact.id);
                 } else if status == XactStatus::Rollbacked {
-                    info!("Abort surrogate transaction {}", xact.id);
+                    info!("Surrogate xact {} ABORTED", xact.id);
                 }
                 Ok(())
             }

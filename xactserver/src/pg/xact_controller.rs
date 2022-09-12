@@ -93,7 +93,7 @@ impl XactController for SurrogateXactController {
         let client = self.client.get_or_insert(client);
         // TODO: Not doing anything for now
         client
-            .execute("SELECT print_bytes($1::bytea);", &[&self.data.as_ref()])
+            .execute("SELECT validate_and_apply_xact($1::bytea);", &[&self.data.as_ref()])
             .await
             .context("Failed to print bytes")?;
         Ok(true)
