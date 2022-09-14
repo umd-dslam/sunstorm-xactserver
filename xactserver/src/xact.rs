@@ -183,6 +183,7 @@ impl RWSet {
 struct RWSetHeader {
     dbid: Oid,
     xid: u32,
+    csn: u64,
     region_set: u64,
 }
 
@@ -190,11 +191,13 @@ impl RWSetHeader {
     pub fn decode(buf: &mut Bytes) -> anyhow::Result<RWSetHeader> {
         let dbid = get_u32(buf).context("Failed to decode 'dbid'")?;
         let xid = get_u32(buf).context("Failed to decode 'xid'")?;
+        let csn: u64 = get_u64(buf).context("Failed to decode 'csn'")?;
         let region_set = get_u64(buf).context("Failed to decode 'region_set'")?;
 
         Ok(Self {
             dbid,
             xid,
+            csn,
             region_set,
         })
     }
@@ -205,7 +208,6 @@ impl RWSetHeader {
 enum Relation {
     Table {
         oid: u32,
-        csn: u32,
         tuples: Vec<Tuple>,
     },
     Index {
@@ -225,7 +227,7 @@ struct Tuple {
 #[derive(Debug)]
 struct Page {
     blocknum: u32,
-    csn: u32,
+    csn: u64,
 }
 
 impl Relation {
@@ -240,7 +242,6 @@ impl Relation {
     fn decode_table(buf: &mut Bytes) -> anyhow::Result<Relation> {
         let relid = get_u32(buf).context("Failed to decode 'relid'")?;
         let ntuples = get_u32(buf).context("Failed to decode 'ntuples'")?;
-        let csn = get_u32(buf).context("Failed to decode 'csn'")?;
         let mut tuples = vec![];
         for _ in 0..ntuples {
             tuples.push(Relation::decode_tuple(buf).with_context(|| {
@@ -250,7 +251,6 @@ impl Relation {
 
         Ok(Relation::Table {
             oid: relid,
-            csn,
             tuples,
         })
     }
@@ -277,7 +277,7 @@ impl Relation {
 
     fn decode_page(buf: &mut Bytes) -> anyhow::Result<Page> {
         let blocknum = get_u32(buf).context("Failed to decode 'blocknum'")?;
-        let csn = get_u32(buf).context("Failed to decode 'csn'")?;
+        let csn = get_u64(buf).context("Failed to decode 'csn'")?;
 
         Ok(Page { blocknum, csn })
     }
