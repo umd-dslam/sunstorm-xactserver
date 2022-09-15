@@ -3,21 +3,41 @@ use std::net::SocketAddr;
 use std::thread;
 use tokio::sync::mpsc;
 use xactserver::pg::PgWatcher;
-use xactserver::{Node, NodeId, XactManager};
+use xactserver::{Node, NodeId, XactManager, DUMMY_ADDRESS};
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    #[clap(long, value_parser, default_value = "127.0.0.1:10000")]
+    #[clap(
+        long,
+        value_parser,
+        default_value = "127.0.0.1:10000",
+        help = "Address to listen for connections from postgres"
+    )]
     listen_pg: SocketAddr,
 
-    #[clap(long, value_parser, default_value = "127.0.0.1:55432")]
+    #[clap(
+        long,
+        value_parser,
+        default_value = "127.0.0.1:55432",
+        help = "Address of postgres to connect to"
+    )]
     connect_pg: SocketAddr,
 
-    #[clap(long, value_parser, default_value = "127.0.0.1:23000")]
+    #[clap(
+        long,
+        value_parser,
+        default_value = "127.0.0.1:23000",
+        help = "Comma-separated list of addresses of other xact servers in other regions"
+    )]
     nodes: String,
 
-    #[clap(long, value_parser, default_value = "0")]
+    #[clap(
+        long,
+        value_parser,
+        default_value = "1",
+        help = "Numeric id of the current node. Used as an 1-based index of the --nodes list"
+    )]
     node_id: NodeId,
 }
 
@@ -25,7 +45,14 @@ fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let args = Args::parse();
-    let node_addresses: Vec<SocketAddr> = args
+    if args.node_id == 0 {
+        Args::command()
+            .error(ErrorKind::InvalidValue, "node id is 1-based")
+            .exit();
+    }
+
+    // Parse the list of node addresses
+    let mut node_addresses: Vec<SocketAddr> = args
         .nodes
         .split(",")
         .map(|addr| {
@@ -39,6 +66,10 @@ fn main() -> anyhow::Result<()> {
             })
         })
         .collect();
+    // Insert a dummy address at the beginning of the list to make the list 1-based
+    node_addresses.insert(0, *DUMMY_ADDRESS);
+
+    // Address to listen to other peers
     let listen_peer = node_addresses
         .get(args.node_id as usize)
         .unwrap_or_else(|| {

@@ -208,10 +208,12 @@ impl RWSetHeader {
 enum Relation {
     Table {
         oid: u32,
+        region: u8,
         tuples: Vec<Tuple>,
     },
     Index {
         oid: u32,
+        region: u8,
         pages: Vec<Page>,
     },
 }
@@ -241,6 +243,7 @@ impl Relation {
 
     fn decode_table(buf: &mut Bytes) -> anyhow::Result<Relation> {
         let relid = get_u32(buf).context("Failed to decode 'relid'")?;
+        let region = get_u8(buf).context("Failed to decode 'region'")?;
         let ntuples = get_u32(buf).context("Failed to decode 'ntuples'")?;
         let mut tuples = vec![];
         for _ in 0..ntuples {
@@ -251,6 +254,7 @@ impl Relation {
 
         Ok(Relation::Table {
             oid: relid,
+            region,
             tuples,
         })
     }
@@ -264,6 +268,7 @@ impl Relation {
 
     fn decode_index(buf: &mut Bytes) -> anyhow::Result<Relation> {
         let relid = get_u32(buf).context("Failed to decode 'relid'")?;
+        let region = get_u8(buf).context("Failed to decode 'region")?;
         let npages = get_u32(buf).context("Failed to decode 'npages'")?;
         let mut pages = vec![];
         for _ in 0..npages {
@@ -272,7 +277,7 @@ impl Relation {
             })?);
         }
 
-        Ok(Relation::Index { oid: relid, pages })
+        Ok(Relation::Index { oid: relid, region, pages })
     }
 
     fn decode_page(buf: &mut Bytes) -> anyhow::Result<Page> {
