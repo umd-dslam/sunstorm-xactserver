@@ -2384,6 +2384,7 @@ dependencies = [
  "clap 3.2.7",
  "env_logger",
  "futures",
+ "lazy_static",
  "log",
  "prost",
  "tokio",

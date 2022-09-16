@@ -11,7 +11,7 @@ use crate::node::client;
 use crate::pg::{LocalXactController, SurrogateXactController};
 use crate::proto::{PrepareRequest, Vote, VoteRequest};
 use crate::xact::{XactState, XactStatus};
-use crate::{NodeId, XactId, XsMessage, NODE_ID_BITS};
+use crate::{NodeId, XactId, XsMessage, DUMMY_ADDRESS, NODE_ID_BITS};
 
 pub struct XactManager {
     node_id: NodeId,
@@ -49,7 +49,13 @@ impl XactManager {
             client::Nodes::connect(
                 self.peer_addrs
                     .iter()
-                    .map(|addr| format!("http://{}", addr.to_string()))
+                    .map(|addr| {
+                        if addr == &*DUMMY_ADDRESS {
+                            String::default()
+                        } else {
+                            format!("http://{}", addr.to_string())
+                        }
+                    })
                     .collect(),
             )
             .await?,
