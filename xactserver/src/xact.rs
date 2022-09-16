@@ -191,7 +191,7 @@ impl RWSetHeader {
     pub fn decode(buf: &mut Bytes) -> anyhow::Result<RWSetHeader> {
         let dbid = get_u32(buf).context("Failed to decode 'dbid'")?;
         let xid = get_u32(buf).context("Failed to decode 'xid'")?;
-        let csn: u64 = get_u64(buf).context("Failed to decode 'csn'")?;
+        let csn = get_u64(buf).context("Failed to decode 'csn'")?;
         let region_set = get_u64(buf).context("Failed to decode 'region_set'")?;
 
         Ok(Self {
