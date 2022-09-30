@@ -1,6 +1,7 @@
 use anyhow::{bail, ensure, Context};
 use bit_set::BitSet;
 use bytes::{Buf, Bytes};
+use log::debug;
 use std::convert::TryInto;
 use std::mem::size_of;
 use std::net::SocketAddr;
@@ -65,15 +66,23 @@ impl<C: XactController> XactState<C> {
         me: NodeId,
     ) -> anyhow::Result<XactStatus> {
         ensure!(self.status == XactStatus::Uninitialized);
-        // Execute the transaction and set status to waiting
-        let commit_vote = self.controller.execute().await?;
         self.status = XactStatus::Waiting;
 
-        // Add votes if pass validation
-        self.add_vote(me, !commit_vote).await?;
-        if commit_vote && me != coordinator {
+        if me != coordinator {
+            // The coordinator always votes to commit
             self.add_vote(coordinator, false).await?;
         }
+
+        // Execute the transaction
+        let aborted = self.controller.execute().await.map_or_else(
+            |err| {
+                debug!("{:?}", err);
+                true
+            },
+            |_| false,
+        );
+
+        self.add_vote(me, aborted).await?;
 
         Ok(self.status)
     }
@@ -277,7 +286,11 @@ impl Relation {
             })?);
         }
 
-        Ok(Relation::Index { oid: relid, region, pages })
+        Ok(Relation::Index {
+            oid: relid,
+            region,
+            pages,
+        })
     }
 
     fn decode_page(buf: &mut Bytes) -> anyhow::Result<Page> {
@@ -333,9 +346,12 @@ mod tests {
 
     #[async_trait]
     impl XactController for TestXactController {
-        async fn execute(&mut self) -> anyhow::Result<bool> {
+        async fn execute(&mut self) -> anyhow::Result<()> {
             self.executed = true;
-            Ok(!self.rollback_on_execution)
+            if self.rollback_on_execution {
+                anyhow::bail!("rolled back");
+            }
+            Ok(())
         }
 
         async fn commit(&mut self) -> anyhow::Result<()> {

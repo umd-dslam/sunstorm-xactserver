@@ -156,7 +156,7 @@ impl XactStateManager {
                 XsMessage::Prepare(prepare_req) => self.handle_prepare_msg(prepare_req).await,
                 XsMessage::Vote(vote_req) => self.handle_vote_msg(vote_req).await,
             }
-            .context(format!("Xact id: {}", id))
+            .with_context(|| format!("Failed to process xact {}", id))
             .unwrap();
         }
     }
@@ -185,35 +185,25 @@ impl XactStateManager {
         // Save the xact state
         self.xact_state = Some(XactType::Local(new_xact_state));
 
-        match xact_status {
-            XactStatus::Waiting => {
-                let request = PrepareRequest {
-                    from: self.node_id as u32,
-                    xact_id,
-                    data: data.into_iter().collect(),
-                };
+        assert_eq!(xact_status, XactStatus::Waiting);
 
-                // TODO: This is sending one-by-one to all other peers, but we want to send
-                //  to just relevant peers, in parallel.
-                for i in 1..self.peers.size() {
-                    let node_id = i as NodeId;
-                    if node_id != self.node_id {
-                        let mut client = self.peers.get(node_id).await?;
-                        client.prepare(tonic::Request::new(request.clone())).await?;
-                    }
-                }
-                debug!("Waiting for votes from other participants");
-            }
-            XactStatus::Committed => {
-                info!("[Dummy] Xact {} committed", xact_id);
-            }
-            XactStatus::Rollbacked => {
-                info!("[Dummy] Xact {} aborted", xact_id);
-            }
-            XactStatus::Uninitialized => {
-                panic!("Unexpected state for xact {}", xact_id);
+        let request = PrepareRequest {
+            from: self.node_id as u32,
+            xact_id,
+            data: data.into_iter().collect(),
+        };
+
+        // TODO: This is sending one-by-one to all other peers, but we want to send
+        //  to just relevant peers, in parallel.
+        for i in 1..self.peers.size() {
+            let node_id = i as NodeId;
+            if node_id != self.node_id {
+                let mut client = self.peers.get(node_id).await?;
+                client.prepare(tonic::Request::new(request.clone())).await?;
             }
         }
+        debug!("Waiting for votes from other participants");
+
         Ok(())
     }
 

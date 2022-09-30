@@ -5,6 +5,7 @@
 //!  
 use crate::XsMessage;
 use anyhow::Context;
+use bytes::{BufMut, BytesMut};
 use log::{debug, error, info};
 use neon_utils::postgres_backend::{self, AuthType, PostgresBackend};
 use neon_utils::pq_proto::{BeMessage, FeMessage};
@@ -103,11 +104,16 @@ impl postgres_backend::Handler for PgWatcherHandler {
                                 data: buf,
                                 commit_tx,
                             })?;
+
+                            let mut bytes = BytesMut::new();
+
                             if commit_rx.blocking_recv()? {
-                                info!("[Dummy] Telling postgres to commit transaction");
+                                bytes.put_u8(1);
                             } else {
-                                info!("[Dummy] Telling postgres to abort transaction");
+                                bytes.put_u8(0);
                             }
+
+                            pgb.write_message(&BeMessage::CopyData(&bytes.freeze()))?;
                         } else {
                             continue;
                         }
