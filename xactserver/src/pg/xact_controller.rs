@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Context};
+use anyhow::{anyhow, bail, Context, ensure};
 use async_trait::async_trait;
 use bytes::Bytes;
 use log::{error, info};
@@ -9,7 +9,7 @@ use crate::XactId;
 
 #[async_trait]
 pub trait XactController {
-    async fn execute(&mut self) -> anyhow::Result<bool>;
+    async fn execute(&mut self) -> anyhow::Result<()>;
     async fn commit(&mut self) -> anyhow::Result<()>;
     async fn rollback(&mut self) -> anyhow::Result<()>;
 }
@@ -28,8 +28,8 @@ impl LocalXactController {
 
 #[async_trait]
 impl XactController for LocalXactController {
-    async fn execute(&mut self) -> anyhow::Result<bool> {
-        Ok(true)
+    async fn execute(&mut self) -> anyhow::Result<()> {
+        Ok(())
     }
 
     async fn commit(&mut self) -> anyhow::Result<()> {
@@ -47,7 +47,7 @@ impl XactController for LocalXactController {
             .take()
             .ok_or(anyhow!("Transaction has already committed or rollbacked"))
             .and_then(|tx| {
-                tx.send(true)
+                tx.send(false)
                     .or(Err(anyhow!("Failed to rollback transaction")))
             })
     }
@@ -58,6 +58,7 @@ pub struct SurrogateXactController {
     connect_pg: SocketAddr,
     data: Bytes,
     client: Option<tokio_postgres::Client>,
+    prepared: bool,
 }
 
 impl SurrogateXactController {
@@ -67,13 +68,14 @@ impl SurrogateXactController {
             connect_pg,
             data,
             client: None,
+            prepared: false,
         }
     }
 }
 
 #[async_trait]
 impl XactController for SurrogateXactController {
-    async fn execute(&mut self) -> anyhow::Result<bool> {
+    async fn execute(&mut self) -> anyhow::Result<()> {
         // TODO: Use a connection pool
         let conn_str = format!(
             "host={} port={} user=cloud_admin dbname=postgres application_name=xactserver",
@@ -90,24 +92,48 @@ impl XactController for SurrogateXactController {
                 error!("Connection error: {}", e);
             }
         });
+
         let client = self.client.get_or_insert(client);
-        // TODO: Not doing anything for now
+        let xact_id = self.xact_id;
+
         client
-            .execute("SELECT validate_and_apply_xact($1::bytea);", &[&self.data.as_ref()])
+            .simple_query("BEGIN")
             .await
-            .context("Failed to print bytes")?;
-        Ok(true)
+            .with_context(|| format!("Failed to begin xact {}", xact_id))?;
+
+        client
+            .execute(
+                "SELECT validate_and_apply_xact($1::bytea);",
+                &[&self.data.as_ref()],
+            )
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to execute validate_and_apply_xact($1::bytea) for xact {}",
+                    xact_id
+                )
+            })?;
+
+        client
+            .simple_query(format!("PREPARE TRANSACTION '{}'", self.xact_id).as_str())
+            .await
+            .with_context(|| format!("Failed to prepare xact {}", xact_id))?;
+
+        self.prepared = true;
+
+        Ok(())
     }
 
     async fn commit(&mut self) -> anyhow::Result<()> {
+        // Must be prepared to commit
+        ensure!(self.prepared);
+
         match self.client {
-            Some(ref _client) => {
-                // TODO: Not doing anything for now
-                // client
-                //     .batch_execute(format!("COMMIT PREPARED '{}'", self.xact_id).as_str())
-                //     .await
-                //     .context("Failed to commit prepared transaction")?;
-                info!("[Dummy] Commit prepared transaction {}", self.xact_id);
+            Some(ref client) => {
+                client
+                    .simple_query(format!("COMMIT PREPARED '{}'", self.xact_id).as_str())
+                    .await
+                    .with_context(|| format!("Failed to commit xact {}", self.xact_id))?;
             }
             None => {
                 bail!("Connection does not exist");
@@ -117,13 +143,17 @@ impl XactController for SurrogateXactController {
     }
 
     async fn rollback(&mut self) -> anyhow::Result<()> {
+        // Do nothing if it is not prepared
+        if !self.prepared {
+            return Ok(())
+        }
+
         match self.client {
-            Some(ref _client) => {
-                // TODO: Not doing anything for now
-                // client
-                //     .batch_execute(format!("ROLLBACK PREPARED '{}'", self.xact_id).as_str())
-                //     .await?;
-                info!("[Dummy] Rollback prepared transaction {}", self.xact_id);
+            Some(ref client) => {
+                client
+                    .simple_query(format!("ROLLBACK PREPARED '{}'", self.xact_id).as_str())
+                    .await
+                    .with_context(|| format!("Failed to roll back xact {}", self.xact_id))?;
             }
             None => {
                 bail!("Connection does not exist");
