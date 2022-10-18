@@ -191,22 +191,16 @@ impl RWSet {
 #[derive(Debug, Default)]
 struct RWSetHeader {
     dbid: Oid,
-    xid: u32,
-    csn: u64,
     region_set: u64,
 }
 
 impl RWSetHeader {
     pub fn decode(buf: &mut Bytes) -> anyhow::Result<RWSetHeader> {
         let dbid = get_u32(buf).context("Failed to decode 'dbid'")?;
-        let xid = get_u32(buf).context("Failed to decode 'xid'")?;
-        let csn = get_u64(buf).context("Failed to decode 'csn'")?;
         let region_set = get_u64(buf).context("Failed to decode 'region_set'")?;
 
         Ok(Self {
             dbid,
-            xid,
-            csn,
             region_set,
         })
     }
@@ -218,11 +212,13 @@ enum Relation {
     Table {
         oid: u32,
         region: u8,
+        csn: u64,
         tuples: Vec<Tuple>,
     },
     Index {
         oid: u32,
         region: u8,
+        csn: u64,
         pages: Vec<Page>,
     },
 }
@@ -238,7 +234,6 @@ struct Tuple {
 #[derive(Debug)]
 struct Page {
     blocknum: u32,
-    csn: u64,
 }
 
 impl Relation {
@@ -253,6 +248,7 @@ impl Relation {
     fn decode_table(buf: &mut Bytes) -> anyhow::Result<Relation> {
         let relid = get_u32(buf).context("Failed to decode 'relid'")?;
         let region = get_u8(buf).context("Failed to decode 'region'")?;
+        let csn = get_u64(buf).context("Failed to decode 'csn'")?;
         let ntuples = get_u32(buf).context("Failed to decode 'ntuples'")?;
         let mut tuples = vec![];
         for _ in 0..ntuples {
@@ -264,6 +260,7 @@ impl Relation {
         Ok(Relation::Table {
             oid: relid,
             region,
+            csn,
             tuples,
         })
     }
@@ -278,6 +275,7 @@ impl Relation {
     fn decode_index(buf: &mut Bytes) -> anyhow::Result<Relation> {
         let relid = get_u32(buf).context("Failed to decode 'relid'")?;
         let region = get_u8(buf).context("Failed to decode 'region")?;
+        let csn = get_u64(buf).context("Failed to decode 'csn'")?;
         let npages = get_u32(buf).context("Failed to decode 'npages'")?;
         let mut pages = vec![];
         for _ in 0..npages {
@@ -289,15 +287,15 @@ impl Relation {
         Ok(Relation::Index {
             oid: relid,
             region,
+            csn,
             pages,
         })
     }
 
     fn decode_page(buf: &mut Bytes) -> anyhow::Result<Page> {
         let blocknum = get_u32(buf).context("Failed to decode 'blocknum'")?;
-        let csn = get_u64(buf).context("Failed to decode 'csn'")?;
 
-        Ok(Page { blocknum, csn })
+        Ok(Page { blocknum })
     }
 }
 
