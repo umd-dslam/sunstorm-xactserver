@@ -97,7 +97,7 @@ impl XactController for SurrogateXactController {
         let xact_id = self.xact_id;
 
         client
-            .simple_query("BEGIN")
+            .simple_query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE")
             .await
             .with_context(|| format!("Failed to begin xact {}", xact_id))?;
 
