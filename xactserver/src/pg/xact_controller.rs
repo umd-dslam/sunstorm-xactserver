@@ -128,8 +128,8 @@ impl XactController for SurrogateXactController {
         // Must be prepared to commit
         ensure!(self.prepared);
 
-        match self.client {
-            Some(ref client) => {
+        match &self.client {
+            Some(client) => {
                 client
                     .simple_query(format!("COMMIT PREPARED '{}'", self.xact_id).as_str())
                     .await
@@ -148,8 +148,8 @@ impl XactController for SurrogateXactController {
             return Ok(())
         }
 
-        match self.client {
-            Some(ref client) => {
+        match &self.client {
+            Some(client) => {
                 client
                     .simple_query(format!("ROLLBACK PREPARED '{}'", self.xact_id).as_str())
                     .await

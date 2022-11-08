@@ -86,15 +86,15 @@ impl XactManager {
 
     async fn process_message(&mut self, msg: XsMessage) -> anyhow::Result<()> {
         // Get the sender for the xact state manager
-        let msg_tx = match msg {
+        let msg_tx = match &msg {
             XsMessage::LocalXact { .. } => {
                 let xact_id = self.next_xact_id();
                 self.new_xact_state_manager(xact_id)?
             }
-            XsMessage::Prepare(ref prepare_req) => {
+            XsMessage::Prepare(prepare_req) => {
                 self.new_xact_state_manager(prepare_req.xact_id)?
             }
-            XsMessage::Vote(ref vote_req) => {
+            XsMessage::Vote(vote_req) => {
                 self.xact_state_msg_tx
                     .get(&vote_req.xact_id)
                     .ok_or(anyhow!(
