@@ -10,7 +10,7 @@ use tokio::sync::oneshot;
 use crate::pg::{LocalXactController, SurrogateXactController, XactController};
 use crate::{NodeId, XactId};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum XactStatus {
     Uninitialized,
     Waiting,
@@ -199,10 +199,7 @@ impl RWSetHeader {
         let dbid = get_u32(buf).context("Failed to decode 'dbid'")?;
         let region_set = get_u64(buf).context("Failed to decode 'region_set'")?;
 
-        Ok(Self {
-            dbid,
-            region_set,
-        })
+        Ok(Self { dbid, region_set })
     }
 }
 

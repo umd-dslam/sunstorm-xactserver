@@ -53,7 +53,7 @@ impl XactManager {
                         if addr == &*DUMMY_ADDRESS {
                             String::default()
                         } else {
-                            format!("http://{}", addr.to_string())
+                            format!("http://{}", addr)
                         }
                     })
                     .collect(),
@@ -91,16 +91,16 @@ impl XactManager {
                 let xact_id = self.next_xact_id();
                 self.new_xact_state_manager(xact_id)?
             }
-            XsMessage::Prepare(prepare_req) => {
-                self.new_xact_state_manager(prepare_req.xact_id)?
-            }
+            XsMessage::Prepare(prepare_req) => self.new_xact_state_manager(prepare_req.xact_id)?,
             XsMessage::Vote(vote_req) => {
                 self.xact_state_msg_tx
                     .get(&vote_req.xact_id)
-                    .ok_or(anyhow!(
-                        "No xact state manager running for xact id {}",
-                        vote_req.xact_id
-                    ))?
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "No xact state manager running for xact id {}",
+                            vote_req.xact_id
+                        )
+                    })?
             }
         };
         // Forward the message to the xact state manager

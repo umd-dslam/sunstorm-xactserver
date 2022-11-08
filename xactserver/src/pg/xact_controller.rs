@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Context, ensure};
+use anyhow::{anyhow, bail, ensure, Context};
 use async_trait::async_trait;
 use bytes::Bytes;
 use log::{error, info};
@@ -35,20 +35,20 @@ impl XactController for LocalXactController {
     async fn commit(&mut self) -> anyhow::Result<()> {
         self.commit_tx
             .take()
-            .ok_or(anyhow!("Transaction has already committed or rollbacked"))
+            .ok_or_else(|| anyhow!("Transaction has already committed or rollbacked"))
             .and_then(|tx| {
                 tx.send(true)
-                    .or(Err(anyhow!("Failed to commit transaction")))
+                    .map_err(|_| anyhow!("Failed to commit transaction"))
             })
     }
 
     async fn rollback(&mut self) -> anyhow::Result<()> {
         self.commit_tx
             .take()
-            .ok_or(anyhow!("Transaction has already committed or rollbacked"))
+            .ok_or_else(|| anyhow!("Transaction has already committed or rollbacked"))
             .and_then(|tx| {
                 tx.send(false)
-                    .or(Err(anyhow!("Failed to rollback transaction")))
+                    .map_err(|_| anyhow!("Failed to rollback transaction"))
             })
     }
 }
@@ -145,7 +145,7 @@ impl XactController for SurrogateXactController {
     async fn rollback(&mut self) -> anyhow::Result<()> {
         // Do nothing if it is not prepared
         if !self.prepared {
-            return Ok(())
+            return Ok(());
         }
 
         match &self.client {

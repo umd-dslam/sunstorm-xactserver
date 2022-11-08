@@ -24,7 +24,7 @@ impl Node {
     pub async fn run(self) -> anyhow::Result<()> {
         info!("Node listening on {}", self.addr);
 
-        let addr = self.addr.clone();
+        let addr = self.addr;
         let svc = XactCoordinationServer::new(self);
         Server::builder().add_service(svc).serve(addr).await?;
 
@@ -70,7 +70,7 @@ pub mod client {
         pub async fn connect(urls: Vec<String>) -> anyhow::Result<Self> {
             let nbufferred = urls.len();
             let conn_pools = stream::iter(urls)
-                .map(|url| bb8::Pool::builder().build(ConnectionManager(url.clone())))
+                .map(|url| bb8::Pool::builder().build(ConnectionManager(url)))
                 .buffered(nbufferred)
                 .try_collect()
                 .await?;

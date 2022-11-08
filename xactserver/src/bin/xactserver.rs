@@ -54,7 +54,7 @@ fn main() -> anyhow::Result<()> {
     // Parse the list of node addresses
     let mut node_addresses: Vec<SocketAddr> = args
         .nodes
-        .split(",")
+        .split(',')
         .map(|addr| {
             addr.parse().unwrap_or_else(|err| {
                 Args::command()
