@@ -1,0 +1,121 @@
+name: Build, Test, and Push
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      build-tag: ${{steps.build-tag.outputs.tag}}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Get build tag
+        run: |
+          echo run:$GITHUB_RUN_ID
+          echo ref:$GITHUB_REF_NAME
+          echo rev:$(git rev-list --count HEAD)
+          if [[ "$GITHUB_REF_NAME" == "master" ]]; then
+            echo "tag=$(git rev-list --count HEAD)" >> $GITHUB_OUTPUT
+          else
+            echo "GITHUB_REF_NAME (value '$GITHUB_REF_NAME') is not set to either 'master'"
+            echo "tag=$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+        id: build-tag
+  
+  build-and-test:
+    runs-on: ubuntu-latest
+    container:
+      image: rust:1.65
+      options: --init
+
+    strategy:
+      matrix:
+        build_type: [ debug, release ]
+
+    env:
+      BUILD_TYPE: ${{ matrix.build_type }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set env variables
+        run: |
+          if [[ $BUILD_TYPE == "debug" ]]; then
+            CARGO_FLAGS="--locked --timings"
+          elif [[ $BUILD_TYPE == "release" ]]; then
+            CARGO_FLAGS="--locked --timings --release"
+          fi
+          echo "CARGO_FLAGS=${CARGO_FLAGS}" >> $GITHUB_ENV
+        shell: bash -euxo pipefail {0}
+
+      - name: Install cmake
+        run: apt update && apt install cmake -y
+
+      - name: Cache cargo deps
+        id: cache_cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry/
+            !~/.cargo/registry/src
+            ~/.cargo/git/
+            target/
+          # Fall back to older versions of the key, if no cache for current Cargo.lock was found
+          key: |
+            v10-${{ runner.os }}-${{ matrix.build_type }}-cargo-${{ hashFiles('Cargo.lock') }}
+            v10-${{ runner.os }}-${{ matrix.build_type }}-cargo-
+
+      - name: Run cargo build
+        run: cargo build $CARGO_FLAGS --bins --tests
+        shell: bash -euxo pipefail {0}
+
+      - name: Run cargo test
+        run: cargo test $CARGO_FLAGS
+        shell: bash -euxo pipefail {0}
+
+  docker-image:
+    runs-on: ubuntu-latest
+    needs: [ tag ]
+    container: gcr.io/kaniko-project/executor:v1.9.0-debug
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1 # v3 won't work with kaniko
+
+      - name: Configure Docker Hub login
+        run: echo "{\"auths\":{\"https://index.docker.io/v1/\":{\"auth\":\"${{secrets.DOCKERHUB_CRED_BASE64}}\"}}}" > /kaniko/.docker/config.json
+
+      - name: Kaniko build 
+        run: /kaniko/executor --cache=true --cache-repo ctring/xactserver-cache --snapshotMode=redo --context . --destination ctring/xactserver:${{needs.tag.outputs.build-tag}}
+  
+  promote-image:
+    runs-on: ubuntu-latest
+    needs: [ docker-image ]
+    container: golang:1.19-bullseye
+    if: github.ref_name == 'master' && github.event_name != 'workflow_dispatch'
+    steps:
+      - name: Install Crane
+        run: go install github.com/google/go-containerregistry/cmd/crane@31786c6cbb82d6ec4fb8eb79cd9387905130534e # v0.11.0
+
+      - name: Pull xactserver image from Docker Hub
+        run: crane pull ctring/xactserver:${{needs.tag.outputs.build-tag}} xactserver
+
+      - name: Configure Docker Hub login
+        run: |
+          crane auth login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_PASSWORD }} index.docker.io
+
+      - name: Add latest tag to the image in Docker Hub
+        run: |
+          crane tag ctring/xactserver:${{needs.tag.outputs.build-tag}} latest
