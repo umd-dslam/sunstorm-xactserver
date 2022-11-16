@@ -1,9 +1,15 @@
-FROM ubuntu
+FROM rust:1.65 AS builder
+WORKDIR /home/nonroot
+
+COPY . .
 
 RUN apt-get update
-RUN apt-get install -y build-essential vim git wget
-RUN apt-get install -y libreadline-dev zlib1g-dev flex bison
-RUN apt-get install -y curl 
 RUN apt-get install -y cmake
-RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
-RUN apt-get install -y cargo
+RUN cargo build --locked --release
+
+FROM debian:bullseye-slim
+WORKDIR /data
+
+COPY --from=builder /home/nonroot/target/release/xactserver /usr/local/bin
+
+ENTRYPOINT ["/usr/local/bin/xactserver"]
