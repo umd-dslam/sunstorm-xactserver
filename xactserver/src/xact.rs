@@ -210,6 +210,7 @@ enum Relation {
         oid: u32,
         region: u8,
         csn: u64,
+        is_table_scan: bool,
         tuples: Vec<Tuple>,
     },
     Index {
@@ -236,30 +237,49 @@ struct Page {
 impl Relation {
     fn decode(buf: &mut Bytes) -> anyhow::Result<Relation> {
         match get_u8(buf).context("Failed to decode relation type")? {
-            b'T' => Relation::decode_table(buf).context("Failed to decode table"),
-            b'I' => Relation::decode_index(buf).context("Failed to decode index"),
+            b'T' => Relation::decode_relation(buf, false).context("Failed to decode table"),
+            b'I' => Relation::decode_relation(buf, true).context("Failed to decode index"),
             other => bail!("Invalid relation type: {}", other),
         }
     }
 
-    fn decode_table(buf: &mut Bytes) -> anyhow::Result<Relation> {
+    fn decode_relation(buf: &mut Bytes, is_index: bool) -> anyhow::Result<Relation> {
         let relid = get_u32(buf).context("Failed to decode 'relid'")?;
         let region = get_u8(buf).context("Failed to decode 'region'")?;
         let csn = get_u64(buf).context("Failed to decode 'csn'")?;
-        let ntuples = get_u32(buf).context("Failed to decode 'ntuples'")?;
-        let mut tuples = vec![];
-        for _ in 0..ntuples {
-            tuples.push(Relation::decode_tuple(buf).with_context(|| {
-                format!("Failed to decode tuple. Tuples decoded: {}", tuples.len())
-            })?);
-        }
+        let is_table_scan = get_u8(buf).context("Failed to decode 'is_table_scan'")?;
+        let nitems = get_u32(buf).context("Failed to decode 'nitems'")?;
 
-        Ok(Relation::Table {
-            oid: relid,
-            region,
-            csn,
-            tuples,
-        })
+        if is_index {
+            let mut pages = vec![];
+            for _ in 0..nitems {
+                pages.push(Relation::decode_page(buf).with_context(|| {
+                    format!("Failed to decode page. Pages decoded: {}", pages.len())
+                })?);
+            }
+    
+            Ok(Relation::Index {
+                oid: relid,
+                region,
+                csn,
+                pages,
+            })
+        } else {
+            let mut tuples = vec![];
+            for _ in 0..nitems {
+                tuples.push(Relation::decode_tuple(buf).with_context(|| {
+                    format!("Failed to decode tuple. Tuples decoded: {}", tuples.len())
+                })?);
+            }
+
+            Ok(Relation::Table {
+                oid: relid,
+                region,
+                csn,
+                is_table_scan: is_table_scan != 0,
+                tuples,
+            })
+        }
     }
 
     fn decode_tuple(buf: &mut Bytes) -> anyhow::Result<Tuple> {
@@ -267,26 +287,6 @@ impl Relation {
         let offset = get_u16(buf).context("Failed to decode 'offset'")?;
 
         Ok(Tuple { blocknum, offset })
-    }
-
-    fn decode_index(buf: &mut Bytes) -> anyhow::Result<Relation> {
-        let relid = get_u32(buf).context("Failed to decode 'relid'")?;
-        let region = get_u8(buf).context("Failed to decode 'region")?;
-        let csn = get_u64(buf).context("Failed to decode 'csn'")?;
-        let npages = get_u32(buf).context("Failed to decode 'npages'")?;
-        let mut pages = vec![];
-        for _ in 0..npages {
-            pages.push(Relation::decode_page(buf).with_context(|| {
-                format!("Failed to decode page. Pages decoded: {}", pages.len())
-            })?);
-        }
-
-        Ok(Relation::Index {
-            oid: relid,
-            region,
-            csn,
-            pages,
-        })
     }
 
     fn decode_page(buf: &mut Bytes) -> anyhow::Result<Page> {
