@@ -160,6 +160,8 @@ impl RWSet {
             relations_len,
             buf.remaining(),
         );
+        let num_relations = get_u32(buf)
+            .context("Failed to decode number of relations")?;
         let mut relations_buf = buf.split_to(relations_len);
         let mut relations = Vec::new();
         while relations_buf.has_remaining() {
@@ -171,6 +173,12 @@ impl RWSet {
             })?;
             relations.push(r);
         }
+        ensure!(
+            num_relations == relations.len() as u32,
+            "Failed to receive relations. Expected: {}, Received:{}",
+            num_relations, 
+            relations.len(),
+        );
         Ok(relations)
     }
 
@@ -211,12 +219,14 @@ enum Relation {
         region: u8,
         csn: u64,
         is_table_scan: bool,
+        n_tuples: u32,
         tuples: Vec<Tuple>,
     },
     Index {
         oid: u32,
         region: u8,
         csn: u64,
+        n_pages: u32,
         pages: Vec<Page>,
     },
 }
@@ -251,6 +261,7 @@ impl Relation {
         let nitems = get_u32(buf).context("Failed to decode 'nitems'")?;
 
         if is_index {
+            let n_pages = nitems;
             let mut pages = vec![];
             for _ in 0..nitems {
                 pages.push(Relation::decode_page(buf).with_context(|| {
@@ -262,9 +273,11 @@ impl Relation {
                 oid: relid,
                 region,
                 csn,
+                n_pages,
                 pages,
             })
         } else {
+            let n_tuples = nitems;
             let mut tuples = vec![];
             for _ in 0..nitems {
                 tuples.push(Relation::decode_tuple(buf).with_context(|| {
@@ -277,6 +290,7 @@ impl Relation {
                 region,
                 csn,
                 is_table_scan: is_table_scan != 0,
+                n_tuples,
                 tuples,
             })
         }
