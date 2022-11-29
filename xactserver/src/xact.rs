@@ -134,6 +134,8 @@ type Oid = u32;
 #[derive(Debug, Default)]
 pub struct RWSet {
     header: RWSetHeader,
+    relations_len: usize,
+    n_relations: u32,
     relations: Option<Vec<Relation>>,
     remainder: Bytes,
     decoded_all: bool,
@@ -142,16 +144,7 @@ pub struct RWSet {
 impl RWSet {
     fn decode(mut buf: Bytes) -> anyhow::Result<RWSet> {
         let header = RWSetHeader::decode(&mut buf).context("Failed to decode header")?;
-        Ok(Self {
-            header,
-            relations: None,
-            remainder: buf,
-            decoded_all: false,
-        })
-    }
-
-    fn decode_relations(buf: &mut Bytes) -> anyhow::Result<Vec<Relation>> {
-        let relations_len = get_u32(buf)
+        let relations_len = get_u32(&mut buf)
             .context("Failed to decode length")?
             .try_into()?;
         ensure!(
@@ -160,8 +153,22 @@ impl RWSet {
             relations_len,
             buf.remaining(),
         );
-        let num_relations = get_u32(buf)
-            .context("Failed to decode number of relations")?;
+        let n_relations = get_u32(&mut buf).context("Failed to decode number of relations")?;
+        Ok(Self {
+            header,
+            relations_len,
+            n_relations,
+            relations: None,
+            remainder: buf,
+            decoded_all: false,
+        })
+    }
+
+    fn decode_relations(
+        buf: &mut Bytes,
+        relations_len: usize,
+        n_relations: u32,
+    ) -> anyhow::Result<Vec<Relation>> {
         let mut relations_buf = buf.split_to(relations_len);
         let mut relations = Vec::new();
         while relations_buf.has_remaining() {
@@ -174,9 +181,9 @@ impl RWSet {
             relations.push(r);
         }
         ensure!(
-            num_relations == relations.len() as u32,
+            n_relations == relations.len() as u32,
             "Failed to receive relations. Expected: {}, Received:{}",
-            num_relations, 
+            n_relations,
             relations.len(),
         );
         Ok(relations)
@@ -188,7 +195,8 @@ impl RWSet {
             return Ok(self);
         }
         self.relations = Some(
-            Self::decode_relations(&mut self.remainder).context("Failed to decode relations")?,
+            Self::decode_relations(&mut self.remainder, self.relations_len, self.n_relations)
+                .context("Failed to decode relations")?,
         );
         self.decoded_all = true;
         Ok(self)
@@ -268,7 +276,7 @@ impl Relation {
                     format!("Failed to decode page. Pages decoded: {}", pages.len())
                 })?);
             }
-    
+
             Ok(Relation::Index {
                 oid: relid,
                 region,
