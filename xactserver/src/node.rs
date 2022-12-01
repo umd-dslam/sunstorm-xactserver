@@ -14,9 +14,9 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn new(addr: &SocketAddr, xact_manager_tx: mpsc::Sender<XsMessage>) -> Node {
+    pub fn new(addr: SocketAddr, xact_manager_tx: mpsc::Sender<XsMessage>) -> Node {
         Self {
-            addr: addr.to_owned(),
+            addr,
             xact_manager_tx,
         }
     }
@@ -58,6 +58,7 @@ pub mod client {
     use anyhow::{anyhow, ensure};
     use async_trait::async_trait;
     use futures::stream::{self, StreamExt, TryStreamExt};
+    use url::Url;
 
     use crate::proto::xact_coordination_client::XactCoordinationClient;
     use crate::NodeId;
@@ -67,10 +68,10 @@ pub mod client {
     }
 
     impl Nodes {
-        pub async fn connect(urls: Vec<String>) -> anyhow::Result<Self> {
+        pub async fn connect(urls: &[Url]) -> anyhow::Result<Self> {
             let nbufferred = urls.len();
             let conn_pools = stream::iter(urls)
-                .map(|url| bb8::Pool::builder().build(ConnectionManager(url)))
+                .map(|url| bb8::Pool::builder().build(ConnectionManager(url.to_string())))
                 .buffered(nbufferred)
                 .try_collect()
                 .await?;

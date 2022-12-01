@@ -2,8 +2,8 @@ use anyhow::{anyhow, bail, ensure, Context};
 use async_trait::async_trait;
 use bytes::Bytes;
 use log::{error, info};
-use std::net::SocketAddr;
 use tokio::sync::oneshot;
+use url::Url;
 
 use crate::XactId;
 
@@ -55,14 +55,14 @@ impl XactController for LocalXactController {
 
 pub struct SurrogateXactController {
     xact_id: XactId,
-    connect_pg: SocketAddr,
+    connect_pg: Url,
     data: Bytes,
     client: Option<tokio_postgres::Client>,
     prepared: bool,
 }
 
 impl SurrogateXactController {
-    pub fn new(xact_id: XactId, connect_pg: SocketAddr, data: Bytes) -> Self {
+    pub fn new(xact_id: XactId, connect_pg: Url, data: Bytes) -> Self {
         Self {
             xact_id,
             connect_pg,
@@ -79,8 +79,12 @@ impl XactController for SurrogateXactController {
         // TODO: Use a connection pool
         let conn_str = format!(
             "host={} port={} user=cloud_admin dbname=postgres application_name=xactserver",
-            self.connect_pg.ip(),
-            self.connect_pg.port(),
+            self.connect_pg
+                .host_str()
+                .ok_or_else(|| anyhow!("Invalid host in postgres url"))?,
+            self.connect_pg
+                .port()
+                .ok_or_else(|| anyhow!("Invalid port in postgres url"))?
         );
         info!("Connecting to local pg, conn str: {}", conn_str);
         let (client, conn) = tokio_postgres::connect(&conn_str, tokio_postgres::NoTls).await?;

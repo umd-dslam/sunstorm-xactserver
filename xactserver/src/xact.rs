@@ -1,11 +1,11 @@
 use anyhow::{bail, ensure, Context};
 use bit_set::BitSet;
 use bytes::{Buf, Bytes};
-use log::debug;
+use log::error;
 use std::convert::TryInto;
 use std::mem::size_of;
-use std::net::SocketAddr;
 use tokio::sync::oneshot;
+use url::Url;
 
 use crate::pg::{LocalXactController, SurrogateXactController, XactController};
 use crate::{NodeId, XactId};
@@ -35,8 +35,8 @@ impl XactState<LocalXactController> {
 }
 
 impl XactState<SurrogateXactController> {
-    pub fn new(id: XactId, data: Bytes, connect_pg: SocketAddr) -> anyhow::Result<Self> {
-        let controller = SurrogateXactController::new(id, connect_pg, data.clone());
+    pub fn new(id: XactId, data: Bytes, connect_pg: &Url) -> anyhow::Result<Self> {
+        let controller = SurrogateXactController::new(id, connect_pg.clone(), data.clone());
         Self::new_internal(id, data, controller)
     }
 }
@@ -76,7 +76,8 @@ impl<C: XactController> XactState<C> {
         // Execute the transaction
         let aborted = self.controller.execute().await.map_or_else(
             |err| {
-                debug!("{:?}", err);
+                // TODO: Bubble this error up from here
+                error!("{:?}", err);
                 true
             },
             |_| false,
@@ -257,7 +258,7 @@ impl Relation {
                     format!("Failed to decode page. Pages decoded: {}", pages.len())
                 })?);
             }
-    
+
             Ok(Relation::Index {
                 oid: relid,
                 region,

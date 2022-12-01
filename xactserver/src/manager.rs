@@ -3,20 +3,20 @@ use bytes::Bytes;
 use log::{debug, info};
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
+use url::Url;
 
 use crate::node::client;
 use crate::pg::{LocalXactController, SurrogateXactController};
 use crate::proto::{PrepareRequest, Vote, VoteRequest};
 use crate::xact::{XactState, XactStatus};
-use crate::{NodeId, XactId, XsMessage, DUMMY_ADDRESS, NODE_ID_BITS};
+use crate::{NodeId, XactId, XsMessage, NODE_ID_BITS};
 
 pub struct XactManager {
     node_id: NodeId,
-    connect_pg: SocketAddr,
-    peer_addrs: Vec<SocketAddr>,
+    connect_pg: Url,
+    peer_addrs: Vec<Url>,
     local_rx: mpsc::Receiver<XsMessage>,
     remote_rx: mpsc::Receiver<XsMessage>,
     xact_state_msg_tx: HashMap<XactId, mpsc::Sender<XsMessage>>,
@@ -27,8 +27,8 @@ pub struct XactManager {
 impl XactManager {
     pub fn new(
         node_id: NodeId,
-        connect_pg: SocketAddr,
-        peer_addrs: Vec<SocketAddr>,
+        connect_pg: Url,
+        peer_addrs: Vec<Url>,
         local_rx: mpsc::Receiver<XsMessage>,
         remote_rx: mpsc::Receiver<XsMessage>,
     ) -> Self {
@@ -45,21 +45,7 @@ impl XactManager {
     }
 
     pub async fn run(mut self) -> anyhow::Result<()> {
-        self.peers = Some(Arc::new(
-            client::Nodes::connect(
-                self.peer_addrs
-                    .iter()
-                    .map(|addr| {
-                        if addr == &*DUMMY_ADDRESS {
-                            String::default()
-                        } else {
-                            format!("http://{}", addr)
-                        }
-                    })
-                    .collect(),
-            )
-            .await?,
-        ));
+        self.peers = Some(Arc::new(client::Nodes::connect(&self.peer_addrs).await?));
 
         loop {
             tokio::select! {
@@ -116,7 +102,7 @@ impl XactManager {
         // Start a new xact state manager
         let xact_state_man = XactStateManager::new(
             self.node_id,
-            self.connect_pg,
+            self.connect_pg.clone(),
             self.peers.as_ref().unwrap().clone(),
         );
         tokio::spawn(xact_state_man.run(id, msg_rx));
@@ -132,13 +118,13 @@ enum XactType {
 
 struct XactStateManager {
     node_id: NodeId,
-    connect_pg: SocketAddr,
+    connect_pg: Url,
     peers: Arc<client::Nodes>,
     xact_state: Option<XactType>,
 }
 
 impl XactStateManager {
-    fn new(node_id: NodeId, connect_pg: SocketAddr, peers: Arc<client::Nodes>) -> Self {
+    fn new(node_id: NodeId, connect_pg: Url, peers: Arc<client::Nodes>) -> Self {
         Self {
             node_id,
             connect_pg,
@@ -216,7 +202,7 @@ impl XactStateManager {
         let xact_id = prepare_req.xact_id;
         let data = Bytes::from(prepare_req.data);
         let mut new_xact_state =
-            XactState::<SurrogateXactController>::new(xact_id, data, self.connect_pg)?;
+            XactState::<SurrogateXactController>::new(xact_id, data, &self.connect_pg)?;
 
         debug!("New remote xact: {:#?}", new_xact_state.rwset.decode_rest());
 

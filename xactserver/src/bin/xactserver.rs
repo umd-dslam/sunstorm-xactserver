@@ -2,8 +2,9 @@ use clap::{CommandFactory, ErrorKind, Parser};
 use std::net::SocketAddr;
 use std::thread;
 use tokio::sync::mpsc;
+use url::Url;
 use xactserver::pg::PgWatcher;
-use xactserver::{Node, NodeId, XactManager, DUMMY_ADDRESS};
+use xactserver::{Node, NodeId, XactManager, DEFAULT_NODE_PORT, DUMMY_URL};
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -19,15 +20,15 @@ struct Args {
     #[clap(
         long,
         value_parser,
-        default_value = "127.0.0.1:55432",
+        default_value = "postgresql://localhost:55432",
         help = "Address of postgres to connect to"
     )]
-    connect_pg: SocketAddr,
+    connect_pg: String,
 
     #[clap(
         long,
         value_parser,
-        default_value = "127.0.0.1:23000",
+        default_value = "http://localhost:23000",
         help = "Comma-separated list of addresses of other xact servers in other regions"
     )]
     nodes: String,
@@ -41,45 +42,59 @@ struct Args {
     node_id: NodeId,
 }
 
+fn invalid_arg_error(msg: &str) -> ! {
+    Args::command().error(ErrorKind::InvalidValue, msg).exit();
+}
+
 fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let args = Args::parse();
     if args.node_id == 0 {
-        Args::command()
-            .error(ErrorKind::InvalidValue, "node id is 1-based")
-            .exit();
+        invalid_arg_error("node id is 1-based");
+    }
+
+    let connect_pg = Url::parse(&args.connect_pg).unwrap_or_else(|err| {
+        invalid_arg_error(&format!(
+            "unable to parse postgres url in '--connect-pg': {}",
+            err
+        ))
+    });
+
+    if !connect_pg.scheme().eq("postgresql") {
+        invalid_arg_error(&format!(
+            "invalid scheme '{}' in '--connect-pg'. Must be 'postgresql'",
+            connect_pg.scheme()
+        ));
     }
 
     // Parse the list of node addresses
-    let mut node_addresses: Vec<SocketAddr> = args
+    let mut node_addresses: Vec<Url> = args
         .nodes
         .split(',')
         .map(|addr| {
-            addr.parse().unwrap_or_else(|err| {
-                Args::command()
-                    .error(
-                        ErrorKind::InvalidValue,
-                        format!("Invalid value '{}' for '--nodes': {}", addr, err),
-                    )
-                    .exit();
-            })
+            let node_url = Url::parse(addr).unwrap_or_else(|err| {
+                invalid_arg_error(&format!("invalid value '{}' in '--nodes': {}", addr, err))
+            });
+
+            let scheme = node_url.scheme();
+            if !["http", "https"].contains(&scheme) {
+                invalid_arg_error(&format!(
+                    "invalid scheme '{}' in '--nodes'. Must be either http or https",
+                    scheme
+                ));
+            }
+
+            node_url
         })
         .collect();
     // Insert a dummy address at the beginning of the list to make the list 1-based
-    node_addresses.insert(0, *DUMMY_ADDRESS);
+    node_addresses.insert(0, DUMMY_URL.clone());
 
     // Address to listen to other peers
     let listen_peer = node_addresses
         .get(args.node_id as usize)
-        .unwrap_or_else(|| {
-            Args::command()
-                .error(
-                    ErrorKind::InvalidValue,
-                    "Invalid value for '--node-id': out of bound",
-                )
-                .exit();
-        });
+        .unwrap_or_else(|| invalid_arg_error("invalid value for '--node-id': out of bound"));
 
     let (watcher_tx, watcher_rx) = mpsc::channel(100);
     let (node_tx, node_rx) = mpsc::channel(100);
@@ -93,7 +108,10 @@ fn main() -> anyhow::Result<()> {
             .spawn(move || pg_watcher.thread_main())?,
     );
 
-    let node = Node::new(listen_peer, node_tx);
+    let node = Node::new(
+        listen_peer.socket_addrs(|| Some(DEFAULT_NODE_PORT))?[0],
+        node_tx,
+    );
     join_handles.push(
         thread::Builder::new()
             .name("network node".into())
@@ -108,7 +126,7 @@ fn main() -> anyhow::Result<()> {
 
     let manager = XactManager::new(
         args.node_id,
-        args.connect_pg,
+        connect_pg,
         node_addresses,
         watcher_rx,
         node_rx,
