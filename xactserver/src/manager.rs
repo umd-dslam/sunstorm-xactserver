@@ -160,6 +160,7 @@ impl XactStateManager {
         // Create and initialize a new xact state
         let mut new_xact_state =
             XactState::<LocalXactController>::new(xact_id, data.clone(), commit_tx)?;
+        let participants = new_xact_state.participants();
 
         debug!("New local xact: {:#?}", new_xact_state.rwset.decode_rest());
 
@@ -179,9 +180,8 @@ impl XactStateManager {
             data: data.into_iter().collect(),
         };
 
-        // TODO: This is sending one-by-one to all other peers, but we want to send
-        //  to just relevant peers, in parallel.
-        for i in 1..self.peers.size() {
+        // TODO: Send prepare in parallel.
+        for i in participants {
             let node_id = i as NodeId;
             if node_id != self.node_id {
                 let mut client = self.peers.get(node_id).await?;
@@ -203,9 +203,15 @@ impl XactStateManager {
         let data = Bytes::from(prepare_req.data);
         let mut new_xact_state =
             XactState::<SurrogateXactController>::new(xact_id, data, &self.connect_pg)?;
+        let participants = new_xact_state.participants();
 
         debug!("New remote xact: {:#?}", new_xact_state.rwset.decode_rest());
 
+
+        // If this node is not invovled in the remotexact, return immediately.
+        if !participants.contains(&self.node_id) {
+            return Ok(());
+        }
         // Initialize the xact state
         let xact_status = new_xact_state
             .initialize(prepare_req.from.try_into()?, self.node_id)
@@ -226,9 +232,8 @@ impl XactStateManager {
             vote: vote as i32,
         };
 
-        // TODO: This is sending one-by-one to all other peers, but we want to send
-        //       to just relevant peers, in parallel.
-        for i in 1..self.peers.size() {
+        // TODO: Send the vote in parallel.
+        for i in participants {
             let node_id = i as NodeId;
             if node_id != self.node_id {
                 let mut client = self.peers.get(node_id).await?;
