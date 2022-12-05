@@ -128,9 +128,6 @@ impl<C: XactController> XactState<C> {
     pub fn participants(&self) -> Vec<NodeId> {
         self.participants.iter().collect()
     }
-    pub fn voted(&self) -> Vec<NodeId> {
-        self.voted.iter().collect()
-    }
 }
 
 type Oid = u32;
