@@ -6,12 +6,12 @@ mod proto {
     tonic::include_proto!("xactserver");
 }
 
+use bytes::Bytes;
 use lazy_static::lazy_static;
+use tokio::sync::oneshot;
+
 pub use manager::Manager;
 pub use node::Node;
-
-use bytes::Bytes;
-use tokio::sync::oneshot;
 
 pub type NodeId = usize;
 pub type XactId = u64;

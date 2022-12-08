@@ -5,9 +5,8 @@ use log::error;
 use std::convert::TryInto;
 use std::mem::size_of;
 use tokio::sync::oneshot;
-use url::Url;
 
-use crate::pg::{LocalXactController, SurrogateXactController, XactController};
+use crate::pg::{LocalXactController, PgConnectionPool, SurrogateXactController, XactController};
 use crate::{NodeId, XactId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,21 +27,21 @@ pub struct XactState<C: XactController> {
 }
 
 impl XactState<LocalXactController> {
-    pub fn new(id: XactId, data: Bytes, commit_tx: oneshot::Sender<bool>) -> anyhow::Result<Self> {
+    pub fn new(id: XactId, data: &Bytes, commit_tx: oneshot::Sender<bool>) -> anyhow::Result<Self> {
         let controller = LocalXactController::new(commit_tx);
-        Self::new_internal(id, data, controller)
+        Self::new_common(id, data.clone(), controller)
     }
 }
 
 impl XactState<SurrogateXactController> {
-    pub fn new(id: XactId, data: Bytes, connect_pg: &Url) -> anyhow::Result<Self> {
-        let controller = SurrogateXactController::new(id, connect_pg.clone(), data.clone());
-        Self::new_internal(id, data, controller)
+    pub fn new(id: XactId, data: &Bytes, pg_conn_pool: &PgConnectionPool) -> anyhow::Result<Self> {
+        let controller = SurrogateXactController::new(id, data.clone(), pg_conn_pool.clone());
+        Self::new_common(id, data.clone(), controller)
     }
 }
 
 impl<C: XactController> XactState<C> {
-    fn new_internal(id: XactId, data: Bytes, controller: C) -> anyhow::Result<Self> {
+    fn new_common(id: XactId, data: Bytes, controller: C) -> anyhow::Result<Self> {
         let rwset = RWSet::decode(data).context("Failed to decode read/write set")?;
         let mut participants = BitSet::new();
         for i in 0..u64::BITS {
