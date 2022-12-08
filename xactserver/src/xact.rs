@@ -12,7 +12,7 @@ use crate::{NodeId, XactId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum XactStatus {
-    Uninitialized,
+    Unexecuted,
     Waiting,
     Committed,
     Rollbacked,
@@ -53,19 +53,15 @@ impl<C: XactController> XactState<C> {
         Ok(Self {
             id,
             rwset,
-            status: XactStatus::Uninitialized,
+            status: XactStatus::Unexecuted,
             participants,
             voted: BitSet::new(),
             controller,
         })
     }
 
-    pub async fn initialize(
-        &mut self,
-        coordinator: NodeId,
-        me: NodeId,
-    ) -> anyhow::Result<XactStatus> {
-        ensure!(self.status == XactStatus::Uninitialized);
+    pub async fn execute(&mut self, coordinator: NodeId, me: NodeId) -> anyhow::Result<XactStatus> {
+        ensure!(self.status == XactStatus::Unexecuted);
         self.status = XactStatus::Waiting;
 
         if me != coordinator {
@@ -110,7 +106,10 @@ impl<C: XactController> XactState<C> {
 
     async fn rollback(&mut self) -> anyhow::Result<()> {
         ensure!(self.status == XactStatus::Waiting);
-        self.controller.rollback().await?;
+        self.controller
+            .rollback()
+            .await
+            .context("Failed to rollback")?;
         self.status = XactStatus::Rollbacked;
         Ok(())
     }
@@ -120,7 +119,7 @@ impl<C: XactController> XactState<C> {
         if self.voted != self.participants {
             return Ok(());
         }
-        self.controller.commit().await?;
+        self.controller.commit().await.context("Failed to commit")?;
         self.status = XactStatus::Committed;
         Ok(())
     }
@@ -400,7 +399,7 @@ mod tests {
                 committed: false,
                 rollbacked: false,
             },
-            status: XactStatus::Uninitialized,
+            status: XactStatus::Unexecuted,
             participants: participant_set,
             voted: BitSet::new(),
         }
@@ -409,13 +408,13 @@ mod tests {
     #[tokio::test]
     async fn test_1_participant() -> anyhow::Result<()> {
         let mut state_1 = new_test_xact_state(vec![0], false);
-        // Initialize with participant 0 (coordinator and myself)
-        assert_eq!(state_1.initialize(0, 0).await?, XactStatus::Committed);
+        // Execute with participant 0 (coordinator and myself)
+        assert_eq!(state_1.execute(0, 0).await?, XactStatus::Committed);
         state_1.controller.assert(true, true, false);
 
         let mut state_2 = new_test_xact_state(vec![4], false);
-        // Initialize with participant 4 (myself and coordinator)
-        assert_eq!(state_2.initialize(4, 4).await?, XactStatus::Committed);
+        // Execute with participant 4 (myself and coordinator)
+        assert_eq!(state_2.execute(4, 4).await?, XactStatus::Committed);
         state_2.controller.assert(true, true, false);
 
         Ok(())
@@ -424,8 +423,8 @@ mod tests {
     #[tokio::test]
     async fn test_1_participant_rollbacked() -> anyhow::Result<()> {
         let mut state_1 = new_test_xact_state(vec![0], true);
-        // Initialize with participant 0 (coordinator and myself)
-        assert_eq!(state_1.initialize(0, 0).await?, XactStatus::Rollbacked);
+        // Execute with participant 0 (coordinator and myself)
+        assert_eq!(state_1.execute(0, 0).await?, XactStatus::Rollbacked);
         state_1.controller.assert(true, false, true);
 
         Ok(())
@@ -435,8 +434,8 @@ mod tests {
     async fn test_3_participants() -> anyhow::Result<()> {
         let mut state = new_test_xact_state(vec![1, 3, 5], false);
 
-        // Initialize with participants 1 (coordinator) and 3 (myself)
-        assert_eq!(state.initialize(1, 3).await?, XactStatus::Waiting);
+        // Execute with participants 1 (coordinator) and 3 (myself)
+        assert_eq!(state.execute(1, 3).await?, XactStatus::Waiting);
         state.controller.assert(true, false, false);
 
         // Participant 3 already voted so nothing change
@@ -454,8 +453,8 @@ mod tests {
     async fn test_3_participants_rollbacked() -> anyhow::Result<()> {
         let mut state = new_test_xact_state(vec![0, 2, 4], false);
 
-        // Initialize with participants 2 (coordinator and myself)
-        assert_eq!(state.initialize(2, 2).await?, XactStatus::Waiting);
+        // Execute with participants 2 (coordinator and myself)
+        assert_eq!(state.execute(2, 2).await?, XactStatus::Waiting);
         state.controller.assert(true, false, false);
 
         // Participant 0 vote to abort
@@ -472,11 +471,11 @@ mod tests {
     #[tokio::test]
     async fn test_wrong_participant() -> anyhow::Result<()> {
         let mut state_1 = new_test_xact_state(vec![0, 1, 2], false);
-        let res_1 = state_1.initialize(3, 3).await;
+        let res_1 = state_1.execute(3, 3).await;
         assert!(res_1.is_err());
 
         let mut state_2 = new_test_xact_state(vec![0, 1, 2], false);
-        assert_eq!(state_2.initialize(2, 2).await?, XactStatus::Waiting);
+        assert_eq!(state_2.execute(2, 2).await?, XactStatus::Waiting);
         let res_2 = state_2.add_vote(4, false).await;
         assert!(res_2.is_err());
 

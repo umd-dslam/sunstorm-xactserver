@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Context};
+use anyhow::{anyhow, bail, ensure, Context};
 use bytes::Bytes;
 use log::{debug, info};
 use std::collections::HashMap;
@@ -13,18 +13,28 @@ use crate::proto::{PrepareRequest, Vote, VoteRequest};
 use crate::xact::{XactState, XactStatus};
 use crate::{NodeId, XactId, XsMessage, NODE_ID_BITS};
 
-pub struct XactManager {
+pub struct Manager {
+    /// Id of current xactserver
     node_id: NodeId,
-    connect_pg: Url,
-    peer_addrs: Vec<Url>,
+
+    /// Receivers for channels to receive messages from
+    /// postgres (local) and other nodes (remote)
     local_rx: mpsc::Receiver<XsMessage>,
     remote_rx: mpsc::Receiver<XsMessage>,
-    xact_state_msg_tx: HashMap<XactId, mpsc::Sender<XsMessage>>,
-    xact_id_counter: XactId,
+
+    /// Connection for sending messages to postgres
+    connect_pg: Url,
+
+    /// Connections for sending messages to other xactserver nodes
+    peer_addrs: Vec<Url>,
     peers: Option<Arc<client::Nodes>>,
+
+    /// State of all transactions
+    xact_state_managers: HashMap<XactId, mpsc::Sender<XsMessage>>,
+    xact_id_counter: XactId,
 }
 
-impl XactManager {
+impl Manager {
     pub fn new(
         node_id: NodeId,
         connect_pg: Url,
@@ -34,11 +44,11 @@ impl XactManager {
     ) -> Self {
         Self {
             node_id,
-            peer_addrs,
-            connect_pg,
             local_rx,
             remote_rx,
-            xact_state_msg_tx: HashMap::new(),
+            peer_addrs,
+            connect_pg,
+            xact_state_managers: HashMap::new(),
             xact_id_counter: 1,
             peers: None,
         }
@@ -78,16 +88,15 @@ impl XactManager {
                 self.new_xact_state_manager(xact_id)?
             }
             XsMessage::Prepare(prepare_req) => self.new_xact_state_manager(prepare_req.xact_id)?,
-            XsMessage::Vote(vote_req) => {
-                self.xact_state_msg_tx
-                    .get(&vote_req.xact_id)
-                    .ok_or_else(|| {
-                        anyhow!(
-                            "No xact state manager running for xact id {}",
-                            vote_req.xact_id
-                        )
-                    })?
-            }
+            XsMessage::Vote(vote_req) => self
+                .xact_state_managers
+                .get(&vote_req.xact_id)
+                .ok_or_else(|| {
+                    anyhow!(
+                        "No xact state manager running for xact id {}",
+                        vote_req.xact_id
+                    )
+                })?,
         };
         // Forward the message to the xact state manager
         msg_tx.send(msg).await?;
@@ -95,19 +104,22 @@ impl XactManager {
     }
 
     fn new_xact_state_manager(&mut self, id: XactId) -> anyhow::Result<&mpsc::Sender<XsMessage>> {
-        if self.xact_state_msg_tx.contains_key(&id) {
-            bail!("Xact state manager already exists for xact {}", id);
-        }
+        ensure!(
+            !self.xact_state_managers.contains_key(&id),
+            "Xact state manager already exists for exact {}",
+            id
+        );
         let (msg_tx, msg_rx) = mpsc::channel(2);
         // Start a new xact state manager
         let xact_state_man = XactStateManager::new(
+            id,
             self.node_id,
             self.connect_pg.clone(),
             self.peers.as_ref().unwrap().clone(),
         );
-        tokio::spawn(xact_state_man.run(id, msg_rx));
+        tokio::spawn(xact_state_man.run(msg_rx));
         // Save and return the sender of the new xact state manager
-        Ok(self.xact_state_msg_tx.entry(id).or_insert(msg_tx))
+        Ok(self.xact_state_managers.entry(id).or_insert(msg_tx))
     }
 }
 
@@ -117,6 +129,7 @@ enum XactType {
 }
 
 struct XactStateManager {
+    id: XactId,
     node_id: NodeId,
     connect_pg: Url,
     peers: Arc<client::Nodes>,
@@ -124,8 +137,9 @@ struct XactStateManager {
 }
 
 impl XactStateManager {
-    fn new(node_id: NodeId, connect_pg: Url, peers: Arc<client::Nodes>) -> Self {
+    fn new(id: XactId, node_id: NodeId, connect_pg: Url, peers: Arc<client::Nodes>) -> Self {
         Self {
+            id,
             node_id,
             connect_pg,
             peers,
@@ -133,53 +147,63 @@ impl XactStateManager {
         }
     }
 
-    async fn run(mut self, id: XactId, mut msg_rx: mpsc::Receiver<XsMessage>) {
+    async fn run(mut self, mut msg_rx: mpsc::Receiver<XsMessage>) {
         while let Some(msg) = msg_rx.recv().await {
             match msg {
-                XsMessage::LocalXact { data, commit_tx } => {
-                    self.handle_local_xact_msg(id, data, commit_tx).await
-                }
-                XsMessage::Prepare(prepare_req) => self.handle_prepare_msg(prepare_req).await,
-                XsMessage::Vote(vote_req) => self.handle_vote_msg(vote_req).await,
+                XsMessage::LocalXact { data, commit_tx } => self
+                    .handle_local_xact_msg(data, commit_tx)
+                    .await
+                    .context("Failed to handle local xact msg"),
+                XsMessage::Prepare(prepare_req) => self
+                    .handle_prepare_msg(prepare_req)
+                    .await
+                    .context("Failed to handle prepare msg"),
+                XsMessage::Vote(vote_req) => self
+                    .handle_vote_msg(vote_req)
+                    .await
+                    .context("Failed to handle vote msg"),
             }
-            .with_context(|| format!("Failed to process xact {}", id))
+            .with_context(|| format!("Failed to process xact {}", self.id))
             .unwrap();
         }
     }
 
     async fn handle_local_xact_msg(
         &mut self,
-        xact_id: XactId,
         data: Bytes,
         commit_tx: oneshot::Sender<bool>,
     ) -> anyhow::Result<()> {
-        if self.xact_state.is_some() {
-            bail!("Xact state is not empty");
-        }
+        ensure!(
+            self.xact_state.is_none(),
+            "Xact state {} already exists",
+            self.id
+        );
 
-        // Create and initialize a new xact state
+        // Create and initialize a new local xact state
         let mut new_xact_state =
-            XactState::<LocalXactController>::new(xact_id, data.clone(), commit_tx)?;
-        let participants = new_xact_state.participants();
+            XactState::<LocalXactController>::new(self.id, data.clone(), commit_tx)?;
 
         debug!("New local xact: {:#?}", new_xact_state.rwset.decode_rest());
 
-        // Initialize the xact state
+        // Execute the transaction. Because this is a local transaction, the current node is the coordinator
         let xact_status = new_xact_state
-            .initialize(self.node_id, self.node_id)
-            .await?;
-
-        // Save the xact state
-        self.xact_state = Some(XactType::Local(new_xact_state));
-
+            .execute(self.node_id, self.node_id)
+            .await
+            .context("Failed to execute local xact")?;
         assert_eq!(xact_status, XactStatus::Waiting);
 
+        // Save the xact state
+        let participants = new_xact_state.participants();
+        self.xact_state = Some(XactType::Local(new_xact_state));
+
+        // Construct the request
         let request = PrepareRequest {
             from: self.node_id as u32,
-            xact_id,
+            xact_id: self.id,
             data: data.into_iter().collect(),
         };
 
+        // Send the transaction to other participants
         // TODO: Send prepare in parallel.
         for i in participants {
             let node_id = i as NodeId;
@@ -188,50 +212,56 @@ impl XactStateManager {
                 client.prepare(tonic::Request::new(request.clone())).await?;
             }
         }
-        debug!("Waiting for votes from other participants");
 
         Ok(())
     }
 
     async fn handle_prepare_msg(&mut self, prepare_req: PrepareRequest) -> anyhow::Result<()> {
-        if self.xact_state.is_some() {
-            bail!("Xact state is not empty");
-        }
+        ensure!(
+            self.xact_state.is_none(),
+            "Xact state {} already exists",
+            self.id
+        );
 
-        // Create and initialize a new xact state
+        // Create and initialize a new surrogate xact state
         let xact_id = prepare_req.xact_id;
         let data = Bytes::from(prepare_req.data);
         let mut new_xact_state =
             XactState::<SurrogateXactController>::new(xact_id, data, &self.connect_pg)?;
-        let participants = new_xact_state.participants();
 
         debug!("New remote xact: {:#?}", new_xact_state.rwset.decode_rest());
 
-
         // If this node is not invovled in the remotexact, return immediately.
+        let participants = new_xact_state.participants();
         if !participants.contains(&self.node_id) {
             return Ok(());
         }
-        // Initialize the xact state
+
+        // Execute the transaction
+        let coordinator = prepare_req.from.try_into()?;
         let xact_status = new_xact_state
-            .initialize(prepare_req.from.try_into()?, self.node_id)
-            .await?;
+            .execute(coordinator, self.node_id)
+            .await
+            .context("Failed to execute remote xact")?;
 
         // Save the xact state
         self.xact_state = Some(XactType::Surrogate(new_xact_state));
 
+        // Determine the vote based on the status of the transaction after execution
         let vote = if xact_status == XactStatus::Rollbacked {
             Vote::Abort
         } else {
             Vote::Commit
         };
 
+        // Construct the request
         let request = VoteRequest {
             from: self.node_id as u32,
             xact_id,
             vote: vote as i32,
         };
 
+        // Send the vote to other participants
         // TODO: Send the vote in parallel.
         for i in participants {
             let node_id = i as NodeId;
@@ -240,12 +270,13 @@ impl XactStateManager {
                 client.vote(tonic::Request::new(request.clone())).await?;
             }
         }
+
         Ok(())
     }
 
     async fn handle_vote_msg(&mut self, vote: VoteRequest) -> anyhow::Result<()> {
         match self.xact_state.as_mut() {
-            None => bail!("Xact state does not exist"),
+            None => bail!("Xact state {} does not exist", self.id),
             Some(XactType::Local(xact)) => {
                 let status = xact
                     .add_vote(vote.from.try_into()?, vote.vote == Vote::Abort as i32)

@@ -4,7 +4,7 @@ use std::thread;
 use tokio::sync::mpsc;
 use url::Url;
 use xactserver::pg::PgWatcher;
-use xactserver::{Node, NodeId, XactManager, DEFAULT_NODE_PORT, DUMMY_URL};
+use xactserver::{Manager, Node, NodeId, DEFAULT_NODE_PORT, DUMMY_URL};
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -124,7 +124,7 @@ fn main() -> anyhow::Result<()> {
             })?,
     );
 
-    let manager = XactManager::new(
+    let manager = Manager::new(
         args.node_id,
         connect_pg,
         node_addresses,
