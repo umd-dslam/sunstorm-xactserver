@@ -7,7 +7,7 @@ mod proto {
 }
 
 use lazy_static::lazy_static;
-pub use manager::XactManager;
+pub use manager::Manager;
 pub use node::Node;
 
 use bytes::Bytes;
