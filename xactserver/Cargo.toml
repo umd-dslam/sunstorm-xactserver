@@ -6,7 +6,8 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0"
 async-trait = "0.1"
-bb8 = "0.8.0"
+bb8 = "0.8"
+bb8-postgres = "0.8"
 bit-set = "0.5.3"
 bytes = { version = "1.0.1", features = ["serde"] }
 clap = { version = "3.2.7", features = ["derive"] }

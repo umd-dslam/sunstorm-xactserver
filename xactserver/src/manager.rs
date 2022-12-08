@@ -8,7 +8,9 @@ use tokio::sync::{mpsc, oneshot};
 use url::Url;
 
 use crate::node::client;
-use crate::pg::{LocalXactController, SurrogateXactController};
+use crate::pg::{
+    create_pg_conn_pool, LocalXactController, PgConnectionPool, SurrogateXactController,
+};
 use crate::proto::{PrepareRequest, Vote, VoteRequest};
 use crate::xact::{XactState, XactStatus};
 use crate::{NodeId, XactId, XsMessage, NODE_ID_BITS};
@@ -23,7 +25,8 @@ pub struct Manager {
     remote_rx: mpsc::Receiver<XsMessage>,
 
     /// Connection for sending messages to postgres
-    connect_pg: Url,
+    pg_url: Url,
+    pg_conn_pool: Option<PgConnectionPool>,
 
     /// Connections for sending messages to other xactserver nodes
     peer_addrs: Vec<Url>,
@@ -37,7 +40,7 @@ pub struct Manager {
 impl Manager {
     pub fn new(
         node_id: NodeId,
-        connect_pg: Url,
+        pg_url: Url,
         peer_addrs: Vec<Url>,
         local_rx: mpsc::Receiver<XsMessage>,
         remote_rx: mpsc::Receiver<XsMessage>,
@@ -47,7 +50,8 @@ impl Manager {
             local_rx,
             remote_rx,
             peer_addrs,
-            connect_pg,
+            pg_url,
+            pg_conn_pool: None,
             xact_state_managers: HashMap::new(),
             xact_id_counter: 1,
             peers: None,
@@ -56,6 +60,7 @@ impl Manager {
 
     pub async fn run(mut self) -> anyhow::Result<()> {
         self.peers = Some(Arc::new(client::Nodes::connect(&self.peer_addrs).await?));
+        self.pg_conn_pool = Some(create_pg_conn_pool(&self.pg_url).await?);
 
         loop {
             tokio::select! {
@@ -114,7 +119,7 @@ impl Manager {
         let xact_state_man = XactStateManager::new(
             id,
             self.node_id,
-            self.connect_pg.clone(),
+            self.pg_conn_pool.as_ref().unwrap().clone(),
             self.peers.as_ref().unwrap().clone(),
         );
         tokio::spawn(xact_state_man.run(msg_rx));
@@ -131,17 +136,22 @@ enum XactType {
 struct XactStateManager {
     id: XactId,
     node_id: NodeId,
-    connect_pg: Url,
+    pg_conn_pool: PgConnectionPool,
     peers: Arc<client::Nodes>,
     xact_state: Option<XactType>,
 }
 
 impl XactStateManager {
-    fn new(id: XactId, node_id: NodeId, connect_pg: Url, peers: Arc<client::Nodes>) -> Self {
+    fn new(
+        id: XactId,
+        node_id: NodeId,
+        pg_conn_pool: PgConnectionPool,
+        peers: Arc<client::Nodes>,
+    ) -> Self {
         Self {
             id,
             node_id,
-            connect_pg,
+            pg_conn_pool,
             peers,
             xact_state: None,
         }
@@ -180,9 +190,7 @@ impl XactStateManager {
         );
 
         // Create and initialize a new local xact state
-        let mut new_xact_state =
-            XactState::<LocalXactController>::new(self.id, data.clone(), commit_tx)?;
-
+        let mut new_xact_state = XactState::<LocalXactController>::new(self.id, &data, commit_tx)?;
         debug!("New local xact: {:#?}", new_xact_state.rwset.decode_rest());
 
         // Execute the transaction. Because this is a local transaction, the current node is the coordinator
@@ -225,9 +233,11 @@ impl XactStateManager {
 
         // Create and initialize a new surrogate xact state
         let xact_id = prepare_req.xact_id;
-        let data = Bytes::from(prepare_req.data);
-        let mut new_xact_state =
-            XactState::<SurrogateXactController>::new(xact_id, data, &self.connect_pg)?;
+        let mut new_xact_state = XactState::<SurrogateXactController>::new(
+            xact_id,
+            &Bytes::from(prepare_req.data),
+            &self.pg_conn_pool,
+        )?;
 
         debug!("New remote xact: {:#?}", new_xact_state.rwset.decode_rest());
 
