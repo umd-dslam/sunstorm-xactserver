@@ -1,7 +1,5 @@
-use anyhow::{anyhow, bail, Context};
+use anyhow::{anyhow, Context};
 use async_trait::async_trait;
-use bb8::PooledConnection;
-use bb8_postgres::{tokio_postgres::NoTls, PostgresConnectionManager};
 use bytes::Bytes;
 use tokio::sync::oneshot;
 
@@ -57,7 +55,6 @@ pub struct SurrogateXactController {
     xact_id: XactId,
     data: Bytes,
     pg_conn_pool: PgConnectionPool,
-    pg_conn: Option<PooledConnection<'static, PostgresConnectionManager<NoTls>>>,
 }
 
 impl SurrogateXactController {
@@ -66,7 +63,6 @@ impl SurrogateXactController {
             xact_id,
             data,
             pg_conn_pool,
-            pg_conn: None,
         }
     }
 }
@@ -74,57 +70,61 @@ impl SurrogateXactController {
 #[async_trait]
 impl XactController for SurrogateXactController {
     async fn execute(&mut self) -> anyhow::Result<()> {
-        let conn = match self.pg_conn.take() {
-            Some(c) => c,
-            None => self.pg_conn_pool.get_owned().await?,
-        };
+        let conn = self.pg_conn_pool.get().await?;
 
-        conn.simple_query("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+        conn.batch_execute("BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE")
             .await
             .with_context(|| format!("Failed to begin xact {}", self.xact_id))?;
 
-        conn.execute(
-            "SELECT validate_and_apply_xact($1::bytea);",
-            &[&self.data.as_ref()],
-        )
-        .await
-        .with_context(|| {
-            format!(
-                "Failed to execute validate_and_apply_xact($1::bytea) for xact {}",
-                self.xact_id
+        let result = conn
+            .execute(
+                "SELECT validate_and_apply_xact($1::bytea);",
+                &[&self.data.as_ref()],
             )
-        })?;
+            .await;
 
-        conn.simple_query(format!("PREPARE TRANSACTION '{}'", self.xact_id).as_str())
+        conn.batch_execute(format!("PREPARE TRANSACTION '{}'", self.xact_id).as_str())
             .await
             .with_context(|| format!("Failed to prepare xact {}", self.xact_id))?;
 
-        // Retain the connection to perform commit or rollback later
-        self.pg_conn = Some(conn);
+        // Check the result after PREPARE TRANSACTION so that the transaction
+        // is properlly aborted if there is an error during validation.
+        result?;
 
         Ok(())
     }
 
     async fn commit(&mut self) -> anyhow::Result<()> {
-        match &self.pg_conn {
-            Some(conn) => {
-                conn.simple_query(format!("COMMIT PREPARED '{}'", self.xact_id).as_str())
-                    .await
-                    .with_context(|| format!("Failed to commit xact {}", self.xact_id))?;
-            }
-            None => {
-                bail!("No prepared transaction to commit");
-            }
-        }
+        let conn = self.pg_conn_pool.get().await?;
+
+        conn.batch_execute(format!("COMMIT PREPARED '{}'", self.xact_id).as_str())
+            .await
+            .with_context(|| format!("Failed to commit xact {}", self.xact_id))?;
+
         Ok(())
     }
 
     async fn rollback(&mut self) -> anyhow::Result<()> {
-        if let Some(conn) = &self.pg_conn {
-            conn.simple_query(format!("ROLLBACK PREPARED '{}'", self.xact_id).as_str())
+        let conn = self.pg_conn_pool.get().await?;
+
+        let prepared_xact = conn
+            .query_opt(
+                format!(
+                    "SELECT 1 FROM pg_prepared_xacts WHERE gid='{}'",
+                    self.xact_id
+                )
+                .as_str(),
+                &[],
+            )
+            .await
+            .with_context(|| format!("Failed to check preparedness of xact {}", self.xact_id))?;
+
+        if prepared_xact.is_some() {
+            conn.batch_execute(format!("ROLLBACK PREPARED '{}'", self.xact_id).as_str())
                 .await
                 .with_context(|| format!("Failed to rollback xact {}", self.xact_id))?;
         }
+
         Ok(())
     }
 }
