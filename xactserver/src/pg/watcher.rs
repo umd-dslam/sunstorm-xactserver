@@ -7,8 +7,9 @@ use crate::XsMessage;
 use anyhow::Context;
 use bytes::{BufMut, BytesMut};
 use log::{debug, error, info};
+use neon_pq_proto::{BeMessage, FeMessage};
 use neon_utils::postgres_backend::{self, AuthType, PostgresBackend};
-use neon_utils::pq_proto::{BeMessage, FeMessage};
+use neon_utils::postgres_backend_async::QueryError;
 use std::net::{SocketAddr, TcpListener};
 use tokio::sync::{mpsc, oneshot};
 
@@ -85,7 +86,7 @@ impl postgres_backend::Handler for PgWatcherHandler {
         &mut self,
         pgb: &mut PostgresBackend,
         _query_string: &str,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<(), QueryError> {
         // Switch to COPY BOTH mode
         pgb.write_message(&BeMessage::CopyBothResponse)?;
 
@@ -100,14 +101,19 @@ impl postgres_backend::Handler for PgWatcherHandler {
                             // Pass the transaction buffer to the xactserver.
                             // This is a blocking send because we're not inside an
                             // asynchronous environment
-                            self.xact_manager_tx.blocking_send(XsMessage::LocalXact {
-                                data: buf,
-                                commit_tx,
-                            })?;
+                            self.xact_manager_tx
+                                .blocking_send(XsMessage::LocalXact {
+                                    data: buf,
+                                    commit_tx,
+                                })
+                                .map_err(|e| QueryError::Other(anyhow::anyhow!(e)))?;
 
                             let mut bytes = BytesMut::new();
 
-                            if commit_rx.blocking_recv()? {
+                            if commit_rx
+                                .blocking_recv()
+                                .map_err(|e| QueryError::Other(anyhow::anyhow!(e)))?
+                            {
                                 bytes.put_u8(1);
                             } else {
                                 bytes.put_u8(0);
@@ -123,9 +129,12 @@ impl postgres_backend::Handler for PgWatcherHandler {
                     }
                 }
                 Err(e) => {
-                    if !postgres_backend::is_socket_read_timed_out(&e) {
-                        return Err(e);
+                    if let QueryError::Other(e) = &e {
+                        if postgres_backend::is_socket_read_timed_out(e) {
+                            continue;
+                        }
                     }
+                    return Err(e);
                 }
             }
         }

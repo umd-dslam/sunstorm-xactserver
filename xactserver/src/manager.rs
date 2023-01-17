@@ -1,6 +1,6 @@
 use anyhow::{anyhow, bail, ensure, Context};
 use bytes::Bytes;
-use log::{debug, info};
+use log::debug;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::sync::Arc;
