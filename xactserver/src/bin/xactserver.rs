@@ -1,5 +1,9 @@
 use clap::{CommandFactory, ErrorKind, Parser};
+use hyper::{header::CONTENT_TYPE, Body, Request, Response};
 use log::info;
+use neon_utils::http::{endpoint::serve_thread_main, error::ApiError};
+use prometheus::{Encoder, TextEncoder};
+use routerify::Router;
 use std::net::SocketAddr;
 use std::thread::{self, JoinHandle};
 use tokio::sync::mpsc;
@@ -41,6 +45,14 @@ struct Args {
         help = "Numeric id of the current node. Used as an 1-based index of the --nodes list"
     )]
     node_id: NodeId,
+
+    #[clap(
+        long,
+        value_parser,
+        default_value = "127.0.0.1:8080",
+        help = "Address to listen for http requests"
+    )]
+    listen_http: SocketAddr,
 }
 
 fn invalid_arg_error(msg: &str) -> ! {
@@ -98,20 +110,26 @@ fn main() -> anyhow::Result<()> {
     let (pg_watcher_handle, watcher_rx) = start_pg_watcher(args.listen_pg)?;
     let (node_handle, node_rx) = start_node(args.node_id, &nodes)?;
     let manager_handle = start_manager(args.node_id, connect_pg, nodes, watcher_rx, node_rx)?;
+    let http_server_handle = start_http_server(args.listen_http)?;
 
-    for handle in [pg_watcher_handle, node_handle, manager_handle] {
+    for handle in [
+        pg_watcher_handle,
+        node_handle,
+        manager_handle,
+        http_server_handle,
+    ] {
         handle.join().unwrap()?;
     }
 
     Ok(())
 }
 
-fn start_pg_watcher(
-    listen_pg: SocketAddr,
-) -> anyhow::Result<(
+type HandleAndReceiver = (
     JoinHandle<Result<(), anyhow::Error>>,
     mpsc::Receiver<XsMessage>,
-)> {
+);
+
+fn start_pg_watcher(listen_pg: SocketAddr) -> anyhow::Result<HandleAndReceiver> {
     let (watcher_tx, watcher_rx) = mpsc::channel(100);
     info!("Listening to PostgreSQL on {}", listen_pg);
     let pg_watcher = PgWatcher::new(listen_pg, watcher_tx);
@@ -128,13 +146,7 @@ fn start_pg_watcher(
     Ok((handle, watcher_rx))
 }
 
-fn start_node(
-    node_id: NodeId,
-    nodes: &[Url],
-) -> anyhow::Result<(
-    JoinHandle<Result<(), anyhow::Error>>,
-    mpsc::Receiver<XsMessage>,
-)> {
+fn start_node(node_id: NodeId, nodes: &[Url]) -> anyhow::Result<HandleAndReceiver> {
     let (node_tx, node_rx) = mpsc::channel(100);
     let listen_peer = nodes
         .get(node_id)
@@ -175,4 +187,37 @@ fn start_manager(
                 .block_on(manager.run())?;
             Ok(())
         })?)
+}
+
+fn start_http_server(
+    listen_http: SocketAddr,
+) -> anyhow::Result<JoinHandle<Result<(), anyhow::Error>>> {
+    let listener = std::net::TcpListener::bind(listen_http)?;
+    let router = Router::builder().get("/metrics", prometheus_metrics_handler);
+
+    Ok(thread::Builder::new()
+        .name("xact manager".into())
+        .spawn(move || {
+            serve_thread_main(
+                router,
+                listener,
+                std::future::pending(), // never shut down
+            )
+        })?)
+}
+
+async fn prometheus_metrics_handler(_req: Request<Body>) -> Result<Response<Body>, ApiError> {
+    let mut buffer = vec![];
+    let encoder = TextEncoder::new();
+
+    let metrics = prometheus::gather();
+    encoder.encode(&metrics, &mut buffer).unwrap();
+
+    let response = Response::builder()
+        .status(200)
+        .header(CONTENT_TYPE, encoder.format_type())
+        .body(Body::from(buffer))
+        .unwrap();
+
+    Ok(response)
 }

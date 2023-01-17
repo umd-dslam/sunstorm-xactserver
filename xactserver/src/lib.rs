@@ -1,4 +1,5 @@
 pub mod manager;
+pub mod metrics;
 pub mod node;
 pub mod pg;
 pub mod xact;
