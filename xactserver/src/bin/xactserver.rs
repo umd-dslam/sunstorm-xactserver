@@ -21,7 +21,7 @@ struct Args {
     #[clap(
         long,
         value_parser,
-        default_value = "postgresql://localhost:55432",
+        default_value = "postgresql://cloud_admin@localhost:55433/postgres",
         help = "Address of postgres to connect to"
     )]
     connect_pg: String,
@@ -117,7 +117,13 @@ fn start_pg_watcher(
     let pg_watcher = PgWatcher::new(listen_pg, watcher_tx);
     let handle = thread::Builder::new()
         .name("pg watcher".into())
-        .spawn(move || pg_watcher.thread_main())?;
+        .spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?
+                .block_on(pg_watcher.run())?;
+            Ok(())
+        })?;
 
     Ok((handle, watcher_rx))
 }

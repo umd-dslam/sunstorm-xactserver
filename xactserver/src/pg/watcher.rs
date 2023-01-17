@@ -8,9 +8,9 @@ use anyhow::Context;
 use bytes::{BufMut, BytesMut};
 use log::{debug, error};
 use neon_pq_proto::{BeMessage, FeMessage};
-use neon_utils::postgres_backend::{self, AuthType, PostgresBackend};
-use neon_utils::postgres_backend_async::QueryError;
-use std::net::{SocketAddr, TcpListener};
+use neon_utils::postgres_backend::AuthType;
+use neon_utils::postgres_backend_async::{self, PostgresBackend, QueryError};
+use std::net::SocketAddr;
 use tokio::sync::{mpsc, oneshot};
 
 /// A `PgWatcher` listens for new connections from a postgres instance. For each
@@ -34,43 +34,33 @@ impl PgWatcher {
         }
     }
 
-    pub fn thread_main(self) -> anyhow::Result<()> {
-        let listener =
-            TcpListener::bind(self.listen_pg).context("Failed to start postgres watcher")?;
+    pub async fn run(&self) -> anyhow::Result<()> {
+        let listener = tokio::net::TcpListener::bind(self.listen_pg)
+            .await
+            .context("Failed to start postgres watcher")?;
 
-        let mut join_handles = Vec::new();
-        for stream in listener.incoming() {
-            let stream = match stream {
-                Ok(stream) => stream,
-                Err(e) => {
-                    error!("Failed to establish a new postgres connection: {}", e);
-                    continue;
+        loop {
+            match listener.accept().await {
+                Ok((socket, peer_addr)) => {
+                    debug!("accepted connection from {}", peer_addr);
+                    tokio::spawn(Self::conn_main(self.xact_manager_tx.clone(), socket));
                 }
-            };
-
-            // Create a new sender to the xactserver for the new postgres backend
-            let xact_manager_tx = self.xact_manager_tx.clone();
-
-            // Create a new postgres backend for each new connection from postgres
-            let handle = std::thread::Builder::new()
-                .spawn(move || {
-                    let mut handler = PgWatcherHandler { xact_manager_tx };
-                    let pg_backend =
-                        PostgresBackend::new(stream, AuthType::Trust, None, true).unwrap();
-
-                    if let Err(e) = pg_backend.run(&mut handler) {
-                        error!("Postgres backend exited with error: {}", e);
-                    }
-                })
-                .unwrap();
-
-            join_handles.push(handle);
+                Err(err) => {
+                    error!("accept() failed: {:?}", err);
+                }
+            }
         }
+    }
 
-        for handle in join_handles {
-            handle.join().unwrap();
-        }
-
+    async fn conn_main(
+        xact_manager_tx: mpsc::Sender<XsMessage>,
+        socket: tokio::net::TcpStream,
+    ) -> anyhow::Result<()> {
+        let mut handler = PgWatcherHandler { xact_manager_tx };
+        let pgbackend = PostgresBackend::new(socket, AuthType::Trust, None)?;
+        pgbackend
+            .run(&mut handler, std::future::pending::<()>)
+            .await?;
         Ok(())
     }
 }
@@ -79,62 +69,66 @@ struct PgWatcherHandler {
     xact_manager_tx: mpsc::Sender<XsMessage>,
 }
 
-impl postgres_backend::Handler for PgWatcherHandler {
-    fn process_query(
+#[async_trait::async_trait]
+impl postgres_backend_async::Handler for PgWatcherHandler {
+    fn startup(
+        &mut self,
+        _pgb: &mut PostgresBackend,
+        _sm: &neon_pq_proto::FeStartupPacket,
+    ) -> Result<(), QueryError> {
+        Ok(())
+    }
+
+    async fn process_query(
         &mut self,
         pgb: &mut PostgresBackend,
         _query_string: &str,
-    ) -> anyhow::Result<(), QueryError> {
-        // Switch to COPY BOTH mode
+    ) -> Result<(), QueryError> {
+        // Switch to COPYBOTH
         pgb.write_message(&BeMessage::CopyBothResponse)?;
+        pgb.flush().await?;
 
         debug!("New postgres connection established");
 
         loop {
-            match pgb.read_message() {
-                Ok(message) => {
-                    if let Some(message) = message {
-                        if let FeMessage::CopyData(buf) = message {
-                            let (commit_tx, commit_rx) = oneshot::channel();
-                            // Pass the transaction buffer to the xactserver.
-                            // This is a blocking send because we're not inside an
-                            // asynchronous environment
-                            self.xact_manager_tx
-                                .blocking_send(XsMessage::LocalXact {
-                                    data: buf,
-                                    commit_tx,
-                                })
-                                .map_err(|e| QueryError::Other(anyhow::anyhow!(e)))?;
+            let msg = pgb.read_message().await?;
 
-                            let mut bytes = BytesMut::new();
-
-                            if commit_rx
-                                .blocking_recv()
-                                .map_err(|e| QueryError::Other(anyhow::anyhow!(e)))?
-                            {
-                                bytes.put_u8(1);
-                            } else {
-                                bytes.put_u8(0);
-                            }
-
-                            pgb.write_message(&BeMessage::CopyData(&bytes.freeze()))?;
-                        } else {
-                            continue;
-                        }
-                    } else {
-                        debug!("Postgres connection closed");
-                        break;
-                    }
+            let copy_data_bytes = match msg {
+                Some(FeMessage::CopyData(bytes)) => bytes,
+                Some(FeMessage::Terminate) => break,
+                Some(m) => {
+                    return Err(QueryError::Other(anyhow::anyhow!(
+                        "unexpected message: {m:?} during COPY",
+                    )));
                 }
-                Err(e) => {
-                    if let QueryError::Other(e) = &e {
-                        if postgres_backend::is_socket_read_timed_out(e) {
-                            continue;
-                        }
-                    }
-                    return Err(e);
-                }
+                None => break, // client disconnected
+            };
+
+            let (commit_tx, commit_rx) = oneshot::channel();
+            // Pass the transaction buffer to the xactserver.
+            // This is a blocking send because we're not inside an
+            // asynchronous environment
+            self.xact_manager_tx
+                .send(XsMessage::LocalXact {
+                    data: copy_data_bytes,
+                    commit_tx,
+                })
+                .await
+                .map_err(|e| QueryError::Other(anyhow::anyhow!(e)))?;
+
+            let mut bytes = BytesMut::new();
+
+            if commit_rx
+                .await
+                .map_err(|e| QueryError::Other(anyhow::anyhow!(e)))?
+            {
+                bytes.put_u8(1);
+            } else {
+                bytes.put_u8(0);
             }
+
+            pgb.write_message(&BeMessage::CopyData(&bytes.freeze()))?;
+            pgb.flush().await?;
         }
 
         Ok(())
