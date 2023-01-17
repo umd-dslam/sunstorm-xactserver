@@ -6,7 +6,7 @@
 use crate::XsMessage;
 use anyhow::Context;
 use bytes::{BufMut, BytesMut};
-use log::{debug, error, info};
+use log::{debug, error};
 use neon_pq_proto::{BeMessage, FeMessage};
 use neon_utils::postgres_backend::{self, AuthType, PostgresBackend};
 use neon_utils::postgres_backend_async::QueryError;
@@ -37,8 +37,6 @@ impl PgWatcher {
     pub fn thread_main(self) -> anyhow::Result<()> {
         let listener =
             TcpListener::bind(self.listen_pg).context("Failed to start postgres watcher")?;
-
-        info!("Watching postgres on {}", self.listen_pg);
 
         let mut join_handles = Vec::new();
         for stream in listener.incoming() {

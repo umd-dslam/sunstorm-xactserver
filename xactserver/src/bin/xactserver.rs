@@ -1,10 +1,11 @@
 use clap::{CommandFactory, ErrorKind, Parser};
+use log::info;
 use std::net::SocketAddr;
-use std::thread;
+use std::thread::{self, JoinHandle};
 use tokio::sync::mpsc;
 use url::Url;
 use xactserver::pg::PgWatcher;
-use xactserver::{Manager, Node, NodeId, DEFAULT_NODE_PORT, DUMMY_URL};
+use xactserver::{Manager, Node, NodeId, XsMessage, DEFAULT_NODE_PORT, DUMMY_URL};
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -46,6 +47,30 @@ fn invalid_arg_error(msg: &str) -> ! {
     Args::command().error(ErrorKind::InvalidValue, msg).exit();
 }
 
+fn parse_node_addresses(nodes: String) -> Vec<Url> {
+    let mut node_addresses: Vec<Url> = nodes
+        .split(',')
+        .map(|addr| {
+            let node_url = Url::parse(addr).unwrap_or_else(|err| {
+                invalid_arg_error(&format!("invalid value '{}' in '--nodes': {}", addr, err))
+            });
+
+            let scheme = node_url.scheme();
+            if !["http", "https"].contains(&scheme) {
+                invalid_arg_error(&format!(
+                    "invalid scheme '{}' in '--nodes'. Must be either http or https",
+                    scheme
+                ));
+            }
+
+            node_url
+        })
+        .collect();
+    // Insert a dummy address at the beginning of the list to make the list 1-based
+    node_addresses.insert(0, DUMMY_URL.clone());
+    node_addresses
+}
+
 fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
@@ -68,84 +93,80 @@ fn main() -> anyhow::Result<()> {
         ));
     }
 
-    // Parse the list of node addresses
-    let mut node_addresses: Vec<Url> = args
-        .nodes
-        .split(',')
-        .map(|addr| {
-            let node_url = Url::parse(addr).unwrap_or_else(|err| {
-                invalid_arg_error(&format!("invalid value '{}' in '--nodes': {}", addr, err))
-            });
+    let nodes = parse_node_addresses(args.nodes);
 
-            let scheme = node_url.scheme();
-            if !["http", "https"].contains(&scheme) {
-                invalid_arg_error(&format!(
-                    "invalid scheme '{}' in '--nodes'. Must be either http or https",
-                    scheme
-                ));
-            }
+    let (pg_watcher_handle, watcher_rx) = start_pg_watcher(args.listen_pg);
+    let (node_handle, node_rx) = start_node(args.node_id, &nodes);
+    let manager_handle = start_manager(args.node_id, connect_pg, nodes, watcher_rx, node_rx);
 
-            node_url
-        })
-        .collect();
-    // Insert a dummy address at the beginning of the list to make the list 1-based
-    node_addresses.insert(0, DUMMY_URL.clone());
-
-    // Address to listen to other peers
-    let listen_peer = node_addresses
-        .get(args.node_id)
-        .unwrap_or_else(|| invalid_arg_error("invalid value for '--node-id': out of bound"));
-
-    let (watcher_tx, watcher_rx) = mpsc::channel(100);
-    let (node_tx, node_rx) = mpsc::channel(100);
-
-    let mut join_handles = Vec::new();
-
-    let pg_watcher = PgWatcher::new(args.listen_pg, watcher_tx);
-    join_handles.push(
-        thread::Builder::new()
-            .name("pg watcher".into())
-            .spawn(move || pg_watcher.thread_main())?,
-    );
-
-    let node = Node::new(
-        listen_peer.socket_addrs(|| Some(DEFAULT_NODE_PORT))?[0],
-        node_tx,
-    );
-    join_handles.push(
-        thread::Builder::new()
-            .name("network node".into())
-            .spawn(move || {
-                tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()?
-                    .block_on(node.run())?;
-                Ok(())
-            })?,
-    );
-
-    let manager = Manager::new(
-        args.node_id,
-        connect_pg,
-        node_addresses,
-        watcher_rx,
-        node_rx,
-    );
-    join_handles.push(
-        thread::Builder::new()
-            .name("xact manager".into())
-            .spawn(move || {
-                tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()?
-                    .block_on(manager.run())?;
-                Ok(())
-            })?,
-    );
-
-    for handle in join_handles {
+    for handle in [pg_watcher_handle, node_handle, manager_handle] {
         handle.join().unwrap()?;
     }
 
     Ok(())
+}
+
+fn start_pg_watcher(
+    listen_pg: SocketAddr,
+) -> (
+    JoinHandle<Result<(), anyhow::Error>>,
+    mpsc::Receiver<XsMessage>,
+) {
+    let (watcher_tx, watcher_rx) = mpsc::channel(100);
+    info!("listening to PostgreSQL on {}", listen_pg);
+    let pg_watcher = PgWatcher::new(listen_pg, watcher_tx);
+    let handle = thread::Builder::new()
+        .name("pg watcher".into())
+        .spawn(move || pg_watcher.thread_main())
+        .expect("unable to start postgres watcher");
+
+    (handle, watcher_rx)
+}
+
+fn start_node(
+    node_id: NodeId,
+    nodes: &[Url],
+) -> (
+    JoinHandle<Result<(), anyhow::Error>>,
+    mpsc::Receiver<XsMessage>,
+) {
+    let (node_tx, node_rx) = mpsc::channel(100);
+    let listen_peer = nodes
+        .get(node_id)
+        .unwrap_or_else(|| invalid_arg_error("invalid value for '--node-id': out of bound"))
+        .socket_addrs(|| Some(DEFAULT_NODE_PORT))
+        .unwrap_or_else(|e| invalid_arg_error(&e.to_string()))[0];
+    let node = Node::new(listen_peer, node_tx);
+    let handle = thread::Builder::new()
+        .name("network node".into())
+        .spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?
+                .block_on(node.run())?;
+            Ok(())
+        })
+        .expect("unable to start node");
+
+    (handle, node_rx)
+}
+
+fn start_manager(
+    node_id: NodeId,
+    connect_pg: Url,
+    nodes: Vec<Url>,
+    watcher_rx: mpsc::Receiver<XsMessage>,
+    node_rx: mpsc::Receiver<XsMessage>,
+) -> JoinHandle<Result<(), anyhow::Error>> {
+    let manager = Manager::new(node_id, connect_pg, nodes, watcher_rx, node_rx);
+    thread::Builder::new()
+        .name("xact manager".into())
+        .spawn(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?
+                .block_on(manager.run())?;
+            Ok(())
+        })
+        .expect("unable to start manager")
 }
