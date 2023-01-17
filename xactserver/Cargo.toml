@@ -13,9 +13,12 @@ bytes = { version = "1.0.1", features = ["serde"] }
 clap = { version = "3.2.7", features = ["derive"] }
 env_logger = "0.9.0"
 futures = "0.3.17"
+hyper = "0.14"
 lazy_static = "1.4.0"
 log = "0.4.14"
+prometheus = {version = "0.13", default_features=false, features = ["process"]} # removes protobuf dependency
 prost = "0.10"
+routerify = "3"
 tonic = "0.7"
 tokio = { version = "1.19.2", features = ["rt-multi-thread", "macros", "sync"] }
 tokio-stream = "0.1"

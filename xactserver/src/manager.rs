@@ -7,6 +7,7 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 use url::Url;
 
+use crate::metrics::NUM_LOCAL_XACTS;
 use crate::node::client;
 use crate::pg::{
     create_pg_conn_pool, LocalXactController, PgConnectionPool, SurrogateXactController,
@@ -188,6 +189,8 @@ impl XactStateManager {
             "Xact state {} already exists",
             self.id
         );
+
+        NUM_LOCAL_XACTS.inc();
 
         // Create and initialize a new local xact state
         let mut new_xact_state = XactState::<LocalXactController>::new(self.id, &data, commit_tx)?;
