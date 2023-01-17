@@ -93,7 +93,7 @@ fn main() -> anyhow::Result<()> {
 
     // Address to listen to other peers
     let listen_peer = node_addresses
-        .get(args.node_id as usize)
+        .get(args.node_id)
         .unwrap_or_else(|| invalid_arg_error("invalid value for '--node-id': out of bound"));
 
     let (watcher_tx, watcher_rx) = mpsc::channel(100);

@@ -84,7 +84,7 @@ pub mod client {
             id: NodeId,
         ) -> anyhow::Result<bb8::PooledConnection<'_, ConnectionManager>> {
             ensure!(id > 0, "Node id must be positive");
-            let pool = self.conn_pools.get(id as usize).ok_or_else(|| {
+            let pool = self.conn_pools.get(id).ok_or_else(|| {
                 anyhow!(
                     "Node id {} is out of range (1 - {})",
                     id,

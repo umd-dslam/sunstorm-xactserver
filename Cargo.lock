@@ -1144,7 +1144,7 @@ dependencies = [
 [[package]]
 name = "metrics"
 version = "0.1.0"
-source = "git+https://github.com/neondatabase/neon.git#e067cd29479cee51c4833e55fd7451e8a2c2cfea"
+source = "git+https://github.com/neondatabase/neon.git#7624963e131716bf00af872812c08f41175ac598"
 dependencies = [
  "libc",
  "once_cell",
@@ -1486,7 +1486,7 @@ checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
 [[package]]
 name = "pq_proto"
 version = "0.1.0"
-source = "git+https://github.com/neondatabase/neon.git#e067cd29479cee51c4833e55fd7451e8a2c2cfea"
+source = "git+https://github.com/neondatabase/neon.git#7624963e131716bf00af872812c08f41175ac598"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2702,7 +2702,7 @@ dependencies = [
 [[package]]
 name = "utils"
 version = "0.1.0"
-source = "git+https://github.com/neondatabase/neon.git#e067cd29479cee51c4833e55fd7451e8a2c2cfea"
+source = "git+https://github.com/neondatabase/neon.git#7624963e131716bf00af872812c08f41175ac598"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2979,7 +2979,7 @@ dependencies = [
 [[package]]
 name = "workspace_hack"
 version = "0.1.0"
-source = "git+https://github.com/neondatabase/neon.git#e067cd29479cee51c4833e55fd7451e8a2c2cfea"
+source = "git+https://github.com/neondatabase/neon.git#7624963e131716bf00af872812c08f41175ac598"
 dependencies = [
  "anyhow",
  "bytes",
