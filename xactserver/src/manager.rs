@@ -292,9 +292,9 @@ impl XactStateManager {
                     .add_vote(vote.from.try_into()?, vote.vote == Vote::Abort as i32)
                     .await?;
                 if status == XactStatus::Committed {
-                    info!("Local xact {} COMMITTED", xact.id);
+                    debug!("Local xact {} COMMITTED", xact.id);
                 } else if status == XactStatus::Rollbacked {
-                    info!("Local xact {} ABORTED", xact.id);
+                    debug!("Local xact {} ABORTED", xact.id);
                 }
                 Ok(())
             }
@@ -303,9 +303,9 @@ impl XactStateManager {
                     .add_vote(vote.from.try_into()?, vote.vote == Vote::Abort as i32)
                     .await?;
                 if status == XactStatus::Committed {
-                    info!("Surrogate xact {} COMMITTED", xact.id);
+                    debug!("Surrogate xact {} COMMITTED", xact.id);
                 } else if status == XactStatus::Rollbacked {
-                    info!("Surrogate xact {} ABORTED", xact.id);
+                    debug!("Surrogate xact {} ABORTED", xact.id);
                 }
                 Ok(())
             }
