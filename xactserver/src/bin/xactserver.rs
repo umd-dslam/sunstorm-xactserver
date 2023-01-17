@@ -95,9 +95,9 @@ fn main() -> anyhow::Result<()> {
 
     let nodes = parse_node_addresses(args.nodes);
 
-    let (pg_watcher_handle, watcher_rx) = start_pg_watcher(args.listen_pg);
-    let (node_handle, node_rx) = start_node(args.node_id, &nodes);
-    let manager_handle = start_manager(args.node_id, connect_pg, nodes, watcher_rx, node_rx);
+    let (pg_watcher_handle, watcher_rx) = start_pg_watcher(args.listen_pg)?;
+    let (node_handle, node_rx) = start_node(args.node_id, &nodes)?;
+    let manager_handle = start_manager(args.node_id, connect_pg, nodes, watcher_rx, node_rx)?;
 
     for handle in [pg_watcher_handle, node_handle, manager_handle] {
         handle.join().unwrap()?;
@@ -108,34 +108,35 @@ fn main() -> anyhow::Result<()> {
 
 fn start_pg_watcher(
     listen_pg: SocketAddr,
-) -> (
+) -> anyhow::Result<(
     JoinHandle<Result<(), anyhow::Error>>,
     mpsc::Receiver<XsMessage>,
-) {
+)> {
     let (watcher_tx, watcher_rx) = mpsc::channel(100);
-    info!("listening to PostgreSQL on {}", listen_pg);
+    info!("Listening to PostgreSQL on {}", listen_pg);
     let pg_watcher = PgWatcher::new(listen_pg, watcher_tx);
     let handle = thread::Builder::new()
         .name("pg watcher".into())
-        .spawn(move || pg_watcher.thread_main())
-        .expect("unable to start postgres watcher");
+        .spawn(move || pg_watcher.thread_main())?;
 
-    (handle, watcher_rx)
+    Ok((handle, watcher_rx))
 }
 
 fn start_node(
     node_id: NodeId,
     nodes: &[Url],
-) -> (
+) -> anyhow::Result<(
     JoinHandle<Result<(), anyhow::Error>>,
     mpsc::Receiver<XsMessage>,
-) {
+)> {
     let (node_tx, node_rx) = mpsc::channel(100);
     let listen_peer = nodes
         .get(node_id)
         .unwrap_or_else(|| invalid_arg_error("invalid value for '--node-id': out of bound"))
         .socket_addrs(|| Some(DEFAULT_NODE_PORT))
         .unwrap_or_else(|e| invalid_arg_error(&e.to_string()))[0];
+
+    info!("Node listening on {}", listen_peer);
     let node = Node::new(listen_peer, node_tx);
     let handle = thread::Builder::new()
         .name("network node".into())
@@ -145,10 +146,9 @@ fn start_node(
                 .build()?
                 .block_on(node.run())?;
             Ok(())
-        })
-        .expect("unable to start node");
+        })?;
 
-    (handle, node_rx)
+    Ok((handle, node_rx))
 }
 
 fn start_manager(
@@ -157,9 +157,10 @@ fn start_manager(
     nodes: Vec<Url>,
     watcher_rx: mpsc::Receiver<XsMessage>,
     node_rx: mpsc::Receiver<XsMessage>,
-) -> JoinHandle<Result<(), anyhow::Error>> {
+) -> anyhow::Result<JoinHandle<Result<(), anyhow::Error>>> {
     let manager = Manager::new(node_id, connect_pg, nodes, watcher_rx, node_rx);
-    thread::Builder::new()
+
+    Ok(thread::Builder::new()
         .name("xact manager".into())
         .spawn(move || {
             tokio::runtime::Builder::new_current_thread()
@@ -167,6 +168,5 @@ fn start_manager(
                 .build()?
                 .block_on(manager.run())?;
             Ok(())
-        })
-        .expect("unable to start manager")
+        })?)
 }

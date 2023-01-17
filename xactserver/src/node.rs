@@ -1,4 +1,3 @@
-use log::info;
 use std::net::SocketAddr;
 use tokio::sync::mpsc;
 use tonic::transport::Server;
@@ -22,8 +21,6 @@ impl Node {
     }
 
     pub async fn run(self) -> anyhow::Result<()> {
-        info!("Node listening on {}", self.addr);
-
         let addr = self.addr;
         let svc = XactCoordinationServer::new(self);
         Server::builder().add_service(svc).serve(addr).await?;
