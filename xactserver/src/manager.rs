@@ -7,6 +7,7 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 use url::Url;
 
+use crate::decoder::RWSet;
 use crate::metrics::NUM_LOCAL_XACTS;
 use crate::node::client;
 use crate::pg::{
@@ -192,9 +193,13 @@ impl XactStateManager {
 
         NUM_LOCAL_XACTS.inc();
 
+        // Deserialize the transaction data
+        let mut rwset = RWSet::decode(data.clone()).context("Failed to decode read/write set")?;
+        debug!("New local xact: {:#?}", rwset.decode_rest());
+
         // Create and initialize a new local xact state
-        let mut new_xact_state = XactState::<LocalXactController>::new(self.id, &data, commit_tx)?;
-        debug!("New local xact: {:#?}", new_xact_state.rwset.decode_rest());
+        let mut new_xact_state =
+            XactState::<LocalXactController>::new(self.id, rwset.participants(), commit_tx)?;
 
         // Execute the transaction. Because this is a local transaction, the current node is the coordinator
         let xact_status = new_xact_state
@@ -234,15 +239,20 @@ impl XactStateManager {
             self.id
         );
 
+        let data = Bytes::from(prepare_req.data);
+
+        // Deserialize the transaction data
+        let mut rwset = RWSet::decode(data.clone()).context("Failed to decode read/write set")?;
+        debug!("New surrogate xact: {:#?}", rwset.decode_rest());
+
         // Create and initialize a new surrogate xact state
         let xact_id = prepare_req.xact_id;
         let mut new_xact_state = XactState::<SurrogateXactController>::new(
             xact_id,
-            &Bytes::from(prepare_req.data),
+            rwset.participants(),
+            data,
             &self.pg_conn_pool,
         )?;
-
-        debug!("New remote xact: {:#?}", new_xact_state.rwset.decode_rest());
 
         // If this node is not invovled in the remotexact, return immediately.
         let participants = new_xact_state.participants();

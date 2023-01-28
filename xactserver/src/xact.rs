@@ -2,10 +2,8 @@ use anyhow::{ensure, Context};
 use bit_set::BitSet;
 use bytes::Bytes;
 use log::error;
-use std::convert::TryInto;
 use tokio::sync::oneshot;
 
-use crate::decoder::RWSet;
 use crate::pg::{LocalXactController, PgConnectionPool, SurrogateXactController, XactController};
 use crate::{NodeId, XactId};
 
@@ -19,7 +17,6 @@ pub enum XactStatus {
 
 pub struct XactState<C: XactController> {
     pub id: XactId,
-    pub rwset: RWSet,
     status: XactStatus,
     participants: BitSet,
     voted: BitSet,
@@ -27,31 +24,32 @@ pub struct XactState<C: XactController> {
 }
 
 impl XactState<LocalXactController> {
-    pub fn new(id: XactId, data: &Bytes, commit_tx: oneshot::Sender<bool>) -> anyhow::Result<Self> {
+    pub fn new(
+        id: XactId,
+        participants: BitSet,
+        commit_tx: oneshot::Sender<bool>,
+    ) -> anyhow::Result<Self> {
         let controller = LocalXactController::new(commit_tx);
-        Self::new_common(id, data.clone(), controller)
+        Self::new_common(id, participants, controller)
     }
 }
 
 impl XactState<SurrogateXactController> {
-    pub fn new(id: XactId, data: &Bytes, pg_conn_pool: &PgConnectionPool) -> anyhow::Result<Self> {
-        let controller = SurrogateXactController::new(id, data.clone(), pg_conn_pool.clone());
-        Self::new_common(id, data.clone(), controller)
+    pub fn new(
+        id: XactId,
+        participants: BitSet,
+        data: Bytes,
+        pg_conn_pool: &PgConnectionPool,
+    ) -> anyhow::Result<Self> {
+        let controller = SurrogateXactController::new(id, data, pg_conn_pool.clone());
+        Self::new_common(id, participants, controller)
     }
 }
 
 impl<C: XactController> XactState<C> {
-    fn new_common(id: XactId, data: Bytes, controller: C) -> anyhow::Result<Self> {
-        let rwset = RWSet::decode(data).context("Failed to decode read/write set")?;
-        let mut participants = BitSet::new();
-        for i in 0..u64::BITS {
-            if (rwset.header.region_set >> i) & 1 == 1 {
-                participants.insert(i.try_into()?);
-            }
-        }
+    fn new_common(id: XactId, participants: BitSet, controller: C) -> anyhow::Result<Self> {
         Ok(Self {
             id,
-            rwset,
             status: XactStatus::Unexecuted,
             participants,
             voted: BitSet::new(),
@@ -183,7 +181,6 @@ mod tests {
         }
         XactState {
             id: 100,
-            rwset: RWSet::default(),
             controller: TestXactController {
                 rollback_on_execution,
                 executed: false,

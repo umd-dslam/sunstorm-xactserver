@@ -6,7 +6,7 @@ type Oid = u32;
 
 #[derive(Debug, Default)]
 pub struct RWSet {
-    pub header: RWSetHeader,
+    header: RWSetHeader,
     relations_len: usize,
     n_relations: u32,
     relations: Option<Vec<Relation>>,
@@ -35,6 +35,10 @@ impl RWSet {
             remainder: buf,
             decoded_all: false,
         })
+    }
+
+    pub fn participants(&self) -> bit_set::BitSet {
+        self.header.participants.clone()
     }
 
     fn decode_relations(
@@ -80,7 +84,7 @@ impl RWSet {
 #[derive(Debug, Default)]
 pub struct RWSetHeader {
     dbid: Oid,
-    pub region_set: u64,
+    participants: bit_set::BitSet,
 }
 
 impl RWSetHeader {
@@ -88,7 +92,14 @@ impl RWSetHeader {
         let dbid = get_u32(buf).context("Failed to decode 'dbid'")?;
         let region_set = get_u64(buf).context("Failed to decode 'region_set'")?;
 
-        Ok(Self { dbid, region_set })
+        let mut participants = bit_set::BitSet::new();
+        for i in 0..u64::BITS {
+            if (region_set >> i) & 1 == 1 {
+                participants.insert(i.try_into()?);
+            }
+        }
+
+        Ok(Self { dbid, participants })
     }
 }
 
