@@ -4,6 +4,7 @@ use bytes::Bytes;
 use log::error;
 use tokio::sync::oneshot;
 
+use crate::metrics::EXECUTION_DURATION;
 use crate::pg::{LocalXactController, PgConnectionPool, SurrogateXactController, XactController};
 use crate::{NodeId, XactId};
 
@@ -54,6 +55,9 @@ impl XactStateType {
         region: NodeId,
         coordinator: NodeId,
     ) -> anyhow::Result<XactStatus> {
+        let _timer = EXECUTION_DURATION
+            .with_label_values(&[&region.to_string(), &coordinator.to_string()])
+            .start_timer();
         match self {
             Self::Uninitialized => anyhow::bail!("Xact state is uninitialized"),
             Self::Local(xact) => xact

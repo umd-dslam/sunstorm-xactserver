@@ -1,6 +1,7 @@
 use anyhow::{anyhow, ensure, Context};
 use bytes::Bytes;
 use log::debug;
+use prometheus::HistogramTimer;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::sync::Arc;
@@ -8,6 +9,7 @@ use tokio::sync::{mpsc, oneshot};
 use url::Url;
 
 use crate::decoder::RWSet;
+use crate::metrics::{TOTAL_DURATION, XACTS};
 use crate::node::client;
 use crate::pg::{create_pg_conn_pool, PgConnectionPool};
 use crate::proto::{PrepareRequest, Vote, VoteRequest};
@@ -140,6 +142,9 @@ struct XactStateManager {
 
     /// State of the transaction
     xact_state: XactStateType,
+
+    /// Timer measuring time taken from starting to finishing the transaction
+    total_duration_timer: Option<HistogramTimer>,
 }
 
 impl XactStateManager {
@@ -155,6 +160,7 @@ impl XactStateManager {
             pg_conn_pool,
             peers,
             xact_state: XactStateType::Uninitialized,
+            total_duration_timer: None,
         }
     }
 
@@ -185,14 +191,11 @@ impl XactStateManager {
         data: Bytes,
         commit_tx: oneshot::Sender<bool>,
     ) -> anyhow::Result<()> {
-        ensure!(
-            matches!(self.xact_state, XactStateType::Uninitialized),
-            "Xact state {} already exists",
-            self.id
-        );
+        assert!(matches!(self.xact_state, XactStateType::Uninitialized));
 
         // This is a local transaction so the current region is the coordinator
         let coordinator = self.node_id;
+        self.update_metrics(coordinator);
 
         // Deserialize the transaction data
         let mut rwset = RWSet::decode(data.clone()).context("Failed to decode read/write set")?;
@@ -226,14 +229,11 @@ impl XactStateManager {
     }
 
     async fn handle_prepare_msg(&mut self, prepare_req: PrepareRequest) -> anyhow::Result<()> {
-        ensure!(
-            matches!(self.xact_state, XactStateType::Uninitialized),
-            "Xact state {} already exists",
-            self.id
-        );
+        assert!(matches!(self.xact_state, XactStateType::Uninitialized));
 
         // Extract the coordinator of this transaction from the request
         let coordinator: NodeId = prepare_req.from.try_into()?;
+        self.update_metrics(coordinator);
 
         // Deserialize the transaction data
         let data = Bytes::from(prepare_req.data);
@@ -286,10 +286,28 @@ impl XactStateManager {
         Ok(())
     }
 
+    fn update_metrics(&mut self, coordinator: usize) {
+        let region = self.id.to_string();
+        let coordinator = coordinator.to_string();
+
+        XACTS.with_label_values(&[&region, &coordinator]).inc();
+
+        self.total_duration_timer = Some(
+            TOTAL_DURATION
+                .with_label_values(&[&coordinator])
+                .start_timer(),
+        );
+    }
+
     async fn handle_vote_msg(&mut self, vote: VoteRequest) -> anyhow::Result<()> {
-        self.xact_state
+        let status = self
+            .xact_state
             .add_vote(vote.from.try_into()?, vote.vote == Vote::Abort as i32)
             .await?;
+
+        if status == XactStatus::Committed || status == XactStatus::Rollbacked {
+            self.total_duration_timer.take().unwrap().stop_and_record();
+        }
 
         Ok(())
     }
