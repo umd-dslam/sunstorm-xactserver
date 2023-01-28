@@ -15,39 +15,83 @@ pub enum XactStatus {
     Rollbacked,
 }
 
-pub struct XactState<C: XactController> {
-    pub id: XactId,
-    status: XactStatus,
-    participants: BitSet,
-    voted: BitSet,
-    controller: C,
+pub enum XactStateType {
+    Uninitialized,
+    Local(XactState<LocalXactController>),
+    Surrogate(XactState<SurrogateXactController>),
 }
 
-impl XactState<LocalXactController> {
-    pub fn new(
+impl XactStateType {
+    pub fn new_local_xact(
         id: XactId,
         participants: BitSet,
         commit_tx: oneshot::Sender<bool>,
     ) -> anyhow::Result<Self> {
         let controller = LocalXactController::new(commit_tx);
-        Self::new_common(id, participants, controller)
+        Ok(Self::Local(XactState::<LocalXactController>::new(
+            id,
+            participants,
+            controller,
+        )?))
     }
-}
 
-impl XactState<SurrogateXactController> {
-    pub fn new(
+    pub fn new_surrogate_xact(
         id: XactId,
         participants: BitSet,
         data: Bytes,
         pg_conn_pool: &PgConnectionPool,
     ) -> anyhow::Result<Self> {
         let controller = SurrogateXactController::new(id, data, pg_conn_pool.clone());
-        Self::new_common(id, participants, controller)
+        Ok(Self::Surrogate(XactState::<SurrogateXactController>::new(
+            id,
+            participants,
+            controller,
+        )?))
+    }
+
+    pub async fn execute(
+        &mut self,
+        region: NodeId,
+        coordinator: NodeId,
+    ) -> anyhow::Result<XactStatus> {
+        match self {
+            Self::Uninitialized => anyhow::bail!("Xact state is uninitialized"),
+            Self::Local(xact) => xact
+                .execute(region, coordinator)
+                .await
+                .with_context(|| format!("Failed to execute local xact {}", xact.id)),
+            Self::Surrogate(xact) => xact
+                .execute(region, coordinator)
+                .await
+                .with_context(|| format!("Failed to execute surrogate xact {}", xact.id)),
+        }
+    }
+
+    pub async fn add_vote(&mut self, from: NodeId, abort: bool) -> anyhow::Result<XactStatus> {
+        match self {
+            Self::Uninitialized => anyhow::bail!("Xact state is uninitialized"),
+            Self::Local(xact) => xact
+                .add_vote(from, abort)
+                .await
+                .with_context(|| format!("Failed to add vote for local xact {}", xact.id)),
+            Self::Surrogate(xact) => xact
+                .add_vote(from, abort)
+                .await
+                .with_context(|| format!("Failed to add vote for surrogate xact {}", xact.id)),
+        }
     }
 }
 
+pub struct XactState<C: XactController> {
+    id: XactId,
+    status: XactStatus,
+    participants: BitSet,
+    voted: BitSet,
+    controller: C,
+}
+
 impl<C: XactController> XactState<C> {
-    fn new_common(id: XactId, participants: BitSet, controller: C) -> anyhow::Result<Self> {
+    fn new(id: XactId, participants: BitSet, controller: C) -> anyhow::Result<Self> {
         Ok(Self {
             id,
             status: XactStatus::Unexecuted,
@@ -57,11 +101,15 @@ impl<C: XactController> XactState<C> {
         })
     }
 
-    pub async fn execute(&mut self, coordinator: NodeId, me: NodeId) -> anyhow::Result<XactStatus> {
+    pub async fn execute(
+        &mut self,
+        region: NodeId,
+        coordinator: NodeId,
+    ) -> anyhow::Result<XactStatus> {
         ensure!(self.status == XactStatus::Unexecuted);
         self.status = XactStatus::Waiting;
 
-        if me != coordinator {
+        if region != coordinator {
             // The coordinator always votes to commit
             self.add_vote(coordinator, false).await?;
         }
@@ -76,7 +124,7 @@ impl<C: XactController> XactState<C> {
             |_| false,
         );
 
-        self.add_vote(me, aborted).await?;
+        self.add_vote(region, aborted).await?;
 
         Ok(self.status)
     }

@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, ensure, Context};
+use anyhow::{anyhow, ensure, Context};
 use bytes::Bytes;
 use log::debug;
 use std::collections::HashMap;
@@ -8,13 +8,10 @@ use tokio::sync::{mpsc, oneshot};
 use url::Url;
 
 use crate::decoder::RWSet;
-use crate::metrics::NUM_LOCAL_XACTS;
 use crate::node::client;
-use crate::pg::{
-    create_pg_conn_pool, LocalXactController, PgConnectionPool, SurrogateXactController,
-};
+use crate::pg::{create_pg_conn_pool, PgConnectionPool};
 use crate::proto::{PrepareRequest, Vote, VoteRequest};
-use crate::xact::{XactState, XactStatus};
+use crate::xact::{XactStateType, XactStatus};
 use crate::{NodeId, XactId, XsMessage, NODE_ID_BITS};
 
 pub struct Manager {
@@ -126,21 +123,23 @@ impl Manager {
         );
         tokio::spawn(xact_state_man.run(msg_rx));
         // Save and return the sender of the new xact state manager
+        // TODO: Clean up state of finished transactions
         Ok(self.xact_state_managers.entry(id).or_insert(msg_tx))
     }
 }
 
-enum XactType {
-    Local(XactState<LocalXactController>),
-    Surrogate(XactState<SurrogateXactController>),
-}
-
 struct XactStateManager {
+    /// Id of the transaction
     id: XactId,
+    /// Id of the current server
     node_id: NodeId,
+
+    /// Connection pools
     pg_conn_pool: PgConnectionPool,
     peers: Arc<client::Nodes>,
-    xact_state: Option<XactType>,
+
+    /// State of the transaction
+    xact_state: XactStateType,
 }
 
 impl XactStateManager {
@@ -155,11 +154,12 @@ impl XactStateManager {
             node_id,
             pg_conn_pool,
             peers,
-            xact_state: None,
+            xact_state: XactStateType::Uninitialized,
         }
     }
 
     async fn run(mut self, mut msg_rx: mpsc::Receiver<XsMessage>) {
+        // TODO: Halt this loop when the current transaction finishes
         while let Some(msg) = msg_rx.recv().await {
             match msg {
                 XsMessage::LocalXact { data, commit_tx } => self
@@ -186,33 +186,26 @@ impl XactStateManager {
         commit_tx: oneshot::Sender<bool>,
     ) -> anyhow::Result<()> {
         ensure!(
-            self.xact_state.is_none(),
+            matches!(self.xact_state, XactStateType::Uninitialized),
             "Xact state {} already exists",
             self.id
         );
 
-        NUM_LOCAL_XACTS.inc();
+        // This is a local transaction so the current region is the coordinator
+        let coordinator = self.node_id;
 
         // Deserialize the transaction data
         let mut rwset = RWSet::decode(data.clone()).context("Failed to decode read/write set")?;
         debug!("New local xact: {:#?}", rwset.decode_rest());
 
-        // Create and initialize a new local xact state
-        let mut new_xact_state =
-            XactState::<LocalXactController>::new(self.id, rwset.participants(), commit_tx)?;
+        // Create and initialize a new local xact
+        self.xact_state = XactStateType::new_local_xact(self.id, rwset.participants(), commit_tx)?;
 
-        // Execute the transaction. Because this is a local transaction, the current node is the coordinator
-        let xact_status = new_xact_state
-            .execute(self.node_id, self.node_id)
-            .await
-            .context("Failed to execute local xact")?;
+        // Execute the transaction. This actually does nothing because this is a local transaction.
+        let xact_status = self.xact_state.execute(self.node_id, coordinator).await?;
         assert_eq!(xact_status, XactStatus::Waiting);
 
-        // Save the xact state
-        let participants = new_xact_state.participants();
-        self.xact_state = Some(XactType::Local(new_xact_state));
-
-        // Construct the request
+        // Construct the prepare request
         let request = PrepareRequest {
             from: self.node_id as u32,
             xact_id: self.id,
@@ -221,7 +214,7 @@ impl XactStateManager {
 
         // Send the transaction to other participants
         // TODO: Send prepare in parallel.
-        for i in participants {
+        for i in rwset.participants().iter() {
             let node_id = i as NodeId;
             if node_id != self.node_id {
                 let mut client = self.peers.get(node_id).await?;
@@ -234,41 +227,37 @@ impl XactStateManager {
 
     async fn handle_prepare_msg(&mut self, prepare_req: PrepareRequest) -> anyhow::Result<()> {
         ensure!(
-            self.xact_state.is_none(),
+            matches!(self.xact_state, XactStateType::Uninitialized),
             "Xact state {} already exists",
             self.id
         );
 
-        let data = Bytes::from(prepare_req.data);
+        // Extract the coordinator of this transaction from the request
+        let coordinator: NodeId = prepare_req.from.try_into()?;
 
         // Deserialize the transaction data
+        let data = Bytes::from(prepare_req.data);
         let mut rwset = RWSet::decode(data.clone()).context("Failed to decode read/write set")?;
         debug!("New surrogate xact: {:#?}", rwset.decode_rest());
 
-        // Create and initialize a new surrogate xact state
+        // If this node does not involve in the remotexact, return immediately.
+        // TODO: Should this throw error instead?
+        let participants = rwset.participants();
+        if !participants.contains(self.node_id) {
+            return Ok(());
+        }
+
+        // Create and initialize a new surrogate xact
         let xact_id = prepare_req.xact_id;
-        let mut new_xact_state = XactState::<SurrogateXactController>::new(
+        self.xact_state = XactStateType::new_surrogate_xact(
             xact_id,
             rwset.participants(),
             data,
             &self.pg_conn_pool,
         )?;
 
-        // If this node is not invovled in the remotexact, return immediately.
-        let participants = new_xact_state.participants();
-        if !participants.contains(&self.node_id) {
-            return Ok(());
-        }
-
-        // Execute the transaction
-        let coordinator = prepare_req.from.try_into()?;
-        let xact_status = new_xact_state
-            .execute(coordinator, self.node_id)
-            .await
-            .context("Failed to execute remote xact")?;
-
-        // Save the xact state
-        self.xact_state = Some(XactType::Surrogate(new_xact_state));
+        // Execute the surrogate transaction
+        let xact_status = self.xact_state.execute(self.node_id, coordinator).await?;
 
         // Determine the vote based on the status of the transaction after execution
         let vote = if xact_status == XactStatus::Rollbacked {
@@ -277,7 +266,7 @@ impl XactStateManager {
             Vote::Commit
         };
 
-        // Construct the request
+        // Construct the vote request
         let request = VoteRequest {
             from: self.node_id as u32,
             xact_id,
@@ -286,7 +275,7 @@ impl XactStateManager {
 
         // Send the vote to other participants
         // TODO: Send the vote in parallel.
-        for i in participants {
+        for i in participants.iter() {
             let node_id = i as NodeId;
             if node_id != self.node_id {
                 let mut client = self.peers.get(node_id).await?;
@@ -298,30 +287,10 @@ impl XactStateManager {
     }
 
     async fn handle_vote_msg(&mut self, vote: VoteRequest) -> anyhow::Result<()> {
-        match self.xact_state.as_mut() {
-            None => bail!("Xact state {} does not exist", self.id),
-            Some(XactType::Local(xact)) => {
-                let status = xact
-                    .add_vote(vote.from.try_into()?, vote.vote == Vote::Abort as i32)
-                    .await?;
-                if status == XactStatus::Committed {
-                    debug!("Local xact {} COMMITTED", xact.id);
-                } else if status == XactStatus::Rollbacked {
-                    debug!("Local xact {} ABORTED", xact.id);
-                }
-                Ok(())
-            }
-            Some(XactType::Surrogate(xact)) => {
-                let status = xact
-                    .add_vote(vote.from.try_into()?, vote.vote == Vote::Abort as i32)
-                    .await?;
-                if status == XactStatus::Committed {
-                    debug!("Surrogate xact {} COMMITTED", xact.id);
-                } else if status == XactStatus::Rollbacked {
-                    debug!("Surrogate xact {} ABORTED", xact.id);
-                }
-                Ok(())
-            }
-        }
+        self.xact_state
+            .add_vote(vote.from.try_into()?, vote.vote == Vote::Abort as i32)
+            .await?;
+
+        Ok(())
     }
 }
