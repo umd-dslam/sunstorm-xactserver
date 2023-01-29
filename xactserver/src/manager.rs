@@ -1,7 +1,7 @@
 use anyhow::{anyhow, ensure, Context};
 use bytes::Bytes;
 use futures::{future, Future};
-use log::debug;
+use log::{debug, warn};
 use prometheus::HistogramTimer;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -166,9 +166,8 @@ impl XactStateManager {
     }
 
     async fn run(mut self, mut msg_rx: mpsc::Receiver<XsMessage>) {
-        // TODO: Halt this loop when the current transaction finishes
         while let Some(msg) = msg_rx.recv().await {
-            match msg {
+            let finish = match msg {
                 XsMessage::LocalXact { data, commit_tx } => self
                     .handle_local_xact_msg(data, commit_tx)
                     .await
@@ -182,8 +181,11 @@ impl XactStateManager {
                     .await
                     .context("Failed to handle vote msg"),
             }
-            .with_context(|| format!("Failed to process xact {}", self.id))
-            .unwrap();
+            .expect("Xact state manager stopped unexpectedly");
+
+            if finish {
+                break;
+            }
         }
     }
 
@@ -191,7 +193,7 @@ impl XactStateManager {
         &mut self,
         data: Bytes,
         commit_tx: oneshot::Sender<bool>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<bool> {
         assert!(matches!(self.xact_state, XactStateType::Uninitialized));
 
         // This is a local transaction so the current region is the coordinator
@@ -225,10 +227,10 @@ impl XactStateManager {
         })
         .await?;
 
-        Ok(())
+        Ok(false)
     }
 
-    async fn handle_prepare_msg(&mut self, prepare_req: PrepareRequest) -> anyhow::Result<()> {
+    async fn handle_prepare_msg(&mut self, prepare_req: PrepareRequest) -> anyhow::Result<bool> {
         assert!(matches!(self.xact_state, XactStateType::Uninitialized));
 
         // Extract the coordinator of this transaction from the request
@@ -240,10 +242,13 @@ impl XactStateManager {
         let mut rwset = RWSet::decode(data.clone()).context("Failed to decode read/write set")?;
         debug!("New surrogate xact: {:#?}", rwset.decode_rest());
 
-        // If this node does not involve in the remotexact, return immediately.
-        // TODO: Should this throw error instead?
+        // If this node does not involve in the remotexact, stop the transaction immediately.
         if !rwset.participants().contains(self.node_id) {
-            return Ok(());
+            warn!(
+                "Received a transaction from region {} that I do not participate in",
+                self.node_id
+            );
+            return Ok(true);
         }
 
         // Create and initialize a new surrogate xact
@@ -259,10 +264,10 @@ impl XactStateManager {
         let xact_status = self.xact_state.execute(self.node_id, coordinator).await?;
 
         // Determine the vote based on the status of the transaction after execution
-        let vote = if xact_status == XactStatus::Rollbacked {
-            Vote::Abort
-        } else {
-            Vote::Commit
+        let vote = match xact_status {
+            XactStatus::Rollbacked => Vote::Abort,
+            XactStatus::Committed => Vote::Commit,
+            _ => anyhow::bail!("Invalid xact status: {:?}", xact_status),
         };
 
         // Send the vote to other participants
@@ -281,7 +286,7 @@ impl XactStateManager {
         })
         .await?;
 
-        Ok(())
+        Ok(false)
     }
 
     fn update_metrics(&mut self, coordinator: usize) {
@@ -313,16 +318,13 @@ impl XactStateManager {
         Ok(())
     }
 
-    async fn handle_vote_msg(&mut self, vote: VoteRequest) -> anyhow::Result<()> {
+    async fn handle_vote_msg(&mut self, vote: VoteRequest) -> anyhow::Result<bool> {
         let status = self
             .xact_state
             .add_vote(vote.from.try_into()?, vote.vote == Vote::Abort as i32)
             .await?;
 
-        if status == XactStatus::Committed || status == XactStatus::Rollbacked {
-            self.total_duration_timer.take().unwrap().stop_and_record();
-        }
-
-        Ok(())
+        // Finish the xact state manager if the xact status is committed or rollbacked
+        Ok(status == XactStatus::Committed || status == XactStatus::Rollbacked)
     }
 }
