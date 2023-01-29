@@ -167,7 +167,7 @@ impl XactStateManager {
 
     async fn run(mut self, mut msg_rx: mpsc::Receiver<XsMessage>) {
         while let Some(msg) = msg_rx.recv().await {
-            let finish = match msg {
+            let result = match msg {
                 XsMessage::LocalXact { data, commit_tx } => self
                     .handle_local_xact_msg(data, commit_tx)
                     .await
@@ -180,12 +180,19 @@ impl XactStateManager {
                     .handle_vote_msg(vote_req)
                     .await
                     .context("Failed to handle vote msg"),
-            }
-            .expect("Xact state manager stopped unexpectedly");
+            };
 
-            if finish {
-                break;
-            }
+            match result {
+                Ok(finish) => {
+                    if finish {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Xact state manager encountered an error: {:?}", e);
+                    break;
+                }
+            };
         }
     }
 
@@ -297,7 +304,7 @@ impl XactStateManager {
 
         self.total_duration_timer = Some(
             TOTAL_DURATION
-                .with_label_values(&[&coordinator])
+                .with_label_values(&[&region, &coordinator])
                 .start_timer(),
         );
     }
