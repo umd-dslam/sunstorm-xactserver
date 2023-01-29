@@ -1,5 +1,6 @@
 use anyhow::{anyhow, ensure, Context};
 use bytes::Bytes;
+use futures::{future, Future};
 use log::debug;
 use prometheus::HistogramTimer;
 use std::collections::HashMap;
@@ -208,22 +209,21 @@ impl XactStateManager {
         let xact_status = self.xact_state.execute(self.node_id, coordinator).await?;
         assert_eq!(xact_status, XactStatus::Waiting);
 
-        // Construct the prepare request
-        let request = PrepareRequest {
-            from: self.node_id as u32,
-            xact_id: self.id,
-            data: data.into_iter().collect(),
-        };
-
         // Send the transaction to other participants
-        // TODO: Send prepare in parallel.
-        for i in rwset.participants().iter() {
-            let node_id = i as NodeId;
-            if node_id != self.node_id {
-                let mut client = self.peers.get(node_id).await?;
-                client.prepare(tonic::Request::new(request.clone())).await?;
+        self.send_to_all_but_me(&rwset.participants(), |p| {
+            let peers = self.peers.clone();
+            let request = PrepareRequest {
+                from: self.node_id as u32,
+                xact_id: self.id,
+                data: data.clone().into_iter().collect(),
+            };
+            async move {
+                let mut client = peers.get(p as NodeId).await?;
+                client.prepare(tonic::Request::new(request)).await?;
+                Ok::<(), anyhow::Error>(())
             }
-        }
+        })
+        .await?;
 
         Ok(())
     }
@@ -242,8 +242,7 @@ impl XactStateManager {
 
         // If this node does not involve in the remotexact, return immediately.
         // TODO: Should this throw error instead?
-        let participants = rwset.participants();
-        if !participants.contains(self.node_id) {
+        if !rwset.participants().contains(self.node_id) {
             return Ok(());
         }
 
@@ -266,22 +265,21 @@ impl XactStateManager {
             Vote::Commit
         };
 
-        // Construct the vote request
-        let request = VoteRequest {
-            from: self.node_id as u32,
-            xact_id,
-            vote: vote as i32,
-        };
-
         // Send the vote to other participants
-        // TODO: Send the vote in parallel.
-        for i in participants.iter() {
-            let node_id = i as NodeId;
-            if node_id != self.node_id {
-                let mut client = self.peers.get(node_id).await?;
-                client.vote(tonic::Request::new(request.clone())).await?;
+        self.send_to_all_but_me(&rwset.participants(), |p| {
+            let peers = self.peers.clone();
+            let request = VoteRequest {
+                from: self.node_id as u32,
+                xact_id,
+                vote: vote as i32,
+            };
+            async move {
+                let mut client = peers.get(p as NodeId).await?;
+                client.vote(tonic::Request::new(request)).await?;
+                Ok::<(), anyhow::Error>(())
             }
-        }
+        })
+        .await?;
 
         Ok(())
     }
@@ -297,6 +295,22 @@ impl XactStateManager {
                 .with_label_values(&[&coordinator])
                 .start_timer(),
         );
+    }
+
+    async fn send_to_all_but_me<'a, I, F, R>(&self, participants: I, f: F) -> anyhow::Result<()>
+    where
+        I: IntoIterator<Item = NodeId>,
+        F: FnMut(NodeId) -> R,
+        R: Future<Output = anyhow::Result<()>>,
+    {
+        future::try_join_all(
+            participants
+                .into_iter()
+                .filter(|p| *p != self.node_id)
+                .map(f),
+        )
+        .await?;
+        Ok(())
     }
 
     async fn handle_vote_msg(&mut self, vote: VoteRequest) -> anyhow::Result<()> {
