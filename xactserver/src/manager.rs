@@ -133,7 +133,7 @@ impl Manager {
 
 struct XactStateManager {
     /// Id of the transaction
-    id: XactId,
+    xact_id: XactId,
     /// Id of the current server
     node_id: NodeId,
 
@@ -150,13 +150,13 @@ struct XactStateManager {
 
 impl XactStateManager {
     fn new(
-        id: XactId,
+        xact_id: XactId,
         node_id: NodeId,
         pg_conn_pool: PgConnectionPool,
         peers: Arc<client::Nodes>,
     ) -> Self {
         Self {
-            id,
+            xact_id,
             node_id,
             pg_conn_pool,
             peers,
@@ -212,7 +212,8 @@ impl XactStateManager {
         debug!("New local xact: {:#?}", rwset.decode_rest());
 
         // Create and initialize a new local xact
-        self.xact_state = XactStateType::new_local_xact(self.id, rwset.participants(), commit_tx)?;
+        self.xact_state =
+            XactStateType::new_local_xact(self.xact_id, rwset.participants(), commit_tx)?;
 
         // Execute the transaction. This actually does nothing because this is a local transaction.
         let xact_status = self.xact_state.execute(self.node_id, coordinator).await?;
@@ -223,7 +224,7 @@ impl XactStateManager {
             let peers = self.peers.clone();
             let request = PrepareRequest {
                 from: self.node_id as u32,
-                xact_id: self.id,
+                xact_id: self.xact_id,
                 data: data.clone().into_iter().collect(),
             };
             async move {
@@ -273,8 +274,12 @@ impl XactStateManager {
         // Determine the vote based on the status of the transaction after execution
         let vote = match xact_status {
             XactStatus::Rollbacked => Vote::Abort,
-            XactStatus::Committed => Vote::Commit,
-            _ => anyhow::bail!("Invalid xact status: {:?}", xact_status),
+            XactStatus::Committed | XactStatus::Waiting => Vote::Commit,
+            _ => anyhow::bail!(
+                "Surrogate xact {} has unexpected status: {:?}",
+                self.xact_id,
+                xact_status
+            ),
         };
 
         // Send the vote to other participants
@@ -297,7 +302,7 @@ impl XactStateManager {
     }
 
     fn update_metrics(&mut self, coordinator: usize) {
-        let region = self.id.to_string();
+        let region = self.node_id.to_string();
         let coordinator = coordinator.to_string();
 
         XACTS.with_label_values(&[&region, &coordinator]).inc();
