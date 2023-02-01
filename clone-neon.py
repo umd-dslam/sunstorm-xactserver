@@ -156,8 +156,6 @@ def edit_safekeeper_ids(ordinal: int, dst_neon: Path):
 
 
 def main(args):
-    if args.ordinal < 0:
-        raise CloneError("Ordinal cannot be negative")
 
     # Clone the .neon directory
     dst = Path(args.dst)
