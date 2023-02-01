@@ -9,7 +9,7 @@ use std::thread::{self, JoinHandle};
 use tokio::sync::mpsc;
 use url::Url;
 use xactserver::pg::PgWatcher;
-use xactserver::{Manager, Node, NodeId, XsMessage, DEFAULT_NODE_PORT, DUMMY_URL};
+use xactserver::{Manager, Node, NodeId, XsMessage, DEFAULT_NODE_PORT};
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -41,7 +41,7 @@ struct Args {
     #[clap(
         long,
         value_parser,
-        default_value = "1",
+        default_value = "0",
         help = "Numeric id of the current node. Used as an 1-based index of the --nodes list"
     )]
     node_id: NodeId,
@@ -60,7 +60,7 @@ fn invalid_arg_error(msg: &str) -> ! {
 }
 
 fn parse_node_addresses(nodes: String) -> Vec<Url> {
-    let mut node_addresses: Vec<Url> = nodes
+    let node_addresses: Vec<Url> = nodes
         .split(',')
         .map(|addr| {
             let node_url = Url::parse(addr).unwrap_or_else(|err| {
@@ -78,8 +78,6 @@ fn parse_node_addresses(nodes: String) -> Vec<Url> {
             node_url
         })
         .collect();
-    // Insert a dummy address at the beginning of the list to make the list 1-based
-    node_addresses.insert(0, DUMMY_URL.clone());
     node_addresses
 }
 
