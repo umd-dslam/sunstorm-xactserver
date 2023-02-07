@@ -42,7 +42,7 @@ struct Args {
         long,
         value_parser,
         default_value = "0",
-        help = "Numeric id of the current node. Used as an 1-based index of the --nodes list"
+        help = "Numeric id of the current node. Used as an 0-based index of the --nodes list"
     )]
     node_id: NodeId,
 
@@ -85,9 +85,6 @@ fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let args = Args::parse();
-    if args.node_id == 0 {
-        invalid_arg_error("node id is 1-based");
-    }
 
     let connect_pg = Url::parse(&args.connect_pg).unwrap_or_else(|err| {
         invalid_arg_error(&format!(
