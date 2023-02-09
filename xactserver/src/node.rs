@@ -52,7 +52,7 @@ impl XactCoordination for Node {
 }
 
 pub mod client {
-    use anyhow::{anyhow, ensure};
+    use anyhow::{anyhow};
     use async_trait::async_trait;
     use futures::stream::{self, StreamExt, TryStreamExt};
     use url::Url;
@@ -80,7 +80,6 @@ pub mod client {
             &self,
             id: NodeId,
         ) -> anyhow::Result<bb8::PooledConnection<'_, ConnectionManager>> {
-            ensure!(id > 0, "Node id must be positive");
             let pool = self.conn_pools.get(id).ok_or_else(|| {
                 anyhow!(
                     "Node id {} is out of range (1 - {})",
