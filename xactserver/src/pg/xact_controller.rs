@@ -33,20 +33,20 @@ impl XactController for LocalXactController {
     async fn commit(&mut self) -> anyhow::Result<()> {
         self.commit_tx
             .take()
-            .ok_or_else(|| anyhow!("Transaction has already committed or rollbacked"))
+            .ok_or_else(|| anyhow!("Transaction has already been committed or rollbacked"))
             .and_then(|tx| {
                 tx.send(true)
-                    .map_err(|_| anyhow!("Failed to commit transaction"))
+                    .map_err(|_| anyhow!("The pg watcher has dropped the receiver"))
             })
     }
 
     async fn rollback(&mut self) -> anyhow::Result<()> {
         self.commit_tx
             .take()
-            .ok_or_else(|| anyhow!("Transaction has already committed or rollbacked"))
+            .ok_or_else(|| anyhow!("Transaction has already been committed or rollbacked"))
             .and_then(|tx| {
                 tx.send(false)
-                    .map_err(|_| anyhow!("Failed to rollback transaction"))
+                    .map_err(|_| anyhow!("The pg watcher has dropped the receiver"))
             })
     }
 }
@@ -81,14 +81,15 @@ impl XactController for SurrogateXactController {
                 "SELECT validate_and_apply_xact($1::bytea);",
                 &[&self.data.as_ref()],
             )
-            .await;
+            .await
+            .with_context(|| format!("Failed to validate xact {}", self.xact_id));
 
         conn.batch_execute(format!("PREPARE TRANSACTION '{}'", self.xact_id).as_str())
             .await
             .with_context(|| format!("Failed to prepare xact {}", self.xact_id))?;
 
-        // Check the result after PREPARE TRANSACTION so that the transaction
-        // is properlly aborted if there is an error during validation.
+        // Check the result here to give PREPARE TRANSACTION a chance to run and
+        // properly rollback the transaction if there is an error during validation.
         result?;
 
         Ok(())
@@ -99,7 +100,7 @@ impl XactController for SurrogateXactController {
 
         conn.batch_execute(format!("COMMIT PREPARED '{}'", self.xact_id).as_str())
             .await
-            .with_context(|| format!("Failed to commit xact {}", self.xact_id))?;
+            .with_context(|| format!("Failed to commit prepared xact {}", self.xact_id))?;
 
         Ok(())
     }
