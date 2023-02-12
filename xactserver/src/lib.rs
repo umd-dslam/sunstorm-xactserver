@@ -10,6 +10,7 @@ mod proto {
 
 use bytes::Bytes;
 use lazy_static::lazy_static;
+use proto::{vote_request, DbError};
 use tokio::sync::oneshot;
 
 pub use manager::Manager;
@@ -32,4 +33,61 @@ pub enum XsMessage {
     },
     Prepare(proto::PrepareRequest),
     Vote(proto::VoteRequest),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum XactStatus {
+    Unexecuted,
+    Waiting,
+    Committed,
+    Rollbacked(RollbackInfo),
+}
+
+impl XactStatus {
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, XactStatus::Committed | XactStatus::Rollbacked(_))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RollbackInfo(NodeId, RollbackReason);
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum RollbackReason {
+    Db(DbError),
+    Other(String),
+}
+
+// Must use the tokio_postgres module in the bb8_postgres crate
+impl From<&bb8_postgres::tokio_postgres::Error> for RollbackReason {
+    fn from(err: &bb8_postgres::tokio_postgres::Error) -> Self {
+        match err.as_db_error() {
+            Some(err) => RollbackReason::Db(DbError {
+                code: err.code().code().as_bytes().to_vec(),
+                severity: err.severity().to_string(),
+                message: err.message().to_string(),
+                detail: err.detail().unwrap_or_default().to_string(),
+                hint: err.hint().unwrap_or_default().to_string(),
+            }),
+            None => RollbackReason::Other(err.to_string()),
+        }
+    }
+}
+
+impl From<vote_request::RollbackReason> for RollbackReason {
+    fn from(rollback_reason: vote_request::RollbackReason) -> Self {
+        match rollback_reason {
+            vote_request::RollbackReason::Db(db_err) => RollbackReason::Db(db_err),
+            vote_request::RollbackReason::Other(err) => RollbackReason::Other(err),
+        }
+    }
+}
+
+impl From<&RollbackReason> for vote_request::RollbackReason {
+    fn from(rollback_reason: &RollbackReason) -> Self {
+        match rollback_reason {
+            RollbackReason::Db(db_error) => vote_request::RollbackReason::Db(db_error.clone()),
+            RollbackReason::Other(error) => vote_request::RollbackReason::Other(error.clone()),
+        }
+    }
 }

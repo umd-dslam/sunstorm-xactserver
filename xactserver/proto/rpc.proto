@@ -11,15 +11,22 @@ message PrepareRequest {
 message PrepareResponse {
 }
 
-enum Vote {
-    COMMIT = 0;
-    ABORT = 1;
-}
-
 message VoteRequest {
     uint32 from = 1;
     uint64 xact_id = 2;
-    Vote vote = 3;
+    // If this field is not set, this is a 'yes' vote
+    oneof rollback_reason {
+        DbError db = 3;
+        string other = 4;
+    }
+}
+
+message DbError {
+    bytes code = 1;
+    string severity = 2;
+    string message = 3;
+    string detail = 4;
+    string hint = 5;
 }
 
 message VoteResponse {

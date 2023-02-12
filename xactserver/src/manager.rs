@@ -1,7 +1,7 @@
 use anyhow::{anyhow, ensure, Context};
 use bytes::Bytes;
 use futures::{future, Future};
-use log::{debug, warn};
+use log::{debug, error, warn};
 use prometheus::HistogramTimer;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -13,9 +13,9 @@ use crate::decoder::RWSet;
 use crate::metrics::{TOTAL_DURATION, XACTS};
 use crate::node::client;
 use crate::pg::{create_pg_conn_pool, PgConnectionPool};
-use crate::proto::{PrepareRequest, Vote, VoteRequest};
-use crate::xact::{XactStateType, XactStatus};
-use crate::{NodeId, XactId, XsMessage, NODE_ID_BITS};
+use crate::proto::{PrepareRequest, VoteRequest};
+use crate::xact::XactStateType;
+use crate::{NodeId, RollbackInfo, XactId, XactStatus, XsMessage, NODE_ID_BITS};
 
 pub struct Manager {
     /// Id of current xactserver
@@ -193,7 +193,7 @@ impl XactStateManager {
                     }
                 }
                 Err(e) => {
-                    eprintln!("Xact state manager encountered an error: {:?}", e);
+                    error!("Xact state manager encountered an error: {:?}", e);
                     break;
                 }
             };
@@ -221,7 +221,7 @@ impl XactStateManager {
 
         // Execute the transaction. This actually does nothing because this is a local transaction.
         let xact_status = self.xact_state.execute(self.node_id, coordinator).await?;
-        assert_eq!(xact_status, XactStatus::Waiting);
+        assert_eq!(xact_status, &XactStatus::Waiting);
 
         // Send the transaction to other participants
         self.send_to_all_but_me(&rwset.participants(), |p| {
@@ -273,18 +273,23 @@ impl XactStateManager {
         )?;
 
         // Execute the surrogate transaction
-        let xact_status = self.xact_state.execute(self.node_id, coordinator).await?;
+        let status = self.xact_state.execute(self.node_id, coordinator).await?;
 
-        // Determine the vote based on the status of the transaction after execution
-        let vote = match xact_status {
-            XactStatus::Rollbacked => Vote::Abort,
-            XactStatus::Committed | XactStatus::Waiting => Vote::Commit,
+        // Extract rollback reason, if any
+        let rollback_reason = match status {
+            XactStatus::Rollbacked(RollbackInfo(_, rollback_reason)) => {
+                Some(rollback_reason.into())
+            }
+            XactStatus::Committed | XactStatus::Waiting => None,
             _ => anyhow::bail!(
                 "Surrogate xact {} has unexpected status: {:?}",
                 self.xact_id,
-                xact_status
+                status
             ),
         };
+
+        // Determine whether to terminate the current xact state manager
+        let finish = status.is_terminal();
 
         // Send the vote to other participants
         self.send_to_all_but_me(&rwset.participants(), |p| {
@@ -292,7 +297,7 @@ impl XactStateManager {
             let request = VoteRequest {
                 from: self.node_id as u32,
                 xact_id,
-                vote: vote as i32,
+                rollback_reason: rollback_reason.clone(),
             };
             async move {
                 let mut client = peers.get(p as NodeId).await?;
@@ -302,7 +307,7 @@ impl XactStateManager {
         })
         .await?;
 
-        Ok(false)
+        Ok(finish)
     }
 
     fn update_metrics(&mut self, coordinator: usize) {
@@ -337,10 +342,12 @@ impl XactStateManager {
     async fn handle_vote_msg(&mut self, vote: VoteRequest) -> anyhow::Result<bool> {
         let status = self
             .xact_state
-            .add_vote(vote.from.try_into()?, vote.vote == Vote::Abort as i32)
+            .add_vote(
+                vote.from.try_into()?,
+                vote.rollback_reason.map(|e| e.into()),
+            )
             .await?;
 
-        // Finish the xact state manager if the xact status is committed or rollbacked
-        Ok(status == XactStatus::Committed || status == XactStatus::Rollbacked)
+        Ok(status.is_terminal())
     }
 }
