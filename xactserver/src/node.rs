@@ -52,7 +52,7 @@ impl XactCoordination for Node {
 }
 
 pub mod client {
-    use anyhow::{anyhow};
+    use anyhow::anyhow;
     use async_trait::async_trait;
     use futures::stream::{self, StreamExt, TryStreamExt};
     use url::Url;

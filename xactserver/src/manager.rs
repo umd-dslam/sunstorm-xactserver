@@ -216,11 +216,16 @@ impl XactStateManager {
         debug!("New local xact: {:#?}", rwset.decode_rest());
 
         // Create and initialize a new local xact
-        self.xact_state =
-            XactStateType::new_local_xact(self.xact_id, rwset.participants(), commit_tx)?;
+        self.xact_state = XactStateType::new_local_xact(
+            self.xact_id,
+            self.node_id,
+            coordinator,
+            rwset.participants(),
+            commit_tx,
+        )?;
 
-        // Execute the transaction. This actually does nothing because this is a local transaction.
-        let xact_status = self.xact_state.execute(self.node_id, coordinator).await?;
+        // Initialize the transaction
+        let xact_status = self.xact_state.initialize().await?;
         assert_eq!(xact_status, &XactStatus::Waiting);
 
         // Send the transaction to other participants
@@ -267,13 +272,15 @@ impl XactStateManager {
         let xact_id = prepare_req.xact_id;
         self.xact_state = XactStateType::new_surrogate_xact(
             xact_id,
+            self.node_id,
+            coordinator,
             rwset.participants(),
             data,
             &self.pg_conn_pool,
         )?;
 
-        // Execute the surrogate transaction
-        let status = self.xact_state.execute(self.node_id, coordinator).await?;
+        // Initialize the transaction
+        let status = self.xact_state.initialize().await?;
 
         // Extract rollback reason, if any
         let rollback_reason = match status {
