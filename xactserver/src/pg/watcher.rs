@@ -3,9 +3,9 @@
 //! This module contains [`PgWatcher`] which watches for new transaction data from the
 //! `remotexact` plugin in postgres.
 //!  
-use crate::XsMessage;
+use crate::{RollbackInfo, RollbackReason, XsMessage};
 use anyhow::Context;
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use log::{debug, error};
 use neon_pq_proto::{BeMessage, FeMessage};
 use neon_utils::postgres_backend::AuthType;
@@ -105,9 +105,8 @@ impl postgres_backend_async::Handler for PgWatcherHandler {
             };
 
             let (commit_tx, commit_rx) = oneshot::channel();
-            // Pass the transaction buffer to the xactserver.
-            // This is a blocking send because we're not inside an
-            // asynchronous environment
+
+            // Pass the transaction buffer to the xact manager
             self.xact_manager_tx
                 .send(XsMessage::LocalXact {
                     data: copy_data_bytes,
@@ -116,21 +115,55 @@ impl postgres_backend_async::Handler for PgWatcherHandler {
                 .await
                 .map_err(|e| QueryError::Other(anyhow::anyhow!(e)))?;
 
-            let mut bytes = BytesMut::new();
-
-            if commit_rx
+            // Receive the commit/rollback data from the xact manager
+            let rollback_info = commit_rx
                 .await
-                .map_err(|e| QueryError::Other(anyhow::anyhow!(e)))?
-            {
-                bytes.put_u8(1);
-            } else {
-                bytes.put_u8(0);
-            }
+                .map_err(|e| QueryError::Other(anyhow::anyhow!(e)))?;
 
-            pgb.write_message(&BeMessage::CopyData(&bytes.freeze()))?;
+            pgb.write_message(&BeMessage::CopyData(&serialize_rollback_info(
+                rollback_info,
+            )))?;
             pgb.flush().await?;
         }
 
         Ok(())
     }
+}
+
+fn serialize_rollback_info(info: Option<RollbackInfo>) -> Bytes {
+    let mut buf = BytesMut::new();
+    if let Some(info) = info {
+        match info {
+            RollbackInfo(by, RollbackReason::Db(db_err)) => {
+                // Plus 1 to distinguish between region 0 and the end of message byte
+                buf.put_u8((by + 1).try_into().unwrap());
+
+                // Error message
+                buf.put_slice(db_err.message.as_bytes());
+                buf.put_u8(b'\0');
+
+                // SQL error data
+                buf.put_u8(1);
+                buf.put_slice(&db_err.code);
+                buf.put_slice(db_err.severity.as_bytes());
+                buf.put_u8(b'\0');
+                buf.put_slice(db_err.detail.as_bytes());
+                buf.put_u8(b'\0');
+                buf.put_slice(db_err.hint.as_bytes());
+                buf.put_u8(b'\0');
+            }
+            RollbackInfo(by, RollbackReason::Other(err)) => {
+                // Plus 1 to distinguish between region 0 and the end of message byte
+                buf.put_u8((by + 1).try_into().unwrap());
+
+                // Error message
+                buf.put_slice(err.as_bytes());
+                buf.put_u8(b'\0');
+            }
+        }
+    }
+    // End of message
+    buf.put_u8(0);
+
+    buf.freeze()
 }

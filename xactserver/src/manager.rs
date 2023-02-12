@@ -203,7 +203,7 @@ impl XactStateManager {
     async fn handle_local_xact_msg(
         &mut self,
         data: Bytes,
-        commit_tx: oneshot::Sender<bool>,
+        commit_tx: oneshot::Sender<Option<RollbackInfo>>,
     ) -> anyhow::Result<bool> {
         assert!(matches!(self.xact_state, XactStateType::Uninitialized));
 
