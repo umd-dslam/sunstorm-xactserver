@@ -29,7 +29,7 @@ pub const DEFAULT_NODE_PORT: u16 = 23000;
 pub enum XsMessage {
     LocalXact {
         data: Bytes,
-        commit_tx: oneshot::Sender<bool>,
+        commit_tx: oneshot::Sender<Option<RollbackInfo>>,
     },
     Prepare(proto::PrepareRequest),
     Vote(proto::VoteRequest),

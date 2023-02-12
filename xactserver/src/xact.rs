@@ -1,7 +1,7 @@
 use anyhow::{ensure, Context};
 use bit_set::BitSet;
 use bytes::Bytes;
-use log::warn;
+use log::{debug, warn};
 use tokio::sync::oneshot;
 
 use crate::metrics::EXECUTION_DURATION;
@@ -20,7 +20,7 @@ impl XactStateType {
         node_id: NodeId,
         coordinator: NodeId,
         participants: BitSet,
-        commit_tx: oneshot::Sender<bool>,
+        commit_tx: oneshot::Sender<Option<RollbackInfo>>,
     ) -> anyhow::Result<Self> {
         let controller = LocalXactController::new(commit_tx);
         Ok(Self::Local(XactState::<LocalXactController>::new(
@@ -142,6 +142,13 @@ impl<C: XactController> XactState<C> {
             }
         });
 
+        if let Some(reason) = &rollback_reason {
+            debug!(
+                "Rolled back surrogate xact {}. Reason: {:?}",
+                self.xact_id, reason
+            );
+        }
+
         self.add_vote(self.node_id, rollback_reason).await?;
 
         Ok(&self.status)
@@ -183,7 +190,7 @@ impl<C: XactController> XactState<C> {
 
         let info = RollbackInfo(from, rollback_reason.clone());
         self.controller
-            .rollback()
+            .rollback(&info)
             .await
             .context("Failed to rollback")?;
         self.status = XactStatus::Rollbacked(info);
@@ -244,7 +251,7 @@ mod tests {
             Ok(())
         }
 
-        async fn rollback(&mut self) -> anyhow::Result<()> {
+        async fn rollback(&mut self, _info: &RollbackInfo) -> anyhow::Result<()> {
             self.rollbacked = true;
             Ok(())
         }

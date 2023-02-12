@@ -3,21 +3,21 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use tokio::sync::oneshot;
 
-use crate::{pg::PgConnectionPool, XactId};
+use crate::{pg::PgConnectionPool, RollbackInfo, XactId};
 
 #[async_trait]
 pub trait XactController {
     async fn execute(&mut self) -> anyhow::Result<()>;
     async fn commit(&mut self) -> anyhow::Result<()>;
-    async fn rollback(&mut self) -> anyhow::Result<()>;
+    async fn rollback(&mut self, info: &RollbackInfo) -> anyhow::Result<()>;
 }
 
 pub struct LocalXactController {
-    commit_tx: Option<oneshot::Sender<bool>>,
+    commit_tx: Option<oneshot::Sender<Option<RollbackInfo>>>,
 }
 
 impl LocalXactController {
-    pub fn new(commit_tx: oneshot::Sender<bool>) -> Self {
+    pub fn new(commit_tx: oneshot::Sender<Option<RollbackInfo>>) -> Self {
         Self {
             commit_tx: Some(commit_tx),
         }
@@ -35,17 +35,17 @@ impl XactController for LocalXactController {
             .take()
             .ok_or_else(|| anyhow!("Transaction has already been committed or rollbacked"))
             .and_then(|tx| {
-                tx.send(true)
+                tx.send(None)
                     .map_err(|_| anyhow!("The pg watcher has dropped the receiver"))
             })
     }
 
-    async fn rollback(&mut self) -> anyhow::Result<()> {
+    async fn rollback(&mut self, info: &RollbackInfo) -> anyhow::Result<()> {
         self.commit_tx
             .take()
             .ok_or_else(|| anyhow!("Transaction has already been committed or rollbacked"))
             .and_then(|tx| {
-                tx.send(false)
+                tx.send(Some(info.clone()))
                     .map_err(|_| anyhow!("The pg watcher has dropped the receiver"))
             })
     }
@@ -105,7 +105,7 @@ impl XactController for SurrogateXactController {
         Ok(())
     }
 
-    async fn rollback(&mut self) -> anyhow::Result<()> {
+    async fn rollback(&mut self, _info: &RollbackInfo) -> anyhow::Result<()> {
         let conn = self.pg_conn_pool.get().await?;
 
         let prepared_xact = conn
