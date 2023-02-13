@@ -8,28 +8,31 @@ use log::error;
 pub use watcher::PgWatcher;
 pub use xact_controller::{LocalXactController, SurrogateXactController, XactController};
 
-pub type PgConnectionPool = Pool<PostgresConnectionManager<NoTls>>;
+type PgConnectionError = <PostgresConnectionManager<NoTls> as bb8::ManageConnection>::Error;
 
 #[derive(Debug, Clone, Copy)]
-pub struct PgErrorSink;
+struct PgErrorSink;
 
-type PgConnError = <PostgresConnectionManager<NoTls> as bb8::ManageConnection>::Error;
-
-impl ErrorSink<PgConnError> for PgErrorSink {
-    fn sink(&self, e: PgConnError) {
+impl ErrorSink<PgConnectionError> for PgErrorSink {
+    fn sink(&self, e: PgConnectionError) {
         error!("{}", e);
     }
 
-    fn boxed_clone(&self) -> Box<dyn ErrorSink<PgConnError>> {
+    fn boxed_clone(&self) -> Box<dyn ErrorSink<PgConnectionError>> {
         Box::new(*self)
     }
 }
 
-pub async fn create_pg_conn_pool(pg_url: &url::Url) -> anyhow::Result<PgConnectionPool> {
-    let pg_mgr = PostgresConnectionManager::new_from_stringlike(pg_url.to_string(), NoTls)?;
-    // TODO: expose settings for the connection pool
+pub type PgConnectionPool = Pool<PostgresConnectionManager<NoTls>>;
+
+pub async fn create_pg_conn_pool(
+    url: &url::Url,
+    max_pool_size: u32,
+) -> anyhow::Result<PgConnectionPool> {
+    let pg_mgr = PostgresConnectionManager::new_from_stringlike(url.to_string(), NoTls)?;
+
     Ok(Pool::builder()
-        .max_size(50)
+        .max_size(max_pool_size)
         .error_sink(Box::new(PgErrorSink))
         .build(pg_mgr)
         .await?)

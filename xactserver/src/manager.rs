@@ -28,6 +28,7 @@ pub struct Manager {
 
     /// Connection for sending messages to postgres
     pg_url: Url,
+    pg_max_conn_pool_size: u32,
     pg_conn_pool: Option<PgConnectionPool>,
 
     /// Connections for sending messages to other xactserver nodes
@@ -43,6 +44,7 @@ impl Manager {
     pub fn new(
         node_id: NodeId,
         pg_url: Url,
+        pg_max_conn_pool_size: u32,
         peer_addrs: Vec<Url>,
         local_rx: mpsc::Receiver<XsMessage>,
         remote_rx: mpsc::Receiver<XsMessage>,
@@ -53,6 +55,7 @@ impl Manager {
             remote_rx,
             peer_addrs,
             pg_url,
+            pg_max_conn_pool_size,
             pg_conn_pool: None,
             xact_state_managers: HashMap::new(),
             xact_id_counter: 1,
@@ -62,7 +65,8 @@ impl Manager {
 
     pub async fn run(mut self) -> anyhow::Result<()> {
         self.peers = Some(Arc::new(client::Nodes::connect(&self.peer_addrs).await?));
-        self.pg_conn_pool = Some(create_pg_conn_pool(&self.pg_url).await?);
+        self.pg_conn_pool =
+            Some(create_pg_conn_pool(&self.pg_url, self.pg_max_conn_pool_size).await?);
 
         loop {
             tokio::select! {

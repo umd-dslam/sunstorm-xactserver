@@ -1,4 +1,4 @@
-use clap::{CommandFactory, ErrorKind, Parser};
+use clap::{error::ErrorKind, CommandFactory, Parser};
 use hyper::{header::CONTENT_TYPE, Body, Request, Response};
 use log::info;
 use neon_utils::http::{endpoint::serve_thread_main, error::ApiError};
@@ -12,9 +12,9 @@ use xactserver::pg::PgWatcher;
 use xactserver::{Manager, Node, NodeId, XsMessage, DEFAULT_NODE_PORT};
 
 #[derive(Parser)]
-#[clap(author, version, about, long_about = None)]
-struct Args {
-    #[clap(
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[arg(
         long,
         value_parser,
         default_value = "127.0.0.1:10000",
@@ -22,7 +22,7 @@ struct Args {
     )]
     listen_pg: SocketAddr,
 
-    #[clap(
+    #[arg(
         long,
         value_parser,
         default_value = "postgresql://cloud_admin@localhost:55433/postgres",
@@ -30,7 +30,15 @@ struct Args {
     )]
     connect_pg: String,
 
-    #[clap(
+    #[arg(
+        long,
+        short,
+        default_value = "128",
+        help = "Maximum size of the postgres connection pool"
+    )]
+    max_pg_conn_pool_size: u32,
+
+    #[arg(
         long,
         value_parser,
         default_value = "http://localhost:23000",
@@ -38,7 +46,7 @@ struct Args {
     )]
     nodes: String,
 
-    #[clap(
+    #[arg(
         long,
         value_parser,
         default_value = "0",
@@ -46,7 +54,7 @@ struct Args {
     )]
     node_id: NodeId,
 
-    #[clap(
+    #[arg(
         long,
         value_parser,
         default_value = "127.0.0.1:8080",
@@ -55,8 +63,56 @@ struct Args {
     listen_http: SocketAddr,
 }
 
+fn main() -> anyhow::Result<()> {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
+    let cli = Cli::parse();
+
+    let connect_pg = Url::parse(&cli.connect_pg).unwrap_or_else(|err| {
+        invalid_arg_error(&format!(
+            "unable to parse postgres url in '--connect-pg': {}",
+            err
+        ))
+    });
+
+    if !connect_pg.scheme().eq("postgresql") {
+        invalid_arg_error(&format!(
+            "invalid scheme '{}' in '--connect-pg'. Must be 'postgresql'",
+            connect_pg.scheme()
+        ));
+    }
+
+    let nodes = parse_node_addresses(cli.nodes);
+    let listen_peers_url = nodes
+        .get(cli.node_id)
+        .unwrap_or_else(|| invalid_arg_error("invalid value for '--node-id': out of bound"));
+
+    let (pg_watcher_handle, watcher_rx) = start_pg_watcher(cli.listen_pg)?;
+    let (node_handle, node_rx) = start_peer_listener(listen_peers_url)?;
+    let manager_handle = start_manager(
+        cli.node_id,
+        connect_pg,
+        cli.max_pg_conn_pool_size,
+        nodes,
+        watcher_rx,
+        node_rx,
+    )?;
+    let http_server_handle = start_http_server(cli.listen_http)?;
+
+    for handle in [
+        pg_watcher_handle,
+        node_handle,
+        manager_handle,
+        http_server_handle,
+    ] {
+        handle.join().unwrap()?;
+    }
+
+    Ok(())
+}
+
 fn invalid_arg_error(msg: &str) -> ! {
-    Args::command().error(ErrorKind::InvalidValue, msg).exit();
+    Cli::command().error(ErrorKind::InvalidValue, msg).exit();
 }
 
 fn parse_node_addresses(nodes: String) -> Vec<Url> {
@@ -81,44 +137,6 @@ fn parse_node_addresses(nodes: String) -> Vec<Url> {
     node_addresses
 }
 
-fn main() -> anyhow::Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-
-    let args = Args::parse();
-
-    let connect_pg = Url::parse(&args.connect_pg).unwrap_or_else(|err| {
-        invalid_arg_error(&format!(
-            "unable to parse postgres url in '--connect-pg': {}",
-            err
-        ))
-    });
-
-    if !connect_pg.scheme().eq("postgresql") {
-        invalid_arg_error(&format!(
-            "invalid scheme '{}' in '--connect-pg'. Must be 'postgresql'",
-            connect_pg.scheme()
-        ));
-    }
-
-    let nodes = parse_node_addresses(args.nodes);
-
-    let (pg_watcher_handle, watcher_rx) = start_pg_watcher(args.listen_pg)?;
-    let (node_handle, node_rx) = start_node(args.node_id, &nodes)?;
-    let manager_handle = start_manager(args.node_id, connect_pg, nodes, watcher_rx, node_rx)?;
-    let http_server_handle = start_http_server(args.listen_http)?;
-
-    for handle in [
-        pg_watcher_handle,
-        node_handle,
-        manager_handle,
-        http_server_handle,
-    ] {
-        handle.join().unwrap()?;
-    }
-
-    Ok(())
-}
-
 type HandleAndReceiver = (
     JoinHandle<Result<(), anyhow::Error>>,
     mpsc::Receiver<XsMessage>,
@@ -141,15 +159,13 @@ fn start_pg_watcher(listen_pg: SocketAddr) -> anyhow::Result<HandleAndReceiver> 
     Ok((handle, watcher_rx))
 }
 
-fn start_node(node_id: NodeId, nodes: &[Url]) -> anyhow::Result<HandleAndReceiver> {
+fn start_peer_listener(listen_url: &Url) -> anyhow::Result<HandleAndReceiver> {
     let (node_tx, node_rx) = mpsc::channel(100);
-    let listen_peer = nodes
-        .get(node_id)
-        .unwrap_or_else(|| invalid_arg_error("invalid value for '--node-id': out of bound"))
+    let listen_peer = listen_url
         .socket_addrs(|| Some(DEFAULT_NODE_PORT))
         .unwrap_or_else(|e| invalid_arg_error(&e.to_string()))[0];
 
-    info!("Node listening on {}", listen_peer);
+    info!("Listening to peers on {}", listen_peer);
     let node = Node::new(listen_peer, node_tx);
     let handle = thread::Builder::new()
         .name("network node".into())
@@ -167,11 +183,19 @@ fn start_node(node_id: NodeId, nodes: &[Url]) -> anyhow::Result<HandleAndReceive
 fn start_manager(
     node_id: NodeId,
     connect_pg: Url,
+    max_pg_conn_pool_size: u32,
     nodes: Vec<Url>,
     watcher_rx: mpsc::Receiver<XsMessage>,
     node_rx: mpsc::Receiver<XsMessage>,
 ) -> anyhow::Result<JoinHandle<Result<(), anyhow::Error>>> {
-    let manager = Manager::new(node_id, connect_pg, nodes, watcher_rx, node_rx);
+    let manager = Manager::new(
+        node_id,
+        connect_pg,
+        max_pg_conn_pool_size,
+        nodes,
+        watcher_rx,
+        node_rx,
+    );
 
     Ok(thread::Builder::new()
         .name("xact manager".into())
