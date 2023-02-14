@@ -94,7 +94,7 @@ impl<C: XactController> XactState<C> {
     fn new(id: XactId, participants: BitSet, controller: C) -> anyhow::Result<Self> {
         Ok(Self {
             id,
-            status: XactStatus::Unexecuted,
+            status: XactStatus::Uninitialized,
             participants,
             voted: BitSet::new(),
             controller,
@@ -106,7 +106,7 @@ impl<C: XactController> XactState<C> {
         region: NodeId,
         coordinator: NodeId,
     ) -> anyhow::Result<&XactStatus> {
-        ensure!(self.status == XactStatus::Unexecuted);
+        ensure!(self.status == XactStatus::Uninitialized);
         self.status = XactStatus::Waiting;
 
         if region != coordinator {
@@ -245,7 +245,7 @@ mod tests {
                 committed: false,
                 rollbacked: false,
             },
-            status: XactStatus::Unexecuted,
+            status: XactStatus::Uninitialized,
             participants: participant_set,
             voted: BitSet::new(),
         }

@@ -37,7 +37,7 @@ pub enum XsMessage {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum XactStatus {
-    Unexecuted,
+    Uninitialized,
     Waiting,
     Committed,
     Rollbacked(RollbackInfo),
