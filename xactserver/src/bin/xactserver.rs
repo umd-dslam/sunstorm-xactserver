@@ -9,7 +9,7 @@ use std::thread::{self, JoinHandle};
 use tokio::sync::mpsc;
 use url::Url;
 use xactserver::pg::PgWatcher;
-use xactserver::{Manager, Node, NodeId, XsMessage, DEFAULT_NODE_PORT};
+use xactserver::{Manager, Node, NodeId, XsMessage, DEFAULT_NODE_PORT, DUMMY_URL};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -119,6 +119,10 @@ fn parse_node_addresses(nodes: String) -> Vec<Url> {
     let node_addresses: Vec<Url> = nodes
         .split(',')
         .map(|addr| {
+            if addr.to_lowercase() == "dummy" {
+                return DUMMY_URL.clone();
+            }
+
             let node_url = Url::parse(addr).unwrap_or_else(|err| {
                 invalid_arg_error(&format!("invalid value '{}' in '--nodes': {}", addr, err))
             });
