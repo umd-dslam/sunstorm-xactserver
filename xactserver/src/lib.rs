@@ -10,7 +10,7 @@ mod proto {
 
 use bytes::Bytes;
 use lazy_static::lazy_static;
-use proto::{vote_request, DbError};
+use proto::{vote_message, DbError};
 use tokio::sync::oneshot;
 
 pub use manager::Manager;
@@ -31,8 +31,8 @@ pub enum XsMessage {
         data: Bytes,
         commit_tx: oneshot::Sender<Option<RollbackInfo>>,
     },
-    Prepare(proto::PrepareRequest),
-    Vote(proto::VoteRequest),
+    Prepare(proto::PrepareMessage),
+    Vote(proto::VoteMessage),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -74,20 +74,20 @@ impl From<&bb8_postgres::tokio_postgres::Error> for RollbackReason {
     }
 }
 
-impl From<vote_request::RollbackReason> for RollbackReason {
-    fn from(rollback_reason: vote_request::RollbackReason) -> Self {
+impl From<vote_message::RollbackReason> for RollbackReason {
+    fn from(rollback_reason: vote_message::RollbackReason) -> Self {
         match rollback_reason {
-            vote_request::RollbackReason::Db(db_err) => RollbackReason::Db(db_err),
-            vote_request::RollbackReason::Other(err) => RollbackReason::Other(err),
+            vote_message::RollbackReason::Db(db_err) => RollbackReason::Db(db_err),
+            vote_message::RollbackReason::Other(err) => RollbackReason::Other(err),
         }
     }
 }
 
-impl From<&RollbackReason> for vote_request::RollbackReason {
+impl From<&RollbackReason> for vote_message::RollbackReason {
     fn from(rollback_reason: &RollbackReason) -> Self {
         match rollback_reason {
-            RollbackReason::Db(db_error) => vote_request::RollbackReason::Db(db_error.clone()),
-            RollbackReason::Other(error) => vote_request::RollbackReason::Other(error.clone()),
+            RollbackReason::Db(db_error) => vote_message::RollbackReason::Db(db_error.clone()),
+            RollbackReason::Other(error) => vote_message::RollbackReason::Other(error.clone()),
         }
     }
 }

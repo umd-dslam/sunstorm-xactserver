@@ -2,16 +2,13 @@ syntax = "proto3";
 
 package xactserver;
 
-message PrepareRequest {
+message PrepareMessage {
     uint32 from = 1;
     uint64 xact_id = 2;
     bytes data = 3;
 }
 
-message PrepareResponse {
-}
-
-message VoteRequest {
+message VoteMessage {
     uint32 from = 1;
     uint64 xact_id = 2;
     // If this field is not set, this is a 'yes' vote
@@ -29,11 +26,10 @@ message DbError {
     string hint = 5;
 }
 
-message VoteResponse {
+message DummyResponse {
 }
 
 service XactCoordination {
-    rpc Prepare(PrepareRequest) returns (PrepareResponse);
-    rpc Vote(VoteRequest) returns (VoteResponse);
+    rpc Prepare(PrepareMessage) returns (DummyResponse);
+    rpc Vote(VoteMessage) returns (DummyResponse);
 }
-

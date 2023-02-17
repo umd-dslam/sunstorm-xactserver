@@ -4,7 +4,7 @@ use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 
 use crate::proto::xact_coordination_server::{XactCoordination, XactCoordinationServer};
-use crate::proto::{PrepareRequest, PrepareResponse, VoteRequest, VoteResponse};
+use crate::proto::{DummyResponse, PrepareMessage, VoteMessage};
 use crate::XsMessage;
 
 pub struct Node {
@@ -33,21 +33,21 @@ impl Node {
 impl XactCoordination for Node {
     async fn prepare(
         &self,
-        request: Request<PrepareRequest>,
-    ) -> Result<Response<PrepareResponse>, Status> {
+        request: Request<PrepareMessage>,
+    ) -> Result<Response<DummyResponse>, Status> {
         self.xact_manager_tx
             .send(XsMessage::Prepare(request.into_inner()))
             .await
             .unwrap();
-        Ok(Response::new(PrepareResponse {}))
+        Ok(Response::new(DummyResponse {}))
     }
 
-    async fn vote(&self, request: Request<VoteRequest>) -> Result<Response<VoteResponse>, Status> {
+    async fn vote(&self, request: Request<VoteMessage>) -> Result<Response<DummyResponse>, Status> {
         self.xact_manager_tx
             .send(XsMessage::Vote(request.into_inner()))
             .await
             .unwrap();
-        Ok(Response::new(VoteResponse {}))
+        Ok(Response::new(DummyResponse {}))
     }
 }
 

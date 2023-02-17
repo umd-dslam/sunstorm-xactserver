@@ -88,7 +88,7 @@ impl postgres_backend_async::Handler for PgWatcherHandler {
         pgb.write_message(&BeMessage::CopyBothResponse)?;
         pgb.flush().await?;
 
-        debug!("New postgres connection established");
+        debug!("new postgres connection established");
 
         loop {
             let msg = pgb.read_message().await?;
