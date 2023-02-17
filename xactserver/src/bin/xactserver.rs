@@ -6,6 +6,7 @@ use prometheus::{Encoder, TextEncoder};
 use routerify::Router;
 use std::net::SocketAddr;
 use std::thread::{self, JoinHandle};
+use std::{panic, process};
 use tokio::sync::mpsc;
 use url::Url;
 use xactserver::pg::PgWatcher;
@@ -65,6 +66,12 @@ struct Cli {
 
 fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
+    let orig_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |panic_info| {
+        orig_hook(panic_info);
+        process::exit(1);
+    }));
 
     let cli = Cli::parse();
 
