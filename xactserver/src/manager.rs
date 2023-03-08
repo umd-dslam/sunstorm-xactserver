@@ -93,25 +93,37 @@ impl Manager {
 
     async fn process_message(&mut self, msg: XsMessage) {
         // Get the sender for the xact state manager
-        let msg_tx = match &msg {
+        let (msg_tx, xact_id) = match &msg {
             XsMessage::LocalXact { .. } => {
                 let xact_id = self.next_xact_id();
-                self.new_xact_state_manager(xact_id)
+                (self.new_xact_state_manager(xact_id), xact_id)
             }
-            XsMessage::Prepare(prepare_req) => self.new_xact_state_manager(prepare_req.xact_id),
-            XsMessage::Vote(vote_req) => self
-                .xact_state_managers
-                .get(&vote_req.xact_id)
-                .ok_or_else(|| {
-                    anyhow!(
-                        "no xact state manager running for xact id {}",
-                        vote_req.xact_id
-                    )
-                }),
+            XsMessage::Prepare(prepare_req) => (
+                self.new_xact_state_manager(prepare_req.xact_id),
+                prepare_req.xact_id,
+            ),
+            XsMessage::Vote(vote_req) => {
+                let msg_tx = self
+                    .xact_state_managers
+                    .get(&vote_req.xact_id)
+                    .ok_or_else(|| anyhow!("no xact state manager running to vote"));
+                (msg_tx, vote_req.xact_id)
+            }
         };
 
-        // Forward the message to the xact state manager
-        msg_tx.unwrap().send(msg).await.unwrap();
+        match msg_tx {
+            Ok(msg_tx) => {
+                // Forward the message to the xact state manager
+                if msg_tx.send(msg).await.is_err() {
+                    debug!(
+                        "cannot send message to stopped xact state manager {}",
+                        xact_id
+                    );
+                    self.xact_state_managers.remove(&xact_id);
+                }
+            }
+            Err(err) => warn!("failed to obtain manager for xact {}: {:?}", xact_id, err),
+        }
     }
 
     fn new_xact_state_manager(&mut self, id: XactId) -> anyhow::Result<&mpsc::Sender<XsMessage>> {
@@ -178,15 +190,15 @@ impl XactStateManager {
                 XsMessage::LocalXact { data, commit_tx } => self
                     .handle_local_xact_msg(data, commit_tx)
                     .await
-                    .context("Failed to handle local xact msg"),
+                    .context("failed to handle local xact msg"),
                 XsMessage::Prepare(prepare_req) => self
                     .handle_prepare_msg(prepare_req)
                     .await
-                    .context("Failed to handle prepare msg"),
+                    .context("failed to handle prepare msg"),
                 XsMessage::Vote(vote_req) => self
                     .handle_vote_msg(vote_req)
                     .await
-                    .context("Failed to handle vote msg"),
+                    .context("failed to handle vote msg"),
             };
 
             match result {
@@ -196,11 +208,16 @@ impl XactStateManager {
                     }
                 }
                 Err(e) => {
-                    error!("Xact state manager encountered an error: {:?}", e);
+                    error!(
+                        "xact state manager {} encountered an error: {:?}",
+                        self.xact_id, e
+                    );
                     break;
                 }
             };
         }
+
+        debug!("stopped xact state manager {}", self.xact_id);
     }
 
     async fn handle_local_xact_msg(
