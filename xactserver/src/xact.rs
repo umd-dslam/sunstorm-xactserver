@@ -117,9 +117,11 @@ impl<C: XactController> XactState<C> {
 
         self.status = XactStatus::Waiting;
 
+        let is_local = self.node_id == self.coordinator;
+
         // If the current participant is not the coordinator, add a 'yes' vote for
         // the coordinator here. Otherwise, the vote for coordinator is added below.
-        if self.node_id != self.coordinator {
+        if !is_local {
             // The coordinator always votes to commit
             self.add_vote(self.coordinator, None).await?;
         }
@@ -127,7 +129,11 @@ impl<C: XactController> XactState<C> {
         // Execute the transaction
         let rollback_reason = {
             let _timer = EXECUTION_DURATION
-                .with_label_values(&[&self.node_id.to_string(), &self.coordinator.to_string()])
+                .with_label_values(&[
+                    &self.node_id.to_string(),
+                    &self.coordinator.to_string(),
+                    &is_local.to_string(),
+                ])
                 .start_timer();
 
             self.controller.execute().await

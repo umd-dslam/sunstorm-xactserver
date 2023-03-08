@@ -10,7 +10,7 @@ use tokio::sync::{mpsc, oneshot};
 use url::Url;
 
 use crate::decoder::RWSet;
-use crate::metrics::{TOTAL_DURATION, XACTS};
+use crate::metrics::{get_rollback_reason_label, FINISHED_XACTS, STARTED_XACTS, TOTAL_DURATION};
 use crate::node::client;
 use crate::pg::{create_pg_conn_pool, PgConnectionPool};
 use crate::proto::{PrepareMessage, VoteMessage};
@@ -140,6 +140,8 @@ struct XactStateManager {
     xact_id: XactId,
     /// Id of the current server
     node_id: NodeId,
+    /// Id of the coordinator
+    coordinator_id: Option<NodeId>,
 
     /// Connection pools
     pg_conn_pool: PgConnectionPool,
@@ -162,6 +164,7 @@ impl XactStateManager {
         Self {
             xact_id,
             node_id,
+            coordinator_id: None,
             pg_conn_pool,
             peers,
             xact_state: XactStateType::Uninitialized,
@@ -208,8 +211,10 @@ impl XactStateManager {
         assert!(matches!(self.xact_state, XactStateType::Uninitialized));
 
         // This is a local transaction so the current region is the coordinator
-        let coordinator = self.node_id;
-        self.update_metrics(coordinator);
+        let coordinator_id = *self.coordinator_id.insert(self.node_id);
+
+        // This must happen after coordinator id is set
+        self.begin_xact_measurement();
 
         // Deserialize the transaction data
         let mut rwset = RWSet::decode(data.clone()).context("Failed to decode read/write set")?;
@@ -219,7 +224,7 @@ impl XactStateManager {
         self.xact_state = XactStateType::new_local_xact(
             self.xact_id,
             self.node_id,
-            coordinator,
+            coordinator_id,
             rwset.participants(),
             commit_tx,
         )?;
@@ -251,8 +256,10 @@ impl XactStateManager {
         assert!(matches!(self.xact_state, XactStateType::Uninitialized));
 
         // Extract the coordinator of this transaction from the request
-        let coordinator: NodeId = prepare.from.try_into()?;
-        self.update_metrics(coordinator);
+        let coordinator_id = *self.coordinator_id.insert(prepare.from.try_into()?);
+
+        // This must happen after coordinator id is set
+        self.begin_xact_measurement();
 
         // Deserialize the transaction data
         let data = Bytes::from(prepare.data);
@@ -273,7 +280,7 @@ impl XactStateManager {
         self.xact_state = XactStateType::new_surrogate_xact(
             xact_id,
             self.node_id,
-            coordinator,
+            coordinator_id,
             rwset.participants(),
             data,
             &self.pg_conn_pool,
@@ -296,7 +303,11 @@ impl XactStateManager {
         };
 
         // Determine whether to terminate the current xact state manager
-        let finish = status.is_terminal();
+        let finished = status.is_terminal();
+
+        if let Some(label) = get_rollback_reason_label(status) {
+            self.end_xact_measurement(label);
+        }
 
         // Send the vote to other participants
         self.send_to_all_but_me(&rwset.participants(), |p| {
@@ -314,20 +325,7 @@ impl XactStateManager {
         })
         .await?;
 
-        Ok(finish)
-    }
-
-    fn update_metrics(&mut self, coordinator: usize) {
-        let region = self.node_id.to_string();
-        let coordinator = coordinator.to_string();
-
-        XACTS.with_label_values(&[&region, &coordinator]).inc();
-
-        self.total_duration_timer = Some(
-            TOTAL_DURATION
-                .with_label_values(&[&region, &coordinator])
-                .start_timer(),
-        );
+        Ok(finished)
     }
 
     async fn send_to_all_but_me<I, F, R>(&self, participants: I, f: F) -> anyhow::Result<()>
@@ -355,6 +353,38 @@ impl XactStateManager {
             )
             .await?;
 
-        Ok(status.is_terminal())
+        let finished = status.is_terminal();
+
+        if let Some(label) = get_rollback_reason_label(status) {
+            self.end_xact_measurement(label);
+        }
+
+        Ok(finished)
+    }
+
+    fn begin_xact_measurement(&mut self) {
+        let region = self.node_id.to_string();
+        let coordinator = self.coordinator_id.unwrap().to_string();
+        let is_local = (self.node_id == self.coordinator_id.unwrap()).to_string();
+
+        STARTED_XACTS
+            .with_label_values(&[&region, &coordinator, &is_local])
+            .inc();
+
+        self.total_duration_timer = Some(
+            TOTAL_DURATION
+                .with_label_values(&[&region, &coordinator, &is_local])
+                .start_timer(),
+        );
+    }
+
+    fn end_xact_measurement(&self, rollback_reason: &str) {
+        let region = self.node_id.to_string();
+        let coordinator = self.coordinator_id.unwrap().to_string();
+        let is_local = (self.node_id == self.coordinator_id.unwrap()).to_string();
+
+        FINISHED_XACTS
+            .with_label_values(&[&region, &coordinator, &is_local, rollback_reason])
+            .inc();
     }
 }
