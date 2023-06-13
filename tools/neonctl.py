@@ -1,13 +1,11 @@
 #!/usr/bin/python3
 # A tool to manage a local multi-region neon cluster
-# Usage:
-#   python3 tools/neonctl.py create <neon_src_dir> <data_dir> [--num-regions <num>] [--pg-version <version>] [--region-prefix <prefix>]
-#   python3 tools/neonctl.py start <neon_src_dir> <data_dir>
-#   python3 tools/neonctl.py stop <neon_src_dir> <data_dir>
-#   python3 tools/neonctl.py destroy <neon_src_dir> <data_dir>
 #
 # Example:
-#   python3 tools/neonctl.py create ~/src/neon ~/neon_data --num-regions 3 --pg-version 14
+#   export NEON_DIR=~/src/neon
+#   python3 tools/neonctl.py create ~/neon_data -r 3
+#   python3 tools/neonctl.py start ~/neon_data
+#   python3 tools/neonctl.py destroy ~/neon_data
 #
 
 import os
@@ -29,15 +27,13 @@ class Neon:
 
     def run(self, args: List[str], check=True, **kwargs):
         cwd = kwargs.get("cwd", os.getcwd())
-        logger.info(f"[{cwd}]: {self.bin} {' '.join(args)}")
+        logger.info(f"[{cwd}]: {os.path.basename(self.bin)} {' '.join(args)}")
 
         if self.dry_run:
             return
 
         try:
-            subprocess.run(
-                [self.bin] + args, env=self.env, check=check, **kwargs
-            )
+            subprocess.run([self.bin] + args, env=self.env, check=check, **kwargs)
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to run {self.bin} {' '.join(args)}")
             raise e
@@ -45,17 +41,21 @@ class Neon:
 
 class NeonCommand(Command):
     def add_arguments(self, parser):
+        parser.add_argument("data_dir", type=str, help="The directory to neon data")
         parser.add_argument(
-            "neon_src_dir", type=str, help="The directory to neon codebase"
+            "--neon-dir", type=str, help="The directory to neon codebase"
         )
-        parser.add_argument("data_dir", type=str, help="The directory of neon data")
         parser.add_argument("--dry-run", action="store_true", help="Dry run")
 
     def get_neon(self, args):
+        neon_dir = args.neon_dir or os.environ.get("NEON_DIR")
+        if not neon_dir:
+            logger.critical("Specify --neon-dir or set NEON_DIR environment variable")
+            exit(1)
         return Neon(
-            os.path.join(args.neon_src_dir, "target/debug/neon_local"),
+            os.path.join(neon_dir, "target/debug/neon_local"),
             {
-                "POSTGRES_DISTRIB_DIR": os.path.join(args.neon_src_dir, "pg_install"),
+                "POSTGRES_DISTRIB_DIR": os.path.join(neon_dir, "pg_install"),
             },
             args.dry_run,
         )
@@ -68,7 +68,7 @@ class NeonCommand(Command):
                 if os.path.isdir(os.path.join(args.data_dir, f))
             ]
         )
-    
+
     def start_all_regions(self, args):
         neon = self.get_neon(args)
         regions = self.get_regions_in_root_dir(args)
@@ -80,7 +80,6 @@ class NeonCommand(Command):
                 cwd=region_dir,
             )
 
-        
     def stop_all_regions(self, args):
         neon = self.get_neon(args)
         regions = self.get_regions_in_root_dir(args)
@@ -119,7 +118,9 @@ class CreateCommand(NeonCommand):
             cwd=global_region_dir,
         )
 
-        logger.info(f"============== CREATING TIMELINES FOR {args.num_regions} REGIONS ==============")
+        logger.info(
+            f"============== CREATING TIMELINES FOR {args.num_regions} REGIONS =============="
+        )
         for i, region in enumerate(region_names):
             if i == 0:
                 continue
@@ -137,7 +138,9 @@ class CreateCommand(NeonCommand):
 
         neon.run(["stop"], cwd=global_region_dir)
 
-        logger.info("============== CLONING THE GLOBAL REGION TO OTHER REGIONS ==============")
+        logger.info(
+            "============== CLONING THE GLOBAL REGION TO OTHER REGIONS =============="
+        )
         for i, region in enumerate(region_names):
             if i == 0:
                 continue
@@ -147,7 +150,9 @@ class CreateCommand(NeonCommand):
                 os.makedirs(region_dir, exist_ok=True)
                 clone_neon(global_region_dir, region_dir, i)
 
-        logger.info("============== CREATING ENDPOINTS FOR EACH NON-GLOBAL REGION ==============")
+        logger.info(
+            "============== CREATING ENDPOINTS FOR EACH NON-GLOBAL REGION =============="
+        )
         for i, region in enumerate(region_names):
             if i == 0:
                 continue
