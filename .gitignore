@@ -4,3 +4,4 @@ build/
 target/
 tmp_install/
 data/
+__pycache__/
