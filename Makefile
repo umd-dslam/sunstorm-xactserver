@@ -4,12 +4,7 @@
 #
 BUILD_TYPE ?= debug
 ifeq ($(BUILD_TYPE),release)
-	PG_CONFIGURE_OPTS = --enable-debug
 	CARGO_BUILD_FLAGS += --release
-else ifeq ($(BUILD_TYPE),debug)
-	PG_CONFIGURE_OPTS = --enable-debug --enable-cassert --enable-depend
-else
-	$(error Bad build type `$(BUILD_TYPE)', see Makefile for options)
 endif
 
 .PHONY: all

@@ -292,7 +292,7 @@ impl XactStateManager {
             return Ok(true);
         }
 
-        // Create and initialize a new surrogate xact
+        // Create a new surrogate xact
         let xact_id = prepare.xact_id;
         self.xact_state = XactStateType::new_surrogate_xact(
             xact_id,
@@ -308,23 +308,17 @@ impl XactStateManager {
 
         // Extract rollback reason, if any
         let rollback_reason = match status {
-            XactStatus::Rollbacked(RollbackInfo(_, rollback_reason)) => {
+            XactStatus::Rollbacking(RollbackInfo(_, rollback_reason))
+            | XactStatus::Rollbacked(RollbackInfo(_, rollback_reason)) => {
                 Some(rollback_reason.into())
             }
-            XactStatus::Committed | XactStatus::Waiting => None,
+            XactStatus::Committing | XactStatus::Committed | XactStatus::Waiting => None,
             _ => anyhow::bail!(
                 "Surrogate xact {} has unexpected status: {:?}",
                 self.xact_id,
                 status
             ),
         };
-
-        // Determine whether to terminate the current xact state manager
-        let finished = status.is_terminal();
-
-        if let Some(label) = get_rollback_reason_label(status) {
-            self.end_xact_measurement(label);
-        }
 
         // Send the vote to other participants
         self.send_to_all_but_me(&rwset.participants(), |p| {
@@ -341,6 +335,12 @@ impl XactStateManager {
             }
         })
         .await?;
+
+        let status = self.xact_state.try_finish().await?;
+        let finished = status.is_terminal();
+        if let Some(label) = get_rollback_reason_label(status) {
+            self.end_xact_measurement(label);
+        }
 
         Ok(finished)
     }
@@ -362,13 +362,14 @@ impl XactStateManager {
     }
 
     async fn handle_vote_msg(&mut self, vote: VoteMessage) -> anyhow::Result<bool> {
-        let status = self
-            .xact_state
+        self.xact_state
             .add_vote(
                 vote.from.try_into()?,
                 vote.rollback_reason.map(|e| e.into()),
             )
             .await?;
+
+        let status = self.xact_state.try_finish().await?;
 
         let finished = status.is_terminal();
 
@@ -395,10 +396,12 @@ impl XactStateManager {
         );
     }
 
-    fn end_xact_measurement(&self, rollback_reason: &str) {
+    fn end_xact_measurement(&mut self, rollback_reason: &str) {
         let region = self.node_id.to_string();
         let coordinator = self.coordinator_id.unwrap().to_string();
         let is_local = (self.node_id == self.coordinator_id.unwrap()).to_string();
+
+        self.total_duration_timer.take().unwrap().stop_and_record();
 
         FINISHED_XACTS
             .with_label_values(&[&region, &coordinator, &is_local, rollback_reason])

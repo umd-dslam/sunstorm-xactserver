@@ -39,6 +39,8 @@ pub enum XsMessage {
 pub enum XactStatus {
     Uninitialized,
     Waiting,
+    Committing,
+    Rollbacking(RollbackInfo),
     Committed,
     Rollbacked(RollbackInfo),
 }

@@ -211,7 +211,7 @@ fn start_manager(
     Ok(thread::Builder::new()
         .name("xact manager".into())
         .spawn(move || {
-            tokio::runtime::Builder::new_current_thread()
+            tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()?
                 .block_on(manager.run())?;
