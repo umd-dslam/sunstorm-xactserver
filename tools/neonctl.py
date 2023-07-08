@@ -49,7 +49,8 @@ class XactServer:
 
     def run(self, args: List[str], **kwargs):
         cwd = kwargs.get("cwd", os.getcwd())
-        logger.info(f"[{cwd}]: {os.path.basename(self.bin)} {' '.join(args)}")
+        bin_name = self.bin if self.dry_run else os.path.basename(self.bin)
+        logger.info(f"[{cwd}]: {bin_name} {' '.join(args)}")
 
         if self.dry_run:
             return
@@ -95,6 +96,11 @@ class NeonCommand(Command):
         parser.add_argument(
             "--xactserver-dir", type=str, help="The directory to xactserver codebase"
         )
+        parser.add_argument(
+            "--no-xactserver",
+            action="store_true",
+            help="Print the command to start xactserver but don't actually start it",
+        )
         parser.add_argument("--dry-run", action="store_true", help="Dry run")
 
     def get_neon(self, args):
@@ -126,7 +132,7 @@ class NeonCommand(Command):
             )
             exit(1)
 
-        return XactServer(xactserver_bin, {}, args.dry_run)
+        return XactServer(xactserver_bin, {}, args.dry_run or args.no_xactserver)
 
     def get_regions_in_root_dir(self, args):
         return sorted(
@@ -138,19 +144,33 @@ class NeonCommand(Command):
         )
 
     def start_all_regions(self, args):
-        neon = self.get_neon(args)
-        xactserver = self.get_xactserver(args)
-        regions = self.get_regions_in_root_dir(args)
-        xactserver_nodes = [
-            f"http://localhost:{23000 + i}" for i in range(len(regions))
+        regions_and_dirs = [
+            (r, os.path.join(args.data_dir, r))
+            for r in self.get_regions_in_root_dir(args)
         ]
-        for i, region in enumerate(regions):
-            region_dir = os.path.join(args.data_dir, region)
-            neon.run(["start"], cwd=region_dir)
+
+        logger.info("Starting neon in all regions")
+
+        neon = self.get_neon(args)
+        for region, dir in regions_and_dirs:
+            neon.run(["start"], cwd=dir)
             neon.run(
                 ["endpoint", "start", region],
-                cwd=region_dir,
+                cwd=dir,
             )
+
+        if args.no_xactserver:
+            logger.warning(
+                "Xactservers are not started. Run the following commands in separate terminals to start the xactservers"
+            )
+        else:
+            logger.info("Starting xactserver in all regions")
+
+        xactserver = self.get_xactserver(args)
+        xactserver_nodes = [
+            f"http://localhost:{23000 + i}" for i in range(len(regions_and_dirs))
+        ]
+        for i, (region, dir) in enumerate(regions_and_dirs):
             xactserver.run(
                 [
                     "--node-id",
@@ -164,17 +184,23 @@ class NeonCommand(Command):
                     "--listen-http",
                     f"127.0.0.1:{8080 + i}",
                 ],
-                cwd=region_dir,
+                cwd=dir,
             )
 
     def stop_all_regions(self, args):
-        neon = self.get_neon(args)
+        region_dirs = [
+            os.path.join(args.data_dir, r) for r in self.get_regions_in_root_dir(args)
+        ]
+
+        logger.info("Stopping xactserver in all regions")
         xactserver = self.get_xactserver(args)
-        regions = self.get_regions_in_root_dir(args)
-        for region in regions:
-            region_dir = os.path.join(args.data_dir, region)
-            neon.run(["stop"], cwd=region_dir, check=False)
-            xactserver.stop(cwd=region_dir)
+        for dir in region_dirs:
+            xactserver.stop(cwd=dir)
+
+        logger.info("Stopping neon in all regions")
+        neon = self.get_neon(args)
+        for dir in region_dirs:
+            neon.run(["stop"], cwd=dir, check=False)
 
 
 class CreateCommand(NeonCommand):
