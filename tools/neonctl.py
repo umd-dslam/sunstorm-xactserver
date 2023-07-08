@@ -3,12 +3,14 @@
 #
 # Example:
 #   export NEON_DIR=~/src/neon
+#   export XACTSERVER_DIR=~/src/xactserver
 #   python3 tools/neonctl.py create ~/neon_data -r 3
 #   python3 tools/neonctl.py start ~/neon_data
 #   python3 tools/neonctl.py destroy ~/neon_data
 #
 
 import os
+import signal
 import shutil
 import subprocess
 from typing import List, Dict
@@ -39,26 +41,92 @@ class Neon:
             raise e
 
 
+class XactServer:
+    def __init__(self, bin: str, env: Dict[str, str], dry_run: bool):
+        self.bin = bin
+        self.env = env
+        self.dry_run = dry_run
+
+    def run(self, args: List[str], **kwargs):
+        cwd = kwargs.get("cwd", os.getcwd())
+        logger.info(f"[{cwd}]: {os.path.basename(self.bin)} {' '.join(args)}")
+
+        if self.dry_run:
+            return
+
+        with open(os.path.join(cwd, "xactserver.pid"), "w") as f:
+            process = subprocess.Popen(
+                [self.bin] + args,
+                env=self.env,
+                start_new_session=True,
+                stderr=subprocess.STDOUT,
+                stdout=subprocess.DEVNULL,
+                **kwargs,
+            )
+            f.write(str(process.pid))
+
+    def stop(self, cwd=None):
+        cwd = os.getcwd() if cwd is None else cwd
+
+        if self.dry_run:
+            return
+
+        pid_file = os.path.join(cwd, "xactserver.pid")
+
+        if not os.path.isfile(pid_file):
+            logger.info("No xactserver.pid file found. Skipping")
+            return
+
+        with open(pid_file, "r") as f:
+            pid = int(f.read())
+            logger.info(f"Stopping xactserver with pid {pid}")
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                logger.info(f"Process with pid {pid} does not exist. Skipping")
+
+
 class NeonCommand(Command):
     def add_arguments(self, parser):
         parser.add_argument("data_dir", type=str, help="The directory to neon data")
         parser.add_argument(
             "--neon-dir", type=str, help="The directory to neon codebase"
         )
+        parser.add_argument(
+            "--xactserver-dir", type=str, help="The directory to xactserver codebase"
+        )
         parser.add_argument("--dry-run", action="store_true", help="Dry run")
 
     def get_neon(self, args):
-        neon_dir = args.neon_dir or os.environ.get("NEON_DIR")
-        if not neon_dir:
-            logger.critical("Specify --neon-dir or set NEON_DIR environment variable")
+        neon_dir = args.neon_dir or os.environ.get("NEON_DIR", ".")
+        neon_bin = os.path.abspath(os.path.join(neon_dir, "target/debug/neon_local"))
+        if not os.path.isfile(neon_bin):
+            logger.critical(
+                "Cannot find neon_local binary. Specify --neon-dir or set NEON_DIR environment variable"
+            )
             exit(1)
+
         return Neon(
-            os.path.join(neon_dir, "target/debug/neon_local"),
+            neon_bin,
             {
                 "POSTGRES_DISTRIB_DIR": os.path.join(neon_dir, "pg_install"),
             },
             args.dry_run,
         )
+
+    def get_xactserver(self, args):
+        xactserver_dir = os.environ.get("XACTSERVER_DIR", ".")
+        xactserver_bin = os.path.abspath(
+            os.path.join(xactserver_dir, "target/debug/xactserver")
+        )
+
+        if not os.path.isfile(xactserver_bin):
+            logger.critical(
+                "Cannot find xactserver binary. Specify --xactserver-dir or set XACTSERVER_DIR environment variable"
+            )
+            exit(1)
+
+        return XactServer(xactserver_bin, {}, args.dry_run)
 
     def get_regions_in_root_dir(self, args):
         return sorted(
@@ -71,21 +139,42 @@ class NeonCommand(Command):
 
     def start_all_regions(self, args):
         neon = self.get_neon(args)
+        xactserver = self.get_xactserver(args)
         regions = self.get_regions_in_root_dir(args)
-        for region in regions:
+        xactserver_nodes = [
+            f"http://localhost:{23000 + i}" for i in range(len(regions))
+        ]
+        for i, region in enumerate(regions):
             region_dir = os.path.join(args.data_dir, region)
             neon.run(["start"], cwd=region_dir)
             neon.run(
                 ["endpoint", "start", region],
                 cwd=region_dir,
             )
+            xactserver.run(
+                [
+                    "--node-id",
+                    str(i),
+                    "--listen-pg",
+                    f"127.0.0.1:{10000 + i}",
+                    "--connect-pg",
+                    f"postgresql://cloud_admin@localhost:{55432 + 2 * i}/postgres",
+                    "--nodes",
+                    ",".join(xactserver_nodes),
+                    "--listen-http",
+                    f"127.0.0.1:{8080 + i}",
+                ],
+                cwd=region_dir,
+            )
 
     def stop_all_regions(self, args):
         neon = self.get_neon(args)
+        xactserver = self.get_xactserver(args)
         regions = self.get_regions_in_root_dir(args)
         for region in regions:
             region_dir = os.path.join(args.data_dir, region)
             neon.run(["stop"], cwd=region_dir, check=False)
+            xactserver.stop(cwd=region_dir)
 
 
 class CreateCommand(NeonCommand):
