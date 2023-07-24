@@ -88,6 +88,11 @@ class XactServer:
 
 
 class NeonCommand(Command):
+    def __init__(self):
+        super().__init__()
+        self.neon_bin = None
+        self.xactserver_bin = None
+
     def add_arguments(self, parser):
         parser.add_argument("data_dir", type=str, help="The directory to neon data")
         parser.add_argument(
@@ -104,35 +109,72 @@ class NeonCommand(Command):
         parser.add_argument("--dry-run", action="store_true", help="Dry run")
 
     def get_neon(self, args):
-        neon_dir = args.neon_dir or os.environ.get("NEON_DIR", ".")
-        neon_bin = os.path.abspath(os.path.join(neon_dir, "target/debug/neon_local"))
-        if not os.path.isfile(neon_bin):
-            logger.critical(
-                "Cannot find neon_local binary. Specify --neon-dir or set NEON_DIR environment variable"
-            )
-            exit(1)
+        if self.neon_bin is None:
+            neon_dir = args.neon_dir or os.environ.get("NEON_DIR", ".")
+            neon_bin_candidates = [
+                os.path.abspath(os.path.join(neon_dir, b))
+                for b in [
+                    "target/debug/neon_local",
+                    "target/release/neon_local",
+                ]
+            ]
 
-        return Neon(
-            neon_bin,
-            {
-                "POSTGRES_DISTRIB_DIR": os.path.join(neon_dir, "pg_install"),
-            },
-            args.dry_run,
-        )
+            neon_bin_path = None
+            for b in neon_bin_candidates:
+                if os.path.isfile(b):
+                    neon_bin_path = b
+                    break
+
+            if neon_bin_path is None:
+                logger.critical(
+                    "Cannot find neon_local binary. Specify --neon-dir or set NEON_DIR environment variable"
+                )
+                exit(1)
+
+            logger.info("Using neon_local binary at: %s", neon_bin_path)
+
+            self.neon_bin = Neon(
+                neon_bin_path,
+                {
+                    "POSTGRES_DISTRIB_DIR": os.path.join(neon_dir, "pg_install"),
+                },
+                args.dry_run,
+            )
+
+        return self.neon_bin
 
     def get_xactserver(self, args):
-        xactserver_dir = os.environ.get("XACTSERVER_DIR", ".")
-        xactserver_bin = os.path.abspath(
-            os.path.join(xactserver_dir, "target/debug/xactserver")
-        )
-
-        if not os.path.isfile(xactserver_bin):
-            logger.critical(
-                "Cannot find xactserver binary. Specify --xactserver-dir or set XACTSERVER_DIR environment variable"
+        if self.xactserver_bin is None:
+            xactserver_dir = args.xactserver_dir or os.environ.get(
+                "XACTSERVER_DIR", "."
             )
-            exit(1)
+            xactserver_bin_candidates = [
+                os.path.abspath(os.path.join(xactserver_dir, b))
+                for b in [
+                    "target/debug/xactserver",
+                    "target/release/xactserver",
+                ]
+            ]
 
-        return XactServer(xactserver_bin, {}, args.dry_run or args.no_xactserver)
+            xactserver_bin_path = None
+            for b in xactserver_bin_candidates:
+                if os.path.isfile(b):
+                    xactserver_bin_path = b
+                    break
+
+            if xactserver_bin_path is None:
+                logger.critical(
+                    "Cannot find xactserver binary. Specify --xactserver-dir or set XACTSERVER_DIR environment variable"
+                )
+                exit(1)
+
+            logger.info("Using xactserver binary at: %s", xactserver_bin_path)
+
+            self.xactserver_bin = XactServer(
+                xactserver_bin_path, {}, args.dry_run or args.no_xactserver
+            )
+
+        return self.xactserver_bin
 
     def get_regions_in_root_dir(self, args):
         return sorted(
@@ -191,14 +233,14 @@ class NeonCommand(Command):
         region_dirs = [
             os.path.join(args.data_dir, r) for r in self.get_regions_in_root_dir(args)
         ]
+        xactserver = self.get_xactserver(args)
+        neon = self.get_neon(args)
 
         logger.info("Stopping xactserver in all regions")
-        xactserver = self.get_xactserver(args)
         for dir in region_dirs:
             xactserver.stop(cwd=dir)
 
         logger.info("Stopping neon in all regions")
-        neon = self.get_neon(args)
         for dir in region_dirs:
             neon.run(["stop"], cwd=dir, check=False)
 
