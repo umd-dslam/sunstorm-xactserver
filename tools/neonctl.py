@@ -233,13 +233,13 @@ class NeonCommand(Command):
         region_dirs = [
             os.path.join(args.data_dir, r) for r in self.get_regions_in_root_dir(args)
         ]
-        xactserver = self.get_xactserver(args)
+        if not args.no_xactserver:
+            xactserver = self.get_xactserver(args)
+            logger.info("Stopping xactserver in all regions")
+            for dir in region_dirs:
+                xactserver.stop(cwd=dir)
+
         neon = self.get_neon(args)
-
-        logger.info("Stopping xactserver in all regions")
-        for dir in region_dirs:
-            xactserver.stop(cwd=dir)
-
         logger.info("Stopping neon in all regions")
         for dir in region_dirs:
             neon.run(["stop"], cwd=dir, check=False)
