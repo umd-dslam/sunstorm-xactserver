@@ -8,7 +8,7 @@
 #   python3 tools/neonctl.py start ~/neon_data
 #   python3 tools/neonctl.py destroy ~/neon_data
 #
-
+import argparse
 import os
 import signal
 import shutil
@@ -95,17 +95,6 @@ class NeonCommand(Command):
 
     def add_arguments(self, parser):
         parser.add_argument("data_dir", type=str, help="The directory to neon data")
-        parser.add_argument(
-            "--neon-dir", type=str, help="The directory to neon codebase"
-        )
-        parser.add_argument(
-            "--xactserver-dir", type=str, help="The directory to xactserver codebase"
-        )
-        parser.add_argument(
-            "--no-xactserver",
-            action="store_true",
-            help="Print the command to start xactserver but don't actually start it",
-        )
         parser.add_argument("--dry-run", action="store_true", help="Dry run")
 
     def get_neon(self, args):
@@ -114,6 +103,7 @@ class NeonCommand(Command):
             neon_bin_candidates = [
                 os.path.abspath(os.path.join(neon_dir, b))
                 for b in [
+                    "neon_local",
                     "target/debug/neon_local",
                     "target/release/neon_local",
                 ]
@@ -136,7 +126,8 @@ class NeonCommand(Command):
             self.neon_bin = Neon(
                 neon_bin_path,
                 {
-                    "POSTGRES_DISTRIB_DIR": os.path.join(neon_dir, "pg_install"),
+                    "POSTGRES_DISTRIB_DIR": args.pg_dir
+                    or os.path.join(neon_dir, "pg_install"),
                 },
                 args.dry_run,
             )
@@ -151,6 +142,7 @@ class NeonCommand(Command):
             xactserver_bin_candidates = [
                 os.path.abspath(os.path.join(xactserver_dir, b))
                 for b in [
+                    "xactserver",
                     "target/debug/xactserver",
                     "target/release/xactserver",
                 ]
@@ -363,8 +355,21 @@ class DestroyCommand(NeonCommand):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Manage a local multi-region neon cluster"
+    )
+    parser.add_argument("--neon-dir", type=str, help="The directory to neon binary")
+    parser.add_argument("--pg-dir", type=str, help="The directory to pg binary")
+    parser.add_argument(
+        "--xactserver-dir", type=str, help="The directory to xactserver binary"
+    )
+    parser.add_argument(
+        "--no-xactserver",
+        action="store_true",
+        help="Print the command to start xactserver but don't actually start it",
+    )
     initialize_and_run_commands(
-        "Manage a local multi-region neon cluster",
+        parser,
         [
             CreateCommand,
             StartCommand,

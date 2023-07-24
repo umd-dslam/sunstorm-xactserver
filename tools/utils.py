@@ -61,8 +61,7 @@ class Command:
         pass
 
 
-def initialize_and_run_commands(description, commands, args=None):
-    parser = argparse.ArgumentParser(description=description)
+def initialize_and_run_commands(parser, commands, args=None):
     subparsers = parser.add_subparsers(dest="command name")
     subparsers.required = True
 
