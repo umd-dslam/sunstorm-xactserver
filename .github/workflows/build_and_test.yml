@@ -98,10 +98,18 @@ jobs:
         run: echo "{\"auths\":{\"https://index.docker.io/v1/\":{\"auth\":\"${{secrets.DOCKERHUB_CRED_BASE64}}\"}}}" > /kaniko/.docker/config.json
 
       - name: Build xactserver image
-        run: /kaniko/executor --cache=true --cache-repo ctring/xactserver-cache --snapshotMode=redo --context . --destination ctring/xactserver:${{needs.tag.outputs.build-tag}}
+        run: 
+          /kaniko/executor --cache=true --cache-repo ctring/xactserver-cache
+                           --snapshotMode=redo 
+                           --context . 
+                           --destination ctring/xactserver:${{needs.tag.outputs.build-tag}}
 
       - name: Build neonctl image
-        run: /kaniko/executor --snapshotMode=redo --context ./tools --destination ctring/neonctl:${{needs.tag.outputs.build-tag}}
+        run: 
+          /kaniko/executor --snapshotMode=redo 
+                           --context ./tools 
+                           --dockerfile ./tools/Dockerfile
+                           --destination ctring/neonctl:${{needs.tag.outputs.build-tag}}
   
   promote-image:
     runs-on: ubuntu-latest
