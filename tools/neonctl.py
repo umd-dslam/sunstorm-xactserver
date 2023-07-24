@@ -121,13 +121,15 @@ class NeonCommand(Command):
                 )
                 exit(1)
 
+            pg_dir = args.pg_dir or os.path.join(neon_dir, "pg_install")
+
             logger.info("Using neon_local binary at: %s", neon_bin_path)
+            logger.info("Using Postgres distribution at: %s", pg_dir)
 
             self.neon_bin = Neon(
                 neon_bin_path,
                 {
-                    "POSTGRES_DISTRIB_DIR": args.pg_dir
-                    or os.path.join(neon_dir, "pg_install"),
+                    "POSTGRES_DISTRIB_DIR": pg_dir,
                 },
                 args.dry_run,
             )
@@ -189,7 +191,7 @@ class NeonCommand(Command):
         for region, dir in regions_and_dirs:
             neon.run(["start"], cwd=dir)
             neon.run(
-                ["endpoint", "start", region],
+                ["endpoint", "start", region, "--pg-version", args.pg_version],
                 cwd=dir,
             )
 
@@ -246,6 +248,9 @@ class CreateCommand(NeonCommand):
         parser.add_argument("--num-regions", "-r", type=int, default=3)
         parser.add_argument("--pg-version", choices=["14", "15"], default="14")
         parser.add_argument("--region-prefix", "-p", type=str, default="r")
+        parser.add_argument(
+            "--keep-neon", action="store_true", help="Keep neon running afterwards"
+        )
 
     def do_command(self, args):
         neon = self.get_neon(args)
@@ -260,10 +265,6 @@ class CreateCommand(NeonCommand):
         neon.run(["start"], cwd=global_region_dir)
         neon.run(
             ["tenant", "create", "--set-default", "--pg-version", args.pg_version],
-            cwd=global_region_dir,
-        )
-        neon.run(
-            ["endpoint", "start", region_names[0], "--pg-version", args.pg_version],
             cwd=global_region_dir,
         )
 
@@ -285,7 +286,8 @@ class CreateCommand(NeonCommand):
                 cwd=global_region_dir,
             )
 
-        neon.run(["stop"], cwd=global_region_dir)
+        if not args.keep_neon:
+            neon.run(["stop"], cwd=global_region_dir)
 
         logger.info(
             "============== CLONING THE GLOBAL REGION TO OTHER REGIONS =============="
@@ -327,6 +329,10 @@ class CreateCommand(NeonCommand):
 class StartCommand(NeonCommand):
     NAME = "start"
     HELP = "Start a local multi-region neon cluster"
+
+    def add_arguments(self, parser):
+        super().add_arguments(parser)
+        parser.add_argument("--pg-version", choices=["14", "15"], default="14")
 
     def do_command(self, args):
         self.start_all_regions(args)
