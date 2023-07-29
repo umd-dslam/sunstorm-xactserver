@@ -1,0 +1,5 @@
+regions:
+  - us-east-1
+  - us-west-1
+
+global_region: us-east-1

@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: xactserver
+  labels:
+    app: xactserver
+    part-of: neon
+spec:
+  ports:
+    - name: postgres
+      targetPort: postgres
+      port: 10000
+    - name: http
+      targetPort: http
+      port: 8080
+  selector:
+    app: xactserver
+  # In general, service IPs and pod IPs come from different CIDR ranges.
+  # In AWS, the pods are assigned IPs direclty from the VPC subnet whereas
+  # the service IPs are assigned from a virtual range, which is not easily
+  # accessible from a different region. The VPC subnets, however, can be easily
+  # routed between regions. Therefore, we use a headless service (setting 
+  # clusterIP to None) to expose the pod IPs directly instead of using the service IP.
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xactserver
+  labels:
+    app: xactserver
+    part-of: neon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: xactserver
+  template:
+    metadata:
+      labels:
+        app: xactserver
+        part-of: neon
+    spec:
+      containers:
+        - name: xactserver
+          image: ctring/xactserver:latest
+          args:
+            - --listen-pg=0.0.0.0:10000
+            - --connect-pg=postgresql://cloud_admin@compute:55433/postgres
+            - --node-id={{ include "regionId" . }}
+            - --nodes={{ include "xactserverNodes" . }}
+            - --listen-http=0.0.0.0:8080
+          ports:
+            - name: postgres
+              containerPort: 10000
+            - name: http
+              containerPort: 8080
+      hostAliases:
+        - ip: "0.0.0.0"
+          hostnames:
+            - xactserver.{{ .Release.Namespace }}
+      restartPolicy: Always

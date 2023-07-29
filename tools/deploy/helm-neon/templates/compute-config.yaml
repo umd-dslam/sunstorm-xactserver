@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: compute-config
+  labels:
+    app: compute-config
+    component: compute
+    part-of: neon
+data:
+  spec-template.json: |
+{{ .Files.Get "compute/spec-template.json" | indent 4 }}

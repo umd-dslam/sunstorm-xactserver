@@ -1,0 +1,59 @@
+{{ if eq .Release.Namespace "global" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  labels:
+    app: minio
+    part-of: neon
+spec:
+  ports:
+    - name: api
+      targetPort: api
+      port: 9000
+    - name: console
+      targetPort: console
+      port: 9001
+  selector:
+    app: minio
+  # In general, service IPs and pod IPs come from different CIDR ranges.
+  # In AWS, the pods are assigned IPs direclty from the VPC subnet whereas
+  # the service IPs are assigned from a virtual range, which is not easily
+  # accessible from a different region. The VPC subnets, however, can be easily
+  # routed between regions. Therefore, we use a headless service (setting 
+  # clusterIP to None) to expose the pod IPs directly instead of using the service IP.
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: minio
+  labels:
+    app: minio
+    part-of: neon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+        part-of: neon
+    spec:
+      containers:
+      - name: minio
+        image: quay.io/minio/minio:RELEASE.2022-11-17T23-20-09Z
+        args: 
+          - server
+          - /data
+          - --console-address
+          - :9001
+        ports: 
+          - name: api
+            containerPort: 9000
+          - name: console
+            containerPort: 9001
+{{ end }}

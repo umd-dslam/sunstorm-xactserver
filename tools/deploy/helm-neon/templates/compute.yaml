@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: compute
+  labels:
+    app: compute
+    component: compute
+    part-of: neon
+spec:
+  ports:
+    - name: postgres
+      targetPort: postgres
+      port: 55433
+    - name: http
+      targetPort: http
+      port: 3080
+  selector:
+    app: compute
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: compute
+  labels:
+    app: compute
+    component: compute
+    part-of: neon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: compute
+  template:
+    metadata:
+      labels:
+        app: compute
+        component: compute
+        part-of: neon
+    spec:
+      containers:
+        - name: postgres
+          image: ctring/compute-node-v14:latest
+          env:
+            - name: REGION
+              value: {{ include "regionId" . | quote }}
+            - name: SAFEKEEPERS_ADDR
+              value: safekeeper:5454
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              {{- .Files.Get "compute/run.sh" | indent 14 }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+          ports:
+            - name: postgres
+              containerPort: 55433
+            - name: http
+              containerPort: 3080
+      restartPolicy: Always
+      volumes:
+        - name: config
+          configMap:
+            name: compute-config

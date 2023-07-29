@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pageserver
+  labels:
+    app: pageserver
+    component: storage
+    part-of: neon
+spec:
+  ports:
+    - name: postgres
+      targetPort: postgres
+      port: 6400
+    - name: http
+      targetPort: http
+      port: 9898
+  selector:
+    app: pageserver
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pageserver
+  labels:
+    app: pageserver
+    component: storage
+    part-of: neon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pageserver
+  template:
+    metadata:
+      labels:
+        app: pageserver
+        component: storage
+        part-of: neon
+    spec:
+      containers:
+        - name: pageserver
+          image: ctring/neon:latest
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              until (/usr/bin/mc alias set minio http://minio.global:9000 minioadmin minioadmin) do
+                  echo 'Waiting to start minio...' && sleep 1
+              done
+              rm -rf /data/.neon
+              /usr/bin/mc cp -r minio/neon/.neon /data
+              /usr/local/bin/pageserver -D /data/.neon/                                               \
+                                        -c "broker_endpoint='http://storage-broker.global:50051'"  \
+                                        -c "listen_pg_addr='0.0.0.0:6400'"                            \
+                                        -c "listen_http_addr='0.0.0.0:9898'"
+          ports:
+            - name: postgres
+              containerPort: 6400
+            - name: http
+              containerPort: 9898
+      restartPolicy: Always

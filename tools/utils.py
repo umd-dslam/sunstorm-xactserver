@@ -1,5 +1,6 @@
-import argparse
 import logging
+import itertools
+import time
 
 
 class CustomFormatter(logging.Formatter):
@@ -29,11 +30,15 @@ class CustomFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-def get_logger(name: str, level: int = logging.DEBUG):
+def get_logger(
+    name: str,
+    level: int = logging.INFO,
+    fmt: str = "%(asctime)s %(levelname)5s - %(message)s",
+):
     logger = logging.getLogger(name)
     ch = logging.StreamHandler()
     ch.setLevel(level)
-    ch.setFormatter(CustomFormatter("%(asctime)s %(levelname)5s - %(message)s"))
+    ch.setFormatter(CustomFormatter(fmt))
     logger.addHandler(ch)
     logger.setLevel(level)
     return logger
@@ -70,3 +75,16 @@ def initialize_and_run_commands(parser, commands, args=None):
 
     parsed_args = parser.parse_args(args)
     parsed_args.run(parsed_args)
+
+
+def reset_spinner():
+    print("\r", end="")
+
+
+def spin_while(cond_fn):
+    spinner = itertools.cycle(["-", "/", "|", "\\"])
+    start_time = time.time()
+    while cond_fn(time.time() - start_time):
+        time.sleep(0.1)
+        print(f"\r{next(spinner)}", end="")
+    print("\r", end="")
