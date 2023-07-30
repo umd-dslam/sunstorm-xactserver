@@ -17,14 +17,14 @@ managedNodeGroups:
   - name: servers
     instanceType: c5.4xlarge
     spot: true
+    desiredCapacity: 2
+    securityGroups:
+      attachIDs:
+        - sg-05538d3ef06e925d8
+  - name: clients
+    instanceType: c5.xlarge
+    spot: true
     desiredCapacity: 1
     securityGroups:
       attachIDs:
         - sg-05538d3ef06e925d8
-  # - name: clients
-  #   instanceType: c5.xlarge
-  #   spot: true
-  #   desiredCapacity: 1
-  #   securityGroups:
-  #     attachIDs:
-  #       - sg-05538d3ef06e925d8

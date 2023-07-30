@@ -189,7 +189,9 @@ def create_namespaces(regions: List[str], global_region: str, dry_run: bool):
         create_namespace(region, region)
 
 
-def deploy_neon(regions: List[str], global_region: str, dry_run: bool):
+def deploy_neon(
+    regions: List[str], global_region: str, cleanup_only: bool, dry_run: bool
+):
     def clean_up_neon_one_namespace(region, namespace):
         cmd = [
             "helm",
@@ -229,13 +231,47 @@ def deploy_neon(regions: List[str], global_region: str, dry_run: bool):
         clean_up_neon_one_namespace(region, region)
     clean_up_neon_one_namespace(global_region, "global")
 
+    if cleanup_only:
+        return
+
     deploy_neon_one_namespace(global_region, "global")
     for region in regions:
         deploy_neon_one_namespace(region, region)
 
 
+STAGES = [
+    "load-balancer",
+    "dns-config",
+    "namespace",
+    "neon",
+]
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--skip-before",
+        "--from",
+        "-f",
+        choices=STAGES,
+        help="Skip all stages before the specified stage.",
+    )
+    parser.add_argument(
+        "--skip-after",
+        "--to",
+        "-t",
+        choices=STAGES,
+        help="Skip all stages after the specified stage.",
+    )
+    parser.add_argument(
+        "--clean-up-neon",
+        action="store_true",
+        help='Only do the cleaning up in the "neon" stage.',
+    )
+    parser.add_argument(
+        "--stages",
+        action="store_true",
+        help="Print the available stages and exit.",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -243,21 +279,40 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    if args.stages:
+        print("\n".join(STAGES))
+        exit(0)
+
+    skip_before_index = STAGES.index(args.skip_before) if args.skip_before else 0
+    skip_after_index = (
+        STAGES.index(args.skip_after) if args.skip_after else len(STAGES) - 1
+    )
+
+    unskipped_stages = STAGES[skip_before_index : skip_after_index + 1]
+
     with open(BASE_PATH / REGIONS_YAML, "r") as yaml_file:
         info = yaml.safe_load(yaml_file)
 
-    LOG.info(
-        f"======================== Setting up load balancer for CoreDNS ========================"
-    )
-    set_up_load_balancer_for_coredns(info["regions"], args.dry_run)
+    if "load-balancer" in unskipped_stages:
+        LOG.info(
+            f"======================== Setting up load balancer for CoreDNS ========================"
+        )
+        set_up_load_balancer_for_coredns(info["regions"], args.dry_run)
 
-    LOG.info(
-        f"======================== Installing DNS configmap ========================"
-    )
-    install_dns_configmap(info["regions"], info["global_region"], args.dry_run)
+    if "dns-config" in unskipped_stages:
+        LOG.info(
+            f"======================== Installing DNS configmap ========================"
+        )
+        install_dns_configmap(info["regions"], info["global_region"], args.dry_run)
 
-    LOG.info(f"======================== Creating namespaces ========================")
-    create_namespaces(info["regions"], info["global_region"], args.dry_run)
+    if "namespace" in unskipped_stages:
+        LOG.info(
+            f"======================== Creating namespaces ========================"
+        )
+        create_namespaces(info["regions"], info["global_region"], args.dry_run)
 
-    LOG.info(f"======================== Deploying Neon ========================")
-    deploy_neon(info["regions"], info["global_region"], args.dry_run)
+    if "neon" in unskipped_stages:
+        LOG.info(f"======================== Deploying Neon ========================")
+        deploy_neon(
+            info["regions"], info["global_region"], args.clean_up_neon, args.dry_run
+        )

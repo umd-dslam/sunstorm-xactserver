@@ -1,6 +1,6 @@
 apiVersion: v2
 name: helm-dns
-description: A Helm chart for Kubernetes
+description: A Helm chart for deploying the configmap for CoreDNS to facilitate cross-region address resolution 
 
 # A chart can be either an 'application' or a 'library' chart.
 #

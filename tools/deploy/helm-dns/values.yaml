@@ -1,7 +1,6 @@
-# Default values for helm-dns.
-# This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
-# Example:
+# The values here will be filled in by the deploy.py script so we don't specify them here.
+# The following values are just for reference.
+#
 # addresses:
 #   us-east-1:
 #     - "1.1.1.1"

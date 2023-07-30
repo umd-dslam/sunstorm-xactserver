@@ -50,7 +50,7 @@ spec:
             - -c
           args:
             - |
-              {{- .Files.Get "compute/run.sh" | indent 14 }}
+              {{- .Files.Get "compute.sh" | indent 14 }}
           volumeMounts:
             - name: config
               mountPath: /config
