@@ -59,4 +59,23 @@ spec:
               containerPort: 6400
             - name: http
               containerPort: 9898
-      restartPolicy: Always
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              preference:
+                matchExpressions:
+                  - key: role
+                    operator: In
+                    values:
+                      - server
+        podAntiAffinity:
+          # This is to ensure that pageserver pods are not scheduled on the same node.
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                    - pageserver
+              topologyKey: "kubernetes.io/hostname"

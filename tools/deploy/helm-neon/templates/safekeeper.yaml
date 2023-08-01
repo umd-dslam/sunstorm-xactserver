@@ -64,3 +64,40 @@ spec:
           hostnames:
             - safekeeper.{{ .Release.Namespace }}
       restartPolicy: Always
+      affinity:
+        nodeAffinity:
+          # Prefer to schedule safekeeper pods on nodes with the role "safekeeper".
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: role
+                operator: In
+                values:
+                - server
+        podAntiAffinity:
+          # This is to ensure that safekeeper pods are not scheduled on the same node.
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                    - safekeeper
+                topologyKey: "kubernetes.io/hostname"
+          {{- if ne .Release.Namespace "global" }}
+          # We prefer that safekeeper pods are not scheduled on the same node as pageserver, xactserver, or compute.
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - pageserver
+                        - xactserver  
+                        - compute
+                topologyKey: "kubernetes.io/hostname"
+          {{- end }}
+

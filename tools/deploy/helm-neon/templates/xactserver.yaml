@@ -60,3 +60,13 @@ spec:
           hostnames:
             - xactserver.{{ .Release.Namespace }}
       restartPolicy: Always
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - pageserver
+              topologyKey: "kubernetes.io/hostname"

@@ -52,4 +52,14 @@ spec:
             - name: api
               containerPort: 50051
       restartPolicy: Always
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
+                - key: role
+                  operator: In
+                  values:
+                    - server
 {{ end }}

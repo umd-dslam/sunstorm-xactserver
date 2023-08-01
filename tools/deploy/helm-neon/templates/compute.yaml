@@ -36,6 +36,7 @@ spec:
         app: compute
         component: compute
         part-of: neon
+        locality: {{ if eq .Release.Namespace "global" -}} global {{- else -}} local {{- end }}
     spec:
       containers:
         - name: postgres
@@ -64,3 +65,14 @@ spec:
         - name: config
           configMap:
             name: compute-config
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - pageserver
+              topologyKey: "kubernetes.io/hostname"
+

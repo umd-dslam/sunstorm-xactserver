@@ -1,5 +1,8 @@
+# AWS regions to deploy to
 regions:
   - us-east-1
+  - us-east-2
   - us-west-1
 
+# The region among the above that contains the global resources
 global_region: us-east-1

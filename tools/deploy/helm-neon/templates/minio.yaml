@@ -27,7 +27,6 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  namespace: {{ .Release.Namespace }}
   name: minio
   labels:
     app: minio
@@ -56,4 +55,14 @@ spec:
             containerPort: 9000
           - name: console
             containerPort: 9001
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              preference:
+                matchExpressions:
+                  - key: role
+                    operator: In
+                    values:
+                      - server
 {{ end }}
