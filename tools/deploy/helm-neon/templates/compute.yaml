@@ -36,7 +36,6 @@ spec:
         app: compute
         component: compute
         part-of: neon
-        locality: {{ if eq .Release.Namespace "global" -}} global {{- else -}} local {{- end }}
     spec:
       containers:
         - name: postgres
@@ -45,7 +44,7 @@ spec:
             - name: REGION
               value: {{ include "regionId" . | quote }}
             - name: SAFEKEEPERS_ADDR
-              value: safekeeper:5454
+              value: {{ include "safekeeperNodes" . }}
           command:
             - /bin/sh
             - -c
@@ -67,6 +66,7 @@ spec:
             name: compute-config
       affinity:
         podAffinity:
+          # Compute nodes must be co-located with the pageserver
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchExpressions:

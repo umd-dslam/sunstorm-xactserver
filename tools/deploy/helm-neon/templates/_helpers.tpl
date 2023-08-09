@@ -13,12 +13,23 @@ Compute the region id.
 {{- end }}
 
 {{/*
-Compute the address of the xactserver nodes.
+Compute the addresses of the xactserver nodes.
 */}}
 {{- define "xactserverNodes" }}
 {{- $nodes := list }}
 {{- range $r := .Values.regions }}
 {{- $nodes = append $nodes (printf "http://xactserver.%s:23000" $r) }}
+{{- end -}}
+{{ join "," $nodes }}
+{{- end }}
+
+{{/*
+Compute the addresses of the safekeepers.
+*/}}
+{{- define "safekeeperNodes" }}
+{{- $nodes := list }}
+{{- range $i := until (int .Values.safekeeper_replicas) }}
+{{- $nodes = append $nodes (printf "safekeeper-%d.safekeeper:5454" $i) }}
 {{- end -}}
 {{ join "," $nodes }}
 {{- end }}

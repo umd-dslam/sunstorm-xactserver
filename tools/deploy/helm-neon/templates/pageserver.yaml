@@ -71,11 +71,13 @@ spec:
                       - server
         podAntiAffinity:
           # This is to ensure that pageserver pods are not scheduled on the same node.
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchExpressions:
-                  - key: app
-                    operator: In
-                    values:
-                    - pageserver
-              topologyKey: "kubernetes.io/hostname"
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                      - pageserver
+                topologyKey: "kubernetes.io/hostname"

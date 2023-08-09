@@ -1,4 +1,5 @@
 regions:
   - global
   - us-east-1
-  - us-west-1
+
+safekeeper_replicas: 1
