@@ -10,7 +10,7 @@ use std::{panic, process};
 use tokio::sync::mpsc;
 use url::Url;
 use xactserver::pg::PgWatcher;
-use xactserver::{Manager, Node, NodeId, XsMessage, DEFAULT_NODE_PORT, DUMMY_URL};
+use xactserver::{Manager, Node, NodeId, XsMessage, DUMMY_URL};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -46,6 +46,14 @@ struct Cli {
         help = "Comma-separated list of addresses of other xact servers in other regions"
     )]
     nodes: String,
+
+    #[arg(
+        long,
+        value_parser,
+        default_value = "0.0.0.0:23000",
+        help = "Address to listen for connections from other xact servers"
+    )]
+    listen_peer: SocketAddr,
 
     #[arg(
         long,
@@ -90,12 +98,9 @@ fn main() -> anyhow::Result<()> {
     }
 
     let nodes = parse_node_addresses(cli.nodes);
-    let listen_peers_url = nodes
-        .get(cli.node_id)
-        .unwrap_or_else(|| invalid_arg_error("invalid value for '--node-id': out of bound"));
 
     let (pg_watcher_handle, watcher_rx) = start_pg_watcher(cli.listen_pg)?;
-    let (node_handle, node_rx) = start_peer_listener(listen_peers_url)?;
+    let (node_handle, node_rx) = start_peer_listener(cli.listen_peer)?;
     let manager_handle = start_manager(
         cli.node_id,
         connect_pg,
@@ -170,11 +175,8 @@ fn start_pg_watcher(listen_pg: SocketAddr) -> anyhow::Result<HandleAndReceiver> 
     Ok((handle, watcher_rx))
 }
 
-fn start_peer_listener(listen_url: &Url) -> anyhow::Result<HandleAndReceiver> {
+fn start_peer_listener(listen_peer: SocketAddr) -> anyhow::Result<HandleAndReceiver> {
     let (node_tx, node_rx) = mpsc::channel(100);
-    let listen_peer = listen_url
-        .socket_addrs(|| Some(DEFAULT_NODE_PORT))
-        .unwrap_or_else(|e| invalid_arg_error(&e.to_string()))[0];
 
     info!("Listening to peers on {}", listen_peer);
     let node = Node::new(listen_peer, node_tx);
