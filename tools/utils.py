@@ -1,6 +1,9 @@
 import logging
 import itertools
 import time
+import yaml
+
+from pathlib import Path
 
 
 class CustomFormatter(logging.Formatter):
@@ -88,3 +91,21 @@ def spin_while(cond_fn):
         time.sleep(0.1)
         print(f"\r{next(spinner)}", end="")
     print("\r", end="")
+
+
+def get_regions(base_path):
+    with open(base_path / "regions.yaml", "r") as yaml_file:
+        return yaml.safe_load(yaml_file)
+
+
+def get_context(region: str) -> str:
+    kube_context = "-"
+    kube_config_file = Path.home() / ".kube" / "config"
+    with open(kube_config_file, "r") as kube_config_file:
+        kube_config = yaml.safe_load(kube_config_file)
+        for ctx in kube_config["contexts"]:
+            if region in ctx["name"]:
+                kube_context = ctx["name"]
+                break
+
+    return kube_context

@@ -10,14 +10,13 @@ import yaml
 
 from pathlib import Path
 from typing import List
-from utils import get_logger, spin_while
+from utils import get_logger, spin_while, get_regions, get_context
 
 LOG = get_logger(
     __name__,
     level=os.environ.get("LOG_LEVEL", "INFO").upper(),
 )
 
-REGIONS_YAML = "regions.yaml"
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
 
 
@@ -35,19 +34,6 @@ def try_with_timeout(fn, timeout: int):
 
         # Wait for 5 seconds before trying again
         spin_while(lambda elapsed: elapsed < 5)
-
-
-def get_context(region: str) -> str:
-    kube_context = "-"
-    kube_config_file = Path.home() / ".kube" / "config"
-    with open(kube_config_file, "r") as kube_config_file:
-        kube_config = yaml.safe_load(kube_config_file)
-        for ctx in kube_config["contexts"]:
-            if region in ctx["name"]:
-                kube_context = ctx["name"]
-                break
-
-    return kube_context
 
 
 def set_up_load_balancer_for_coredns(regions: List[str], dry_run: bool) -> str:
@@ -290,29 +276,35 @@ if __name__ == "__main__":
 
     unskipped_stages = STAGES[skip_before_index : skip_after_index + 1]
 
-    with open(BASE_PATH / REGIONS_YAML, "r") as yaml_file:
-        info = yaml.safe_load(yaml_file)
+    regions_info = get_regions(BASE_PATH)
 
     if "load-balancer" in unskipped_stages:
         LOG.info(
             f"======================== Setting up load balancer for CoreDNS ========================"
         )
-        set_up_load_balancer_for_coredns(info["regions"], args.dry_run)
+        set_up_load_balancer_for_coredns(regions_info["regions"], args.dry_run)
 
     if "dns-config" in unskipped_stages:
         LOG.info(
             f"======================== Installing DNS configmap ========================"
         )
-        install_dns_configmap(info["regions"], info["global_region"], args.dry_run)
+        install_dns_configmap(
+            regions_info["regions"], regions_info["global_region"], args.dry_run
+        )
 
     if "namespace" in unskipped_stages:
         LOG.info(
             f"======================== Creating namespaces ========================"
         )
-        create_namespaces(info["regions"], info["global_region"], args.dry_run)
+        create_namespaces(
+            regions_info["regions"], regions_info["global_region"], args.dry_run
+        )
 
     if "neon" in unskipped_stages:
         LOG.info(f"======================== Deploying Neon ========================")
         deploy_neon(
-            info["regions"], info["global_region"], args.clean_up_neon, args.dry_run
+            regions_info["regions"],
+            regions_info["global_region"],
+            args.clean_up_neon,
+            args.dry_run,
         )

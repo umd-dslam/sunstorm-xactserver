@@ -7,7 +7,7 @@ import yaml
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List
-from utils import get_logger, spin_while, reset_spinner
+from utils import get_logger, spin_while, reset_spinner, get_regions, get_context
 
 LOG = get_logger(
     __name__,
@@ -15,21 +15,7 @@ LOG = get_logger(
     fmt="%(asctime)s %(threadName)s %(levelname)5s - %(message)s",
 )
 
-REGIONS_YAML = "regions.yaml"
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
-
-
-def get_context(region: str) -> str:
-    kube_context = "-"
-    kube_config_file = Path.home() / ".kube" / "config"
-    with open(kube_config_file, "r") as kube_config_file:
-        kube_config = yaml.safe_load(kube_config_file)
-        for ctx in kube_config["contexts"]:
-            if region in ctx["name"]:
-                kube_context = ctx["name"]
-                break
-
-    return kube_context
 
 
 def parallel_eksctl(action: str, regions: List[str], dry_run: bool) -> str:
@@ -84,7 +70,6 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    with open(BASE_PATH / REGIONS_YAML, "r") as yaml_file:
-        info = yaml.safe_load(yaml_file)
+    info = get_regions(BASE_PATH)
 
     parallel_eksctl(args.action, info["regions"], args.dry_run)
