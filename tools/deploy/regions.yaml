@@ -4,5 +4,6 @@ regions:
   - us-east-2
   - us-west-1
 
-# The region among the above that contains the global resources
+# The region that contains the global resources. This region can
+# be one of the regions listed above, or a different region.
 global_region: us-east-1
