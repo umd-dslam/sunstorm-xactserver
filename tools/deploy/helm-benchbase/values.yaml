@@ -1,0 +1,33 @@
+# The first region should always be the global region
+# If you run benchmark.py, this value will be set automatically.
+regions: 
+  - global
+  - us-east-1
+
+# The benchmark to run 
+benchmark: "hot"
+
+# The operation to perform, can be "create", "load", or "execute"
+operation: "create"
+
+# Name of the result directory. Timestamp will be used if this is not set
+tag: null
+
+# Scale factor of the dataset. Its definition depends on the benchmark
+scalefactor: 20
+# Number of concurrent clients
+terminals: 1
+# Duration of the benchmark in seconds
+time: 3
+# Maximum throughput of the benchmark
+rate: 10000
+
+# Benchmark specific parameters
+
+# ============= HOT =============
+# Percentage of multi-region transactions
+mrpct: 0
+# Number of hot keys per partition
+hot: 0
+
+

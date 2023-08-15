@@ -50,9 +50,9 @@ spec:
               done
               rm -rf /data/.neon
               /usr/bin/mc cp -r minio/neon/.neon /data
-              /usr/local/bin/pageserver -D /data/.neon/                                               \
+              /usr/local/bin/pageserver -D /data/.neon/                                            \
                                         -c "broker_endpoint='http://storage-broker.global:50051'"  \
-                                        -c "listen_pg_addr='0.0.0.0:6400'"                            \
+                                        -c "listen_pg_addr='0.0.0.0:6400'"                         \
                                         -c "listen_http_addr='0.0.0.0:9898'"
           ports:
             - name: postgres

@@ -1,0 +1,28 @@
+{{ if has .Values.operation (list "create" "load") }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: create-load
+  labels:
+    app: create-load
+    part-of: neon
+spec:
+  template:
+    spec:
+      containers:
+        - name: create-load
+          image: ghcr.io/umd-dslam/benchbase:latest
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - /benchbase/entrypoint.sh --bench {{ .Values.benchmark }} --config /config/config.xml --{{ .Values.operation }}=true
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      restartPolicy: Never
+      volumes:
+        - name: config
+          configMap:
+            name: benchbase-config
+{{ end }}

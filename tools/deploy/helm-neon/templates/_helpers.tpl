@@ -3,9 +3,9 @@ Compute the region id.
 */}}
 {{- define "regionId" }}
 {{- $regionId := "" }}
-{{- $curRegion := .Release.Namespace }}
+{{- $currentRegion := .Release.Namespace }}
 {{- range $i, $region := .Values.regions }}
-  {{- if eq $region $curRegion }}
+  {{- if eq $region $currentRegion }}
     {{- $regionId = $i }}
   {{- end }}
 {{- end }}

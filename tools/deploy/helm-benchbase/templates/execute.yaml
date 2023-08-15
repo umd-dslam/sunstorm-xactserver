@@ -1,0 +1,37 @@
+{{ if eq .Values.operation "execute" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: execute
+  labels:
+    app: execute
+    part-of: neon
+spec:
+  template:
+    spec:
+      containers:
+        - name: execute
+          image: ghcr.io/umd-dslam/benchbase:latest
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              timestamp=$(date +%Y-%m-%d_%H-%M-%S)
+              /benchbase/entrypoint.sh --bench {{ .Values.benchmark }}           \
+                                       --config /config/config.xml               \
+                                       --execute=true                            \
+                                       --interval-monitor 1000                   \
+                                       --json-histograms results/histograms.json | tee results/log.txt 
+
+              /usr/bin/mc alias set minio http://minio.global:9000 minioadmin minioadmin
+              /usr/bin/mc cp ./results/* minio/neon/{{ default "$timestamp" .Values.tag }}/{{ include "regionId" . }}-{{ .Release.Namespace }}/
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      restartPolicy: Never
+      volumes:
+        - name: config
+          configMap:
+            name: benchbase-config
+{{ end }}
