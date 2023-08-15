@@ -25,7 +25,7 @@ For pods to communicate across separate Kubernetes clusters, the VPCs in all reg
 
 ### Create security groups
 
-For each region, create a security group that allows all traffic from other regions. In the example above, security group will have one inbound rule where the Source is `10.0.0.0/8` so that we allow traffic from all other regions.
+For every region, create a security group that allows all traffic from other regions. In the example above, the security group will have one inbound rule where the **Source** is `10.0.0.0/8` so that we allow traffic from all other regions.
 
 Copy the ID of this security group and use it in the `securityGroups` fields in the EKS yaml file (e.g. `deploy/eks/us-east-1.yml`) of the corresponding region.
 
@@ -55,7 +55,7 @@ vpc:
 
 ### Specify EC2 instances
 
-For every region, Adjust the parameters under `managedNodeGroups` of the EKS yaml file as needed (e.g. `instanceType`, `desiredCapacity`, etc.). Remember to specify extra instances in the AWS region that holds the global resources.
+For every region, adjust the parameters under `managedNodeGroups` of the EKS yaml file as needed (e.g. `instanceType`, `desiredCapacity`, etc.). Remember to specify extra instances in the AWS region that holds the global resources.
 
 The full schema of this config file can be found [here](https://eksctl.io/usage/schema/#managedNodeGroups).
 
@@ -65,26 +65,149 @@ Specify the regions and global region in the `deploy/regions.yaml` file. The reg
 
 ### Run the EKS clusters creation script
 
-Specify the regions and global region that you want to deploy to in the `deploy/regions.yaml` file. Adjust the parameters in the yaml files in `deploy/eks` as needed, remember to specify extra instances in the AWS region that holds the global resources. 
-
 Run the following command to create the EKS clusters:
 
 ```
 python3 eks.py create
 ```
 
-This process may take a few minutes to complete.
+It may take around 15 minutes for the clusters to be created. You can check the status of the clusters in the log files in `deploy/eks` or the AWS console.
 
 ## Deploy the system
 
-Adjust the parameters in the file `deploy/helm-neon/values.yaml` as needed (note that the `regions` field will be overwritten by the tool). Then run the following command to deploy the system:
+Adjust the parameters in the file `deploy/helm-neon/values.yaml` as needed (note that the `regions` field will be overwritten by the tool so can be ignored), then run the following command to deploy the system:
 
 ```
 python3 deploy.py 
 ```
 
-This tool also provides options to skip some stages in the development process if needed. Run `python3 deploy.py -h` to see the available options.
+On first run, the DNS configmap installation stage may take a few minutes to wait for the load balancer to be ready.
 
-## Run the benchmark
+This tool also provides options to skip some stages in the development process if needed. Run `python3 deploy.py -h` to see the available options. For example, sometimes when some of the spot instances are terminated, you need to redeploy the system only without reinstalling the DNS configmap. In this case, you can run:
 
-WIP
+```
+python3 deploy.py --skip-before neon
+```
+
+# Useful commands to manage the cluster
+
+## Contexts
+
+To control the cluster in a particular region, you need to set the context of `kubectl` to that region. To see the existing contexts, run:
+
+```
+kubectl config get-contexts
+```
+Example output:
+```
+CURRENT   NAME                              CLUSTER                    AUTHINFO                          NAMESPACE
+*         ctring@neon.us-east-1.eksctl.io   neon.us-east-1.eksctl.io   ctring@neon.us-east-1.eksctl.io   
+          ctring@neon.us-east-2.eksctl.io   neon.us-east-2.eksctl.io   ctring@neon.us-east-2.eksctl.io   
+          ctring@neon.us-west-1.eksctl.io   neon.us-west-1.eksctl.io   ctring@neon.us-west-1.eksctl.io  
+```
+
+From this point on, we will specify the context of the command using the `--context` flag. Remember to replace it with the context of your cluster.
+
+## Resources
+
+Get all deployments in `us-east-1`. The `-A` flag is used to get resources from all namespaces. If you want to get resources from a specific namespace, replace `-A` with `-n <namespace>`.
+
+```
+kubectl get deploy -A --context ctring@neon.us-east-1.eksctl.io 
+```
+```
+NAMESPACE     NAME             READY   UP-TO-DATE   AVAILABLE   AGE
+global        compute          1/1     1            1           6m9s
+global        minio            1/1     1            1           6m9s
+global        pageserver       1/1     1            1           6m9s
+global        storage-broker   1/1     1            1           6m9s
+global        xactserver       1/1     1            1           6m9s
+kube-system   coredns          2/2     2            2           20m
+us-east-1     compute          1/1     1            1           6m6s
+us-east-1     pageserver       1/1     1            1           6m6s
+us-east-1     xactserver       1/1     1            1           6m6s                                                 app=xactserver
+```
+
+You can get other types of resources by replacing `deploy` with the corresponding resource type (e.g. `pod`, `svc`, etc.).
+
+You can also add `-o wide` to get more information about the resources.
+
+## Logs
+
+Get the logs of the `xactserver` deployment in `us-east-1`
+
+```
+kubectl logs deploy/xactserver --context ctring@neon.us-east-1.eksctl.io -n us-east-1
+```
+```
+[2023-08-15T18:55:56Z INFO  xactserver] Listening to PostgreSQL on 0.0.0.0:10000
+[2023-08-15T18:55:56Z INFO  xactserver] Listening to peers on 0.0.0.0:23000
+[2023-08-15T18:55:56Z INFO  utils::http::endpoint] Starting an HTTP endpoint at 0.0.0.0:8080
+```
+
+Add `-f` if you want to follow the logs.
+
+## Port forwarding
+
+It is useful to be able to connect to minio or the compute node from your local machine. To do so, run the following command to forward the port of the resource to your local machine:
+
+```
+kubectl port-forward svc/minio -n global 9000 9001 --context ctring@neon.us-east-1.eksctl.io
+```
+
+```
+kubectl port-forward svc/compute -n us-east-1 55433 --context ctring@neon.us-east-1.eksctl.io
+```
+
+
+# Run the benchmark
+
+Set the parameters for the benchmark appropriately in `deploy/helm-benchbase/values.yaml`. Note that you can change any of these values later in the command line.
+
+## Create the benchmark schema
+
+```
+python3 benchmark.py create
+```
+
+On first run, there may be error messages about configmaps or jobs not found for deletion. This is normal and can be ignored.
+
+Check the logs of the schema creation job 
+
+```
+kubectl logs job/create-load -n global --context ctring@neon.us-east-1.eksctl.io
+```
+
+## Load the data
+
+```
+python3 benchmark.py load
+```
+
+Check the logs of the data loading job
+
+```
+kubectl logs job/create-load -n global --context ctring@neon.us-east-1.eksctl.io
+```
+
+## Execute the benchmark
+
+```
+python3 benchmark.py execute
+```
+
+Check the logs of the execution job
+
+```
+kubectl logs job/execute -n us-east-1 --context ctring@neon.us-east-1.eksctl.io
+```
+
+The results can be found on Minio.
+
+# Clean up
+
+Destroy the EKS clusters:
+
+```
+python3 eks.py delete
+```

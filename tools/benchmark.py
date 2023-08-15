@@ -14,7 +14,7 @@ LOG = get_logger(
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
 
 
-def run_benchmark(region, sets, args):
+def run_benchmark(region, namespace, sets, args):
     sets_args = []
     for arg in sets:
         sets_args.extend(["--set", arg])
@@ -24,7 +24,7 @@ def run_benchmark(region, sets, args):
         "template",
         (BASE_PATH / "helm-benchbase").as_posix(),
         "--namespace",
-        region,
+        namespace,
     ] + sets_args
 
     LOG.debug(f"Executing: {' '.join(helm_cmd)}")
@@ -40,7 +40,7 @@ def run_benchmark(region, sets, args):
         LOG.debug(f"Helm output: {helm_output.read().decode()}")
 
         # Delete the existing deployment, if any
-        cmd = ["kubectl", "delete", "--namespace", region, "-f", "-"]
+        cmd = ["kubectl", "delete", "--namespace", namespace, "-f", "-"]
         if not args.local:
             cmd.extend(["--context", get_context(region)])
         LOG.debug(f"Executing: {' '.join(cmd)}")
@@ -53,7 +53,7 @@ def run_benchmark(region, sets, args):
             )
 
         # Apply the new deployment
-        cmd = ["kubectl", "apply", "--namespace", region, "-f", "-"]
+        cmd = ["kubectl", "apply", "--namespace", namespace, "-f", "-"]
         if not args.local:
             cmd.extend(["--context", get_context(region)])
         LOG.debug(f"Executing: {' '.join(cmd)}")
@@ -89,14 +89,22 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     regions_info = get_regions(BASE_PATH)
+    regions = regions_info["regions"]
+    global_region = regions_info["global_region"]
 
     sets = args.set or []
-    sets.append(f"regions={{global,{','.join(regions_info['regions'])}}}")
+    sets.append(f"regions={{global,{','.join(regions)}}}")
 
     if args.operation == "create":
-        run_benchmark("global", ["operation=create"] + sets, args)
+        run_benchmark(global_region, "global", ["operation=create"] + sets, args)
     elif args.operation == "load":
-        run_benchmark("global", ["operation=load"] + sets, args)
+        run_benchmark(global_region, "global", ["operation=load"] + sets, args)
     elif args.operation == "execute":
         for region in regions_info["regions"]:
-            run_benchmark(region, ["operation=execute"] + sets, args)
+            LOG.info("Executing benchmark in region %s", region)
+            run_benchmark(
+                region,
+                region,
+                ["operation=execute"] + sets,
+                args,
+            )

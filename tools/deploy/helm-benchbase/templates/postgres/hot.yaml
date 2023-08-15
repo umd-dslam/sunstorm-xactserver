@@ -78,11 +78,14 @@ data:
     {{ $numRows := (mul .Values.scalefactor 1000) }}
     {{ $numRegions := (sub (len .Values.regions) 1) }}
     {{- $numRowsPerRegion := (div $numRows $numRegions) }}
-    {{- range $i := until (int $numRegions) }}
+    {{- range $i := until (int (sub $numRegions 1)) }}
     {{- $from := (mul $i $numRowsPerRegion) }}
     {{- $to := (add $from $numRowsPerRegion) }}
     CREATE TABLE usertable_{{ add1 $i }} PARTITION OF usertable FOR VALUES FROM ({{ $from }}) TO ({{ $to }});
     {{- end }}
+
+    {{- $from := (mul (sub (int $numRegions) 1) $numRowsPerRegion) }}
+    CREATE TABLE usertable_{{ $numRegions }} PARTITION OF usertable FOR VALUES FROM ({{ $from }}) TO ({{ $numRows }});
 
     {{- range $i := until (int $numRegions) }}
     UPDATE pg_class SET relregion = {{ add1 $i }} WHERE relname = 'usertable_{{ add1 $i }}';

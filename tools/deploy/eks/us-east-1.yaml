@@ -21,9 +21,10 @@ managedNodeGroups:
     securityGroups:
       attachIDs:
         - sg-018aeab319579349c
+        - sg-0000aedfbc146790e
     labels:
       role: server
-    tag:
+    tags:
       role: server
   - name: safekeepers
     instanceType: c5.2xlarge
@@ -34,10 +35,10 @@ managedNodeGroups:
         - sg-018aeab319579349c
     labels:
       role: safekeeper
-    tag:
+    tags:
       role: safekeeper
   - name: clients
-    instanceType: c5.xlarge
+    instanceType: c5.2xlarge
     spot: true
     desiredCapacity: 1
     securityGroups:
@@ -45,5 +46,5 @@ managedNodeGroups:
         - sg-018aeab319579349c
     labels:
       role: client
-    tag:
+    tags:
       role: client

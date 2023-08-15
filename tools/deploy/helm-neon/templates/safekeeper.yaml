@@ -80,7 +80,7 @@ spec:
               - key: role
                 operator: In
                 values:
-                - server
+                - safekeeper
         podAntiAffinity:
           # We prefer that safekeeper pods are not scheduled on the same node.
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -98,3 +98,15 @@ spec:
                         - compute
                       {{- end }}
                 topologyKey: "kubernetes.io/hostname"
+        {{- if eq .Release.Namespace "global" }}
+        podAffinity:
+          # Colocate safekeeper with the pageserver if this is a global region
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - pageserver
+              topologyKey: "kubernetes.io/hostname"
+        {{- end }}

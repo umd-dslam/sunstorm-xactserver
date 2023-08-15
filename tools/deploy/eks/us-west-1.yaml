@@ -22,7 +22,7 @@ managedNodeGroups:
         - sg-0941de724bb2351cb
     labels:
       role: server
-    tag:
+    tags:
       role: server
   - name: safekeepers
     instanceType: c5.2xlarge
@@ -33,10 +33,10 @@ managedNodeGroups:
         - sg-0941de724bb2351cb
     labels:
       role: safekeeper
-    tag:
+    tags:
       role: safekeeper
   - name: clients
-    instanceType: c5.xlarge
+    instanceType: c5.2xlarge
     spot: true
     desiredCapacity: 1
     securityGroups:
@@ -44,5 +44,5 @@ managedNodeGroups:
         - sg-0941de724bb2351cb
     labels:
       role: client
-    tag:
+    tags:
       role: client
