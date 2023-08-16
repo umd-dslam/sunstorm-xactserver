@@ -5,8 +5,8 @@ use crate::{NodeId, RollbackInfo, RollbackReason, XactId, XactStatus};
 use anyhow::{ensure, Context};
 use bit_set::BitSet;
 use bytes::Bytes;
-use log::{debug, warn};
 use tokio::sync::oneshot;
+use tracing::{debug, warn};
 
 pub enum XactStateType {
     Uninitialized,

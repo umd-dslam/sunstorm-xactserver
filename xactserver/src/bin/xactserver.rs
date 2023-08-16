@@ -1,16 +1,17 @@
 use clap::{error::ErrorKind, CommandFactory, Parser};
 use hyper::Server;
 use hyper::{header::CONTENT_TYPE, Body, Request, Response};
-use log::info;
 use prometheus::{Encoder, TextEncoder};
 use routerify::{Router, RouterService};
 use std::net::{SocketAddr, TcpListener};
 use std::thread::{self, JoinHandle};
 use std::{panic, process};
 use tokio::sync::mpsc;
+use tracing::info;
+use tracing::metadata::LevelFilter;
 use url::Url;
 use xactserver::pg::PgWatcher;
-use xactserver::{Manager, Node, NodeId, XsMessage, DUMMY_URL};
+use xactserver::{init_tracing, Manager, Node, NodeId, XsMessage, DUMMY_URL};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -73,7 +74,7 @@ struct Cli {
 }
 
 fn main() -> anyhow::Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    init_tracing(LevelFilter::INFO)?;
 
     let orig_hook = panic::take_hook();
     panic::set_hook(Box::new(move |panic_info| {

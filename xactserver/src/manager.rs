@@ -1,12 +1,12 @@
 use anyhow::{anyhow, ensure, Context};
 use bytes::Bytes;
 use futures::{future, Future};
-use log::{debug, error, warn};
 use prometheus::HistogramTimer;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
+use tracing::{debug, error, warn};
 use url::Url;
 
 use crate::decoder::RWSet;

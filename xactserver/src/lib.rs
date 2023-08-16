@@ -9,14 +9,18 @@ mod proto {
     tonic::include_proto!("xactserver");
 }
 
+pub use manager::Manager;
+pub use node::Node;
+
 use crate::proto::VoteMessage;
 use bytes::Bytes;
 use lazy_static::lazy_static;
 use proto::{vote_message, DbError};
 use tokio::sync::oneshot;
-
-pub use manager::Manager;
-pub use node::Node;
+use tracing_subscriber::{
+    filter::{EnvFilter, LevelFilter},
+    prelude::*,
+};
 
 pub type NodeId = usize;
 pub type XactId = u64;
@@ -124,4 +128,22 @@ impl From<VoteMessage> for Vote {
             rollback_reason: msg.rollback_reason.map(RollbackReason::from),
         }
     }
+}
+
+pub fn init_tracing(default_log_level: LevelFilter) -> anyhow::Result<()> {
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(default_log_level.into())
+        .from_env_lossy();
+
+    let fmt_layer = tracing_subscriber::fmt::layer()
+        .with_target(false)
+        .with_writer(std::io::stderr)
+        .with_test_writer();
+
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(fmt_layer)
+        .try_init()?;
+
+    Ok(())
 }

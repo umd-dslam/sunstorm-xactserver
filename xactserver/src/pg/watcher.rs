@@ -6,7 +6,6 @@
 use crate::{RollbackInfo, RollbackReason, XsMessage};
 use anyhow::Context;
 use bytes::{BufMut, Bytes, BytesMut};
-use log::{debug, error};
 use neon_postgres_backend::{self, AuthType, PostgresBackend, PostgresBackendTCP, QueryError};
 use neon_pq_proto::{BeMessage, FeMessage};
 use std::net::SocketAddr;
@@ -14,6 +13,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::{mpsc, oneshot},
 };
+use tracing::{debug, error};
 
 /// A `PgWatcher` listens for new connections from a postgres instance. For each
 /// new connection, a [`PostgresBackend`] is created in a new thread. This postgres
