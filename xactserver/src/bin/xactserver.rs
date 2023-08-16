@@ -1,10 +1,10 @@
 use clap::{error::ErrorKind, CommandFactory, Parser};
+use hyper::Server;
 use hyper::{header::CONTENT_TYPE, Body, Request, Response};
 use log::info;
-use neon_utils::http::{endpoint::serve_thread_main, error::ApiError};
 use prometheus::{Encoder, TextEncoder};
-use routerify::Router;
-use std::net::SocketAddr;
+use routerify::{Router, RouterService};
+use std::net::{SocketAddr, TcpListener};
 use std::thread::{self, JoinHandle};
 use std::{panic, process};
 use tokio::sync::mpsc;
@@ -224,21 +224,29 @@ fn start_manager(
 fn start_http_server(
     listen_http: SocketAddr,
 ) -> anyhow::Result<JoinHandle<Result<(), anyhow::Error>>> {
-    let listener = std::net::TcpListener::bind(listen_http)?;
-    let router = Router::builder().get("/metrics", prometheus_metrics_handler);
+    let router_builder = Router::builder().get("/metrics", prometheus_metrics_handler);
 
-    Ok(thread::Builder::new()
-        .name("xact manager".into())
-        .spawn(move || {
-            serve_thread_main(
-                router,
-                listener,
-                std::future::pending(), // never shut down
-            )
-        })?)
+    Ok(thread::Builder::new().name("http".into()).spawn(move || {
+        let listener = TcpListener::bind(listen_http)?;
+
+        info!("Listening to HTTP on {}", listener.local_addr()?);
+
+        let service =
+            RouterService::new(router_builder.build().map_err(|err| anyhow::anyhow!(err))?)
+                .unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+
+        let _guard = runtime.enter();
+        let server = Server::from_tcp(listener)?.serve(service);
+        runtime.block_on(server)?;
+
+        Ok(())
+    })?)
 }
 
-async fn prometheus_metrics_handler(_req: Request<Body>) -> Result<Response<Body>, ApiError> {
+async fn prometheus_metrics_handler(_req: Request<Body>) -> anyhow::Result<Response<Body>> {
     let mut buffer = vec![];
     let encoder = TextEncoder::new();
 

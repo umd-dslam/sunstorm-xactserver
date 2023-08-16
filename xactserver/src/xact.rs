@@ -128,14 +128,14 @@ impl<C: XactController> XactState<C> {
         self.status = XactStatus::Waiting;
 
         let is_local = self.node_id == self.coordinator;
-
+        let mut rollback_reason = None;
         if !is_local {
             // If the current participant is not the coordinator, add a 'yes' vote for
             // the coordinator here.
             self.add_vote(Vote::yes(self.coordinator)).await?;
 
             // Execute the transaction
-            let rollback_reason = {
+            rollback_reason = {
                 let _timer = EXECUTION_DURATION
                     .with_label_values(&[
                         &self.node_id.to_string(),
@@ -164,7 +164,11 @@ impl<C: XactController> XactState<C> {
             }
         }
 
-        self.add_vote(Vote::yes(self.node_id)).await?;
+        self.add_vote(Vote {
+            from: self.node_id,
+            rollback_reason,
+        })
+        .await?;
         Ok(&self.status)
     }
 
@@ -261,29 +265,61 @@ mod tests {
         }
     }
 
-    fn new_test_xact_state(
+    #[derive(Default)]
+    struct XactStateBuilder {
         node_id: NodeId,
         coordinator: NodeId,
         participants: Vec<NodeId>,
         rollback_on_execution: bool,
-    ) -> XactState<TestXactController> {
-        let mut participant_set = BitSet::new();
-        for p in participants {
-            participant_set.insert(p);
+    }
+
+    impl XactStateBuilder {
+        fn new() -> Self {
+            Self {
+                participants: vec![0],
+                ..Default::default()
+            }
         }
-        XactState {
-            xact_id: 100,
-            node_id,
-            coordinator,
-            controller: TestXactController {
-                rollback_on_execution,
-                executed: false,
-                committed: false,
-                rollbacked: false,
-            },
-            status: XactStatus::Uninitialized,
-            participants: participant_set,
-            voted: BitSet::new(),
+
+        fn with_node_id(mut self, node_id: NodeId) -> Self {
+            self.node_id = node_id;
+            self
+        }
+
+        fn with_coordinator(mut self, coordinator: NodeId) -> Self {
+            self.coordinator = coordinator;
+            self
+        }
+
+        fn with_participants(mut self, participants: Vec<NodeId>) -> Self {
+            self.participants = participants;
+            self
+        }
+
+        fn with_rollback_on_execution(mut self, rollback_on_execution: bool) -> Self {
+            self.rollback_on_execution = rollback_on_execution;
+            self
+        }
+
+        fn build(self) -> XactState<TestXactController> {
+            let mut participant_set = BitSet::new();
+            for p in self.participants {
+                participant_set.insert(p);
+            }
+            XactState {
+                xact_id: 100,
+                node_id: self.node_id,
+                coordinator: self.coordinator,
+                controller: TestXactController {
+                    rollback_on_execution: self.rollback_on_execution,
+                    executed: false,
+                    committed: false,
+                    rollbacked: false,
+                },
+                status: XactStatus::Uninitialized,
+                participants: participant_set,
+                voted: BitSet::new(),
+            }
         }
     }
 
@@ -303,7 +339,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_1_participant() -> anyhow::Result<()> {
-        let mut state_1 = new_test_xact_state(0, 0, vec![0], false);
+        let mut state_1 = XactStateBuilder::new().build();
+
         assert_eq!(state_1.initialize().await?, &XactStatus::Committing);
         assert_eq!(state_1.try_finish().await?, &XactStatus::Committed);
         // There is only one participant and the transaction is local so it is immediately
@@ -314,8 +351,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_2_participant_rollbacked() -> anyhow::Result<()> {
-        let mut state_1 = new_test_xact_state(1, 0, vec![0, 1], true);
+    async fn test_2_participants_rollbacked() -> anyhow::Result<()> {
+        let mut state_1 = XactStateBuilder::new()
+            .with_node_id(1)
+            .with_coordinator(0)
+            .with_participants(vec![0, 1])
+            .with_rollback_on_execution(true)
+            .build();
+
         let status = state_1.initialize().await?;
         assert!(is_rollbacking(status), "Actual status: {:?}", status);
         let status = state_1.try_finish().await?;
@@ -327,7 +370,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_3_participants() -> anyhow::Result<()> {
-        let mut state = new_test_xact_state(1, 3, vec![1, 3, 5], false);
+        let mut state = XactStateBuilder::new()
+            .with_node_id(1)
+            .with_coordinator(3)
+            .with_participants(vec![1, 3, 5])
+            .build();
+
         assert_eq!(state.initialize().await?, &XactStatus::Waiting);
         state.controller.assert(true, false, false);
 
@@ -347,7 +395,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_4_participants_rollbacked() -> anyhow::Result<()> {
-        let mut state = new_test_xact_state(2, 2, vec![0, 2, 4, 6], false);
+        let mut state = XactStateBuilder::new()
+            .with_node_id(2)
+            .with_coordinator(2)
+            .with_participants(vec![0, 2, 4, 6])
+            .build();
+
         assert_eq!(state.initialize().await?, &XactStatus::Waiting);
         state.controller.assert(false, false, false);
 
@@ -378,10 +431,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_wrong_participant() -> anyhow::Result<()> {
-        let mut state_1 = new_test_xact_state(3, 2, vec![0, 1, 2], false);
+        let mut state_1 = XactStateBuilder::new()
+            .with_node_id(3)
+            .with_coordinator(2)
+            .with_participants(vec![0, 1, 2])
+            .build();
+
         assert_eq!(state_1.initialize().await?, &XactStatus::Waiting);
 
-        let mut state_2 = new_test_xact_state(2, 2, vec![0, 1, 2], false);
+        let mut state_2 = XactStateBuilder::new()
+            .with_node_id(2)
+            .with_coordinator(2)
+            .with_participants(vec![0, 1, 2])
+            .build();
+
         assert_eq!(state_2.initialize().await?, &XactStatus::Waiting);
         assert_eq!(state_2.add_vote(Vote::yes(4)).await?, &XactStatus::Waiting);
 

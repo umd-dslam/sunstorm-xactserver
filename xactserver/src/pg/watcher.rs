@@ -7,18 +7,20 @@ use crate::{RollbackInfo, RollbackReason, XsMessage};
 use anyhow::Context;
 use bytes::{BufMut, Bytes, BytesMut};
 use log::{debug, error};
+use neon_postgres_backend::{self, AuthType, PostgresBackend, PostgresBackendTCP, QueryError};
 use neon_pq_proto::{BeMessage, FeMessage};
-use neon_utils::postgres_backend::AuthType;
-use neon_utils::postgres_backend_async::{self, PostgresBackend, QueryError};
 use std::net::SocketAddr;
-use tokio::sync::{mpsc, oneshot};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    sync::{mpsc, oneshot},
+};
 
 /// A `PgWatcher` listens for new connections from a postgres instance. For each
 /// new connection, a [`PostgresBackend`] is created in a new thread. This postgres
 /// backend will receive the transaction read/write set and forward this data to
 /// [`XactServer`].
 ///
-/// [`PostgresBackend`]: neon_utils::postgres_backend::PostgresBackend
+/// [`PostgresBackend`]: neon_postgres_backend::PostgresBackend
 /// [`XactServer`]: crate::XactServer
 ///
 pub struct PgWatcher {
@@ -57,7 +59,7 @@ impl PgWatcher {
         socket: tokio::net::TcpStream,
     ) -> anyhow::Result<()> {
         let mut handler = PgWatcherHandler { xact_manager_tx };
-        let pgbackend = PostgresBackend::new(socket, AuthType::Trust, None)?;
+        let pgbackend = PostgresBackendTCP::new(socket, AuthType::Trust, None)?;
         pgbackend
             .run(&mut handler, std::future::pending::<()>)
             .await?;
@@ -70,10 +72,13 @@ struct PgWatcherHandler {
 }
 
 #[async_trait::async_trait]
-impl postgres_backend_async::Handler for PgWatcherHandler {
+impl<IO> neon_postgres_backend::Handler<IO> for PgWatcherHandler
+where
+    IO: AsyncRead + AsyncWrite + Unpin + Sync + Send,
+{
     fn startup(
         &mut self,
-        _pgb: &mut PostgresBackend,
+        _pgb: &mut PostgresBackend<IO>,
         _sm: &neon_pq_proto::FeStartupPacket,
     ) -> Result<(), QueryError> {
         Ok(())
@@ -81,11 +86,11 @@ impl postgres_backend_async::Handler for PgWatcherHandler {
 
     async fn process_query(
         &mut self,
-        pgb: &mut PostgresBackend,
+        pgb: &mut PostgresBackend<IO>,
         _query_string: &str,
     ) -> Result<(), QueryError> {
         // Switch to COPYBOTH
-        pgb.write_message(&BeMessage::CopyBothResponse)?;
+        pgb.write_message(&BeMessage::CopyBothResponse).await?;
         pgb.flush().await?;
 
         debug!("new postgres connection established");
@@ -122,7 +127,8 @@ impl postgres_backend_async::Handler for PgWatcherHandler {
 
             pgb.write_message(&BeMessage::CopyData(&serialize_rollback_info(
                 rollback_info,
-            )))?;
+            )))
+            .await?;
             pgb.flush().await?;
         }
 

@@ -8,24 +8,24 @@ anyhow = "1.0"
 async-trait = "0.1"
 bb8 = "0.8"
 bb8-postgres = "0.8"
-bit-set = "0.5.3"
-bytes = { version = "1.0.1", features = ["serde"] }
-clap = { version = "4.1.4", features = ["derive"] }
-env_logger = "0.9.0"
-futures = "0.3.17"
+bit-set = "0.5"
+bytes = { version = "1.0", features = ["serde"] }
+clap = { version = "4.1", features = ["derive"] }
+env_logger = "0.9"
+futures = "0.3"
 hyper = "0.14"
-lazy_static = "1.4.0"
-log = "0.4.14"
+lazy_static = "1.4"
+log = "0.4"
 prometheus = {version = "0.13", default_features=false, features = ["process"]} # removes protobuf dependency
-prost = "0.10"
+prost = "0.11"
 routerify = "3"
-tonic = "0.7"
-tokio = { version = "1.24.2", features = ["rt-multi-thread", "macros", "sync"] }
+tonic = "0.9"
+tokio = { version = "1.31", features = ["rt-multi-thread", "macros", "sync"] }
 tokio-stream = "0.1"
 neon-pq-proto = { git = "https://github.com/neondatabase/neon.git", package = "pq_proto" }
-neon-utils = { git = "https://github.com/neondatabase/neon.git", package = "utils" }
+neon-postgres-backend = { git = "https://github.com/neondatabase/neon.git", package = "postgres_backend" }
 tokio-postgres = { git = "https://github.com/neondatabase/rust-postgres.git", branch = "neon", package = "tokio-postgres" }
 url = "2.2.2"
 
 [build-dependencies]
-tonic-build = "0.7"
+tonic-build = "0.9"
