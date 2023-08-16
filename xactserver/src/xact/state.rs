@@ -1,6 +1,7 @@
+use super::XactStatus;
 use crate::metrics::EXECUTION_DURATION;
 use crate::pg::XactController;
-use crate::{NodeId, RollbackInfo, RollbackReason, Vote, XactId, XactStatus};
+use crate::{NodeId, RollbackInfo, RollbackReason, Vote, XactId};
 use anyhow::{ensure, Context};
 use bit_set::BitSet;
 use tracing::{debug, warn};
@@ -97,7 +98,7 @@ impl<C: XactController> XactState<C> {
     pub(super) async fn add_vote(&mut self, vote: Vote) -> anyhow::Result<&XactStatus> {
         ensure!(self.status != XactStatus::Committing && self.status != XactStatus::Committed);
 
-        if !self.participants.contains(vote.from) {
+        if !self.participants.contains(vote.from.into()) {
             warn!(
                 "Node {} is not a participant of xact {}",
                 vote.from, self.xact_id
@@ -110,8 +111,8 @@ impl<C: XactController> XactState<C> {
 
         if let Some(reason) = vote.rollback_reason {
             self.status = XactStatus::Rollbacking(RollbackInfo(vote.from, reason));
-        } else if !self.voted.contains(vote.from) {
-            self.voted.insert(vote.from);
+        } else if !self.voted.contains(vote.from.into()) {
+            self.voted.insert(vote.from.into());
             if self.voted == self.participants {
                 self.status = XactStatus::Committing;
             }
@@ -127,7 +128,7 @@ impl<C: XactController> XactState<C> {
             }
             XactStatus::Rollbacking(info) => {
                 self.controller
-                    .rollback(&info)
+                    .rollback(info)
                     .await
                     .context("Failed to rollback")?;
                 self.status = XactStatus::Rollbacked(info.clone());
@@ -135,10 +136,6 @@ impl<C: XactController> XactState<C> {
             _ => {}
         }
         Ok(&self.status)
-    }
-
-    pub fn participants(&self) -> Vec<NodeId> {
-        self.participants.iter().collect()
     }
 }
 
@@ -198,7 +195,7 @@ mod tests {
     impl XactStateBuilder {
         fn new() -> Self {
             Self {
-                participants: vec![0],
+                participants: vec![NodeId(0)],
                 ..Default::default()
             }
         }
@@ -226,10 +223,10 @@ mod tests {
         fn build(self) -> XactState<TestXactController> {
             let mut participant_set = BitSet::new();
             for p in self.participants {
-                participant_set.insert(p);
+                participant_set.insert(p.into());
             }
             XactState {
-                xact_id: 100,
+                xact_id: XactId(100),
                 node_id: self.node_id,
                 coordinator: self.coordinator,
                 controller: TestXactController {
@@ -275,9 +272,9 @@ mod tests {
     #[tokio::test]
     async fn test_2_participants_rollbacked() -> anyhow::Result<()> {
         let mut state_1 = XactStateBuilder::new()
-            .with_node_id(1)
-            .with_coordinator(0)
-            .with_participants(vec![0, 1])
+            .with_node_id(NodeId(1))
+            .with_coordinator(NodeId(0))
+            .with_participants(vec![NodeId(0), NodeId(1)])
             .with_rollback_on_execution(true)
             .build();
 
@@ -293,20 +290,26 @@ mod tests {
     #[tokio::test]
     async fn test_3_participants() -> anyhow::Result<()> {
         let mut state = XactStateBuilder::new()
-            .with_node_id(1)
-            .with_coordinator(3)
-            .with_participants(vec![1, 3, 5])
+            .with_node_id(NodeId(1))
+            .with_coordinator(NodeId(3))
+            .with_participants(vec![NodeId(1), NodeId(3), NodeId(5)])
             .build();
 
         assert_eq!(state.initialize(vec![]).await?, &XactStatus::Waiting);
         state.controller.assert(true, false, false);
 
         // Participant 3 already voted so nothing change
-        assert_eq!(state.add_vote(Vote::yes(3)).await?, &XactStatus::Waiting);
+        assert_eq!(
+            state.add_vote(Vote::yes(NodeId(3))).await?,
+            &XactStatus::Waiting
+        );
         state.controller.assert(true, false, false);
 
         // The last participant votes no abort so the transaction is committed
-        assert_eq!(state.add_vote(Vote::yes(5)).await?, &XactStatus::Committing);
+        assert_eq!(
+            state.add_vote(Vote::yes(NodeId(5))).await?,
+            &XactStatus::Committing
+        );
         state.controller.assert(true, false, false);
 
         assert_eq!(state.try_finish().await?, &XactStatus::Committed);
@@ -318,9 +321,9 @@ mod tests {
     #[tokio::test]
     async fn test_4_participants_rollbacked() -> anyhow::Result<()> {
         let mut state = XactStateBuilder::new()
-            .with_node_id(2)
-            .with_coordinator(2)
-            .with_participants(vec![0, 2, 4, 6])
+            .with_node_id(NodeId(2))
+            .with_coordinator(NodeId(2))
+            .with_participants(vec![NodeId(0), NodeId(2), NodeId(4), NodeId(6)])
             .build();
 
         assert_eq!(state.initialize(vec![]).await?, &XactStatus::Waiting);
@@ -328,14 +331,14 @@ mod tests {
 
         // Participant 0 vote to abort
         let status = state
-            .add_vote(Vote::no(0, RollbackReason::Other("".to_string())))
+            .add_vote(Vote::no(NodeId(0), RollbackReason::Other("".to_string())))
             .await?;
 
         assert!(is_rollbacking(status), "actual status: {:?}", status);
         state.controller.assert(false, false, false);
 
         // Transaction is rollbacking, further votes have no effect
-        let status = state.add_vote(Vote::yes(4)).await?;
+        let status = state.add_vote(Vote::yes(NodeId(4))).await?;
         assert!(is_rollbacking(status), "actual status: {:?}", status);
         state.controller.assert(false, false, false);
 
@@ -344,7 +347,7 @@ mod tests {
         state.controller.assert(false, false, true);
 
         // Transaction is rollbacked, further votes have no effect
-        let status = state.add_vote(Vote::yes(6)).await?;
+        let status = state.add_vote(Vote::yes(NodeId(6))).await?;
         assert!(is_rollbacked(status), "actual status: {:?}", status);
         state.controller.assert(false, false, true);
 
@@ -354,21 +357,24 @@ mod tests {
     #[tokio::test]
     async fn test_wrong_participant() -> anyhow::Result<()> {
         let mut state_1 = XactStateBuilder::new()
-            .with_node_id(3)
-            .with_coordinator(2)
-            .with_participants(vec![0, 1, 2])
+            .with_node_id(NodeId(3))
+            .with_coordinator(NodeId(2))
+            .with_participants(vec![NodeId(0), NodeId(1), NodeId(2)])
             .build();
 
         assert_eq!(state_1.initialize(vec![]).await?, &XactStatus::Waiting);
 
         let mut state_2 = XactStateBuilder::new()
-            .with_node_id(2)
-            .with_coordinator(2)
-            .with_participants(vec![0, 1, 2])
+            .with_node_id(NodeId(2))
+            .with_coordinator(NodeId(2))
+            .with_participants(vec![NodeId(0), NodeId(1), NodeId(2)])
             .build();
 
         assert_eq!(state_2.initialize(vec![]).await?, &XactStatus::Waiting);
-        assert_eq!(state_2.add_vote(Vote::yes(4)).await?, &XactStatus::Waiting);
+        assert_eq!(
+            state_2.add_vote(Vote::yes(NodeId(4))).await?,
+            &XactStatus::Waiting
+        );
 
         Ok(())
     }

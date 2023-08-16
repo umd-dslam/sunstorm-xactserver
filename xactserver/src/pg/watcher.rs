@@ -142,7 +142,7 @@ fn serialize_rollback_info(info: Option<RollbackInfo>) -> Bytes {
         match info {
             RollbackInfo(by, RollbackReason::Db(db_err)) => {
                 // Plus 1 to distinguish between region 0 and the end of message byte
-                buf.put_u8((by + 1).try_into().unwrap());
+                buf.put_u8((u32::from(by) + 1).try_into().unwrap());
 
                 // Error message
                 buf.put_slice(db_err.message.as_bytes());
@@ -160,7 +160,7 @@ fn serialize_rollback_info(info: Option<RollbackInfo>) -> Bytes {
             }
             RollbackInfo(by, RollbackReason::Other(err)) => {
                 // Plus 1 to distinguish between region 0 and the end of message byte
-                buf.put_u8((by + 1).try_into().unwrap());
+                buf.put_u8((u32::from(by) + 1).try_into().unwrap());
 
                 // Error message
                 buf.put_slice(err.as_bytes());

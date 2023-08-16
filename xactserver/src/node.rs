@@ -80,7 +80,7 @@ pub mod client {
             &self,
             id: NodeId,
         ) -> anyhow::Result<bb8::PooledConnection<'_, ConnectionManager>> {
-            let pool = self.conn_pools.get(id).ok_or_else(|| {
+            let pool = self.conn_pools.get(usize::from(id)).ok_or_else(|| {
                 anyhow!(
                     "Node id {} is out of range (1 - {})",
                     id,

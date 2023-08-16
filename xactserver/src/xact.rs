@@ -1,12 +1,28 @@
 mod state;
 
 use crate::pg::{LocalXactController, PgConnectionPool, SurrogateXactController};
-use crate::{NodeId, RollbackInfo, Vote, XactId, XactStatus};
+use crate::{NodeId, RollbackInfo, Vote, XactId};
 use anyhow::Context;
 use bit_set::BitSet;
 use bytes::Bytes;
 use state::XactState;
 use tokio::sync::oneshot;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum XactStatus {
+    Uninitialized,
+    Waiting,
+    Committing,
+    Rollbacking(RollbackInfo),
+    Committed,
+    Rollbacked(RollbackInfo),
+}
+
+impl XactStatus {
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, XactStatus::Committed | XactStatus::Rollbacked(_))
+    }
+}
 
 pub enum XactType {
     Unknown(Vec<Vote>),

@@ -219,6 +219,8 @@ class NeonCommand(Command):
                     ",".join(xactserver_nodes),
                     "--listen-http",
                     f"127.0.0.1:{8080 + i}",
+                    "--listen-peer",
+                    f"0.0.0.0:{23000 + i}",
                 ],
                 cwd=dir,
             )

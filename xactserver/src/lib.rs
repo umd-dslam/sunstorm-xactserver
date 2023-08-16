@@ -1,16 +1,19 @@
 pub mod decoder;
 pub mod pg;
-pub mod xact;
 
+mod id;
 mod manager;
 mod metrics;
 mod node;
+mod xact;
 mod proto {
     tonic::include_proto!("xactserver");
 }
 
+pub use id::{NodeId, XactId};
 pub use manager::Manager;
 pub use node::Node;
+pub use xact::XactStatus;
 
 use crate::proto::VoteMessage;
 use bytes::Bytes;
@@ -22,13 +25,9 @@ use tracing_subscriber::{
     prelude::*,
 };
 
-pub type NodeId = usize;
-pub type XactId = u64;
-
 lazy_static! {
     pub static ref DUMMY_URL: url::Url = url::Url::parse("http://0.0.0.0").unwrap();
 }
-pub const NODE_ID_BITS: i32 = 10;
 pub const DEFAULT_NODE_PORT: u16 = 23000;
 
 #[derive(Debug)]
@@ -39,22 +38,6 @@ pub enum XsMessage {
     },
     Prepare(proto::PrepareMessage),
     Vote(proto::VoteMessage),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum XactStatus {
-    Uninitialized,
-    Waiting,
-    Committing,
-    Rollbacking(RollbackInfo),
-    Committed,
-    Rollbacked(RollbackInfo),
-}
-
-impl XactStatus {
-    pub fn is_terminal(&self) -> bool {
-        matches!(self, XactStatus::Committed | XactStatus::Rollbacked(_))
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -124,7 +107,7 @@ impl Vote {
 impl From<VoteMessage> for Vote {
     fn from(msg: VoteMessage) -> Self {
         Self {
-            from: msg.from as usize,
+            from: msg.from.into(),
             rollback_reason: msg.rollback_reason.map(RollbackReason::from),
         }
     }

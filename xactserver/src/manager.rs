@@ -15,7 +15,7 @@ use crate::node::client;
 use crate::pg::{create_pg_conn_pool, PgConnectionPool};
 use crate::proto::{PrepareMessage, VoteMessage};
 use crate::xact::XactType;
-use crate::{NodeId, RollbackInfo, XactId, XactStatus, XsMessage, NODE_ID_BITS};
+use crate::{NodeId, RollbackInfo, XactId, XactStatus, XsMessage};
 
 pub struct Manager {
     /// Id of current xactserver
@@ -37,7 +37,7 @@ pub struct Manager {
 
     /// State of all transactions
     xact_state_managers: HashMap<XactId, mpsc::Sender<XsMessage>>,
-    xact_id_counter: XactId,
+    xact_id_counter: u32,
 }
 
 impl Manager {
@@ -58,7 +58,7 @@ impl Manager {
             pg_max_conn_pool_size,
             pg_conn_pool: None,
             xact_state_managers: HashMap::new(),
-            xact_id_counter: 1,
+            xact_id_counter: 0,
             peers: None,
         }
     }
@@ -85,29 +85,24 @@ impl Manager {
         Ok(())
     }
 
-    fn next_xact_id(&mut self) -> XactId {
-        let xact_id = (self.xact_id_counter << NODE_ID_BITS) | (self.node_id as u64);
-        self.xact_id_counter += 1;
-        xact_id
-    }
-
     async fn process_message(&mut self, msg: XsMessage) {
         // Get the sender for the xact state manager
         let (msg_tx, xact_id) = match &msg {
             XsMessage::LocalXact { .. } => {
-                let xact_id = self.next_xact_id();
+                self.xact_id_counter += 1;
+                let xact_id = XactId::new(self.xact_id_counter, self.node_id);
                 (self.new_xact_state_manager(xact_id), xact_id)
             }
             XsMessage::Prepare(prepare_req) => (
-                self.new_xact_state_manager(prepare_req.xact_id),
-                prepare_req.xact_id,
+                self.new_xact_state_manager(prepare_req.xact_id.into()),
+                prepare_req.xact_id.into(),
             ),
             XsMessage::Vote(vote_req) => {
                 let msg_tx = self
                     .xact_state_managers
-                    .get(&vote_req.xact_id)
+                    .get(&vote_req.xact_id.into())
                     .ok_or_else(|| anyhow!("no xact state manager running to vote"));
-                (msg_tx, vote_req.xact_id)
+                (msg_tx, vote_req.xact_id.into())
             }
         };
 
@@ -253,12 +248,12 @@ impl XactStateManager {
         self.send_to_all_but_me(&rwset.participants(), |p| {
             let peers = self.peers.clone();
             let message = PrepareMessage {
-                from: self.node_id as u32,
-                xact_id: self.xact_id,
+                from: self.node_id.into(),
+                xact_id: self.xact_id.into(),
                 data: data.clone().into_iter().collect(),
             };
             async move {
-                let mut client = peers.get(p as NodeId).await?;
+                let mut client = peers.get(p).await?;
                 client.prepare(tonic::Request::new(message)).await?;
                 Ok::<(), anyhow::Error>(())
             }
@@ -281,7 +276,7 @@ impl XactStateManager {
         debug!("New surrogate xact: {:#?}", rwset.decode_rest());
 
         // If this node does not involve in the remotexact, stop the transaction immediately.
-        if !rwset.participants().contains(self.node_id) {
+        if !rwset.participants().contains(self.node_id.into()) {
             warn!(
                 "Received a transaction from region {} that I do not participate in",
                 self.node_id
@@ -290,11 +285,10 @@ impl XactStateManager {
         }
 
         // Create and initialize a new surrogate xact
-        let xact_id = prepare.xact_id;
         let status = self
             .xact
             .init_as_surrogate(
-                xact_id,
+                self.xact_id,
                 self.node_id,
                 coordinator_id,
                 rwset.participants(),
@@ -321,12 +315,12 @@ impl XactStateManager {
         self.send_to_all_but_me(&rwset.participants(), |p| {
             let peers = self.peers.clone();
             let message = VoteMessage {
-                from: self.node_id as u32,
-                xact_id,
+                from: self.node_id.into(),
+                xact_id: self.xact_id.into(),
                 rollback_reason: rollback_reason.clone(),
             };
             async move {
-                let mut client = peers.get(p as NodeId).await?;
+                let mut client = peers.get(p).await?;
                 client.vote(tonic::Request::new(message)).await?;
                 Ok::<(), anyhow::Error>(())
             }
@@ -342,15 +336,19 @@ impl XactStateManager {
         Ok(finished)
     }
 
-    async fn send_to_all_but_me<I, F, R>(&self, participants: I, f: F) -> anyhow::Result<()>
+    async fn send_to_all_but_me<F, R>(
+        &self,
+        participants: &bit_set::BitSet,
+        f: F,
+    ) -> anyhow::Result<()>
     where
-        I: IntoIterator<Item = NodeId>,
         F: FnMut(NodeId) -> R,
         R: Future<Output = anyhow::Result<()>>,
     {
         future::try_join_all(
             participants
                 .into_iter()
+                .map(NodeId::from)
                 .filter(|p| *p != self.node_id)
                 .map(f),
         )
