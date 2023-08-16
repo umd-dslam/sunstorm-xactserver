@@ -14,7 +14,7 @@ use crate::metrics::{get_rollback_reason_label, FINISHED_XACTS, STARTED_XACTS, T
 use crate::node::client;
 use crate::pg::{create_pg_conn_pool, PgConnectionPool};
 use crate::proto::{PrepareMessage, VoteMessage};
-use crate::xact::XactStateType;
+use crate::xact::XactType;
 use crate::{NodeId, RollbackInfo, XactId, XactStatus, XsMessage, NODE_ID_BITS};
 
 pub struct Manager {
@@ -160,7 +160,7 @@ struct XactStateManager {
     peers: Arc<client::Nodes>,
 
     /// State of the transaction
-    xact_state: XactStateType,
+    xact: XactType,
 
     /// Timer measuring time taken from starting to finishing the transaction
     total_duration_timer: Option<HistogramTimer>,
@@ -179,7 +179,7 @@ impl XactStateManager {
             coordinator_id: None,
             pg_conn_pool,
             peers,
-            xact_state: XactStateType::Uninitialized,
+            xact: Default::default(),
             total_duration_timer: None,
         }
     }
@@ -225,8 +225,6 @@ impl XactStateManager {
         data: Bytes,
         commit_tx: oneshot::Sender<Option<RollbackInfo>>,
     ) -> anyhow::Result<bool> {
-        assert!(matches!(self.xact_state, XactStateType::Uninitialized));
-
         // This is a local transaction so the current region is the coordinator
         let coordinator_id = *self.coordinator_id.insert(self.node_id);
 
@@ -238,17 +236,18 @@ impl XactStateManager {
         debug!("New local xact: {:#?}", rwset.decode_rest());
 
         // Create and initialize a new local xact
-        self.xact_state = XactStateType::new_local_xact(
-            self.xact_id,
-            self.node_id,
-            coordinator_id,
-            rwset.participants(),
-            commit_tx,
-        )?;
+        let status = self
+            .xact
+            .init_as_local(
+                self.xact_id,
+                self.node_id,
+                coordinator_id,
+                rwset.participants(),
+                commit_tx,
+            )
+            .await?;
 
-        // Initialize the transaction
-        let xact_status = self.xact_state.initialize().await?;
-        assert_eq!(xact_status, &XactStatus::Waiting);
+        assert_eq!(status, &XactStatus::Waiting);
 
         // Send the transaction to other participants
         self.send_to_all_but_me(&rwset.participants(), |p| {
@@ -270,8 +269,6 @@ impl XactStateManager {
     }
 
     async fn handle_prepare_msg(&mut self, prepare: PrepareMessage) -> anyhow::Result<bool> {
-        assert!(matches!(self.xact_state, XactStateType::Uninitialized));
-
         // Extract the coordinator of this transaction from the request
         let coordinator_id = *self.coordinator_id.insert(prepare.from.try_into()?);
 
@@ -292,19 +289,19 @@ impl XactStateManager {
             return Ok(true);
         }
 
-        // Create a new surrogate xact
+        // Create and initialize a new surrogate xact
         let xact_id = prepare.xact_id;
-        self.xact_state = XactStateType::new_surrogate_xact(
-            xact_id,
-            self.node_id,
-            coordinator_id,
-            rwset.participants(),
-            data,
-            &self.pg_conn_pool,
-        )?;
-
-        // Initialize the transaction
-        let status = self.xact_state.initialize().await?;
+        let status = self
+            .xact
+            .init_as_surrogate(
+                xact_id,
+                self.node_id,
+                coordinator_id,
+                rwset.participants(),
+                data,
+                &self.pg_conn_pool,
+            )
+            .await?;
 
         // Extract rollback reason, if any
         let rollback_reason = match status {
@@ -336,7 +333,7 @@ impl XactStateManager {
         })
         .await?;
 
-        let status = self.xact_state.try_finish().await?;
+        let status = self.xact.try_finish().await?;
         let finished = status.is_terminal();
         if let Some(label) = get_rollback_reason_label(status) {
             self.end_xact_measurement(label);
@@ -362,9 +359,9 @@ impl XactStateManager {
     }
 
     async fn handle_vote_msg(&mut self, vote: VoteMessage) -> anyhow::Result<bool> {
-        self.xact_state.add_vote(vote.into()).await?;
+        self.xact.add_vote(vote.into()).await?;
 
-        let status = self.xact_state.try_finish().await?;
+        let status = self.xact.try_finish().await?;
 
         let finished = status.is_terminal();
 
