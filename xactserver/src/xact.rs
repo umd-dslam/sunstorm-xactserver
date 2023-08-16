@@ -1,12 +1,12 @@
+use crate::metrics::EXECUTION_DURATION;
+use crate::pg::{LocalXactController, PgConnectionPool, SurrogateXactController, XactController};
+use crate::Vote;
+use crate::{NodeId, RollbackInfo, RollbackReason, XactId, XactStatus};
 use anyhow::{ensure, Context};
 use bit_set::BitSet;
 use bytes::Bytes;
 use log::{debug, warn};
 use tokio::sync::oneshot;
-
-use crate::metrics::EXECUTION_DURATION;
-use crate::pg::{LocalXactController, PgConnectionPool, SurrogateXactController, XactController};
-use crate::{NodeId, RollbackInfo, RollbackReason, XactId, XactStatus};
 
 pub enum XactStateType {
     Uninitialized,
@@ -64,19 +64,15 @@ impl XactStateType {
         }
     }
 
-    pub async fn add_vote(
-        &mut self,
-        from: NodeId,
-        rollback_reason: Option<RollbackReason>,
-    ) -> anyhow::Result<&XactStatus> {
+    pub async fn add_vote(&mut self, vote: Vote) -> anyhow::Result<&XactStatus> {
         match self {
             Self::Uninitialized => anyhow::bail!("Xact state is uninitialized"),
             Self::Local(xact) => xact
-                .add_vote(from, rollback_reason)
+                .add_vote(vote)
                 .await
                 .context("Failed to add vote for local xact"),
             Self::Surrogate(xact) => xact
-                .add_vote(from, rollback_reason)
+                .add_vote(vote)
                 .await
                 .context("Failed to add vote for surrogate xact"),
         }
@@ -132,15 +128,14 @@ impl<C: XactController> XactState<C> {
         self.status = XactStatus::Waiting;
 
         let is_local = self.node_id == self.coordinator;
-        let mut rollback_reason = None;
 
         if !is_local {
             // If the current participant is not the coordinator, add a 'yes' vote for
             // the coordinator here.
-            self.add_vote(self.coordinator, None).await?;
+            self.add_vote(Vote::yes(self.coordinator)).await?;
 
             // Execute the transaction
-            rollback_reason = {
+            let rollback_reason = {
                 let _timer = EXECUTION_DURATION
                     .with_label_values(&[
                         &self.node_id.to_string(),
@@ -169,21 +164,17 @@ impl<C: XactController> XactState<C> {
             }
         }
 
-        self.add_vote(self.node_id, rollback_reason).await?;
+        self.add_vote(Vote::yes(self.node_id)).await?;
         Ok(&self.status)
     }
 
-    pub async fn add_vote(
-        &mut self,
-        from: NodeId,
-        rollback_reason: Option<RollbackReason>,
-    ) -> anyhow::Result<&XactStatus> {
+    pub async fn add_vote(&mut self, vote: Vote) -> anyhow::Result<&XactStatus> {
         ensure!(self.status != XactStatus::Committing && self.status != XactStatus::Committed);
 
-        if !self.participants.contains(from) {
+        if !self.participants.contains(vote.from) {
             warn!(
                 "Node {} is not a participant of xact {}",
-                from, self.xact_id
+                vote.from, self.xact_id
             );
         }
 
@@ -191,10 +182,10 @@ impl<C: XactController> XactState<C> {
             return Ok(&self.status);
         }
 
-        if let Some(reason) = rollback_reason {
-            self.status = XactStatus::Rollbacking(RollbackInfo(from, reason));
-        } else if !self.voted.contains(from) {
-            self.voted.insert(from);
+        if let Some(reason) = vote.rollback_reason {
+            self.status = XactStatus::Rollbacking(RollbackInfo(vote.from, reason));
+        } else if !self.voted.contains(vote.from) {
+            self.voted.insert(vote.from);
             if self.voted == self.participants {
                 self.status = XactStatus::Committing;
             }
@@ -210,7 +201,7 @@ impl<C: XactController> XactState<C> {
             }
             XactStatus::Rollbacking(ref info) => {
                 self.controller
-                    .rollback(&info)
+                    .rollback(info)
                     .await
                     .context("Failed to rollback")?;
                 self.status = XactStatus::Rollbacked(info.clone());
@@ -341,11 +332,11 @@ mod tests {
         state.controller.assert(true, false, false);
 
         // Participant 3 already voted so nothing change
-        assert_eq!(state.add_vote(3, None).await?, &XactStatus::Waiting);
+        assert_eq!(state.add_vote(Vote::yes(3)).await?, &XactStatus::Waiting);
         state.controller.assert(true, false, false);
 
         // The last participant votes no abort so the transaction is committed
-        assert_eq!(state.add_vote(5, None).await?, &XactStatus::Committing);
+        assert_eq!(state.add_vote(Vote::yes(5)).await?, &XactStatus::Committing);
         state.controller.assert(true, false, false);
 
         assert_eq!(state.try_finish().await?, &XactStatus::Committed);
@@ -362,14 +353,14 @@ mod tests {
 
         // Participant 0 vote to abort
         let status = state
-            .add_vote(0, Some(RollbackReason::Other("".to_string())))
+            .add_vote(Vote::no(0, RollbackReason::Other("".to_string())))
             .await?;
 
         assert!(is_rollbacking(status), "actual status: {:?}", status);
         state.controller.assert(false, false, false);
 
         // Transaction is rollbacking, further votes have no effect
-        let status = state.add_vote(4, None).await?;
+        let status = state.add_vote(Vote::yes(4)).await?;
         assert!(is_rollbacking(status), "actual status: {:?}", status);
         state.controller.assert(false, false, false);
 
@@ -378,7 +369,7 @@ mod tests {
         state.controller.assert(false, false, true);
 
         // Transaction is rollbacked, further votes have no effect
-        let status = state.add_vote(6, None).await?;
+        let status = state.add_vote(Vote::yes(6)).await?;
         assert!(is_rollbacked(status), "actual status: {:?}", status);
         state.controller.assert(false, false, true);
 
@@ -392,7 +383,7 @@ mod tests {
 
         let mut state_2 = new_test_xact_state(2, 2, vec![0, 1, 2], false);
         assert_eq!(state_2.initialize().await?, &XactStatus::Waiting);
-        assert_eq!(state_2.add_vote(4, None).await?, &XactStatus::Waiting);
+        assert_eq!(state_2.add_vote(Vote::yes(4)).await?, &XactStatus::Waiting);
 
         Ok(())
     }

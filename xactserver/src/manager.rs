@@ -362,12 +362,7 @@ impl XactStateManager {
     }
 
     async fn handle_vote_msg(&mut self, vote: VoteMessage) -> anyhow::Result<bool> {
-        self.xact_state
-            .add_vote(
-                vote.from.try_into()?,
-                vote.rollback_reason.map(|e| e.into()),
-            )
-            .await?;
+        self.xact_state.add_vote(vote.into()).await?;
 
         let status = self.xact_state.try_finish().await?;
 

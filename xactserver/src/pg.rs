@@ -1,12 +1,12 @@
 mod watcher;
 mod xact_controller;
 
+pub use watcher::PgWatcher;
+pub use xact_controller::{LocalXactController, SurrogateXactController, XactController};
+
 use bb8::{ErrorSink, Pool};
 use bb8_postgres::{tokio_postgres::NoTls, PostgresConnectionManager};
 use log::error;
-
-pub use watcher::PgWatcher;
-pub use xact_controller::{LocalXactController, SurrogateXactController, XactController};
 
 type PgConnectionError = <PostgresConnectionManager<NoTls> as bb8::ManageConnection>::Error;
 

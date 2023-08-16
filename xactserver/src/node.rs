@@ -89,10 +89,6 @@ pub mod client {
             })?;
             Ok(pool.get().await?)
         }
-
-        pub fn size(&self) -> usize {
-            self.conn_pools.len()
-        }
     }
 
     pub struct ConnectionManager(String);

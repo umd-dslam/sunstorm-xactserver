@@ -1,13 +1,15 @@
 pub mod decoder;
-pub mod manager;
-pub mod metrics;
-pub mod node;
 pub mod pg;
 pub mod xact;
+
+mod manager;
+mod metrics;
+mod node;
 mod proto {
     tonic::include_proto!("xactserver");
 }
 
+use crate::proto::VoteMessage;
 use bytes::Bytes;
 use lazy_static::lazy_static;
 use proto::{vote_message, DbError};
@@ -90,6 +92,36 @@ impl From<&RollbackReason> for vote_message::RollbackReason {
         match rollback_reason {
             RollbackReason::Db(db_error) => vote_message::RollbackReason::Db(db_error.clone()),
             RollbackReason::Other(error) => vote_message::RollbackReason::Other(error.clone()),
+        }
+    }
+}
+
+pub struct Vote {
+    from: NodeId,
+    rollback_reason: Option<RollbackReason>,
+}
+
+impl Vote {
+    pub fn yes(node_id: NodeId) -> Self {
+        Self {
+            from: node_id,
+            rollback_reason: None,
+        }
+    }
+
+    pub fn no(node_id: NodeId, reason: RollbackReason) -> Self {
+        Self {
+            from: node_id,
+            rollback_reason: Some(reason),
+        }
+    }
+}
+
+impl From<VoteMessage> for Vote {
+    fn from(msg: VoteMessage) -> Self {
+        Self {
+            from: msg.from as usize,
+            rollback_reason: msg.rollback_reason.map(RollbackReason::from),
         }
     }
 }
