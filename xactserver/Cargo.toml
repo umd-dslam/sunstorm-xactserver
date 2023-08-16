@@ -11,8 +11,6 @@ bb8-postgres = "0.8"
 bit-set = "0.5"
 bytes = { version = "1.0", features = ["serde"] }
 clap = { version = "4.1", features = ["derive"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 futures = "0.3"
 hyper = "0.14"
 lazy_static = "1.4"
@@ -22,6 +20,9 @@ routerify = "3"
 tonic = "0.9"
 tokio = { version = "1.31", features = ["rt-multi-thread", "macros", "sync"] }
 tokio-stream = "0.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-test = "0.2"
 neon-pq-proto = { git = "https://github.com/neondatabase/neon.git", package = "pq_proto" }
 neon-postgres-backend = { git = "https://github.com/neondatabase/neon.git", package = "postgres_backend" }
 tokio-postgres = { git = "https://github.com/neondatabase/rust-postgres.git", branch = "neon", package = "tokio-postgres" }

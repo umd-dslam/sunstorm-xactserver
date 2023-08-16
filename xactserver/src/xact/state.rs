@@ -133,7 +133,12 @@ impl<C: XactController> XactState<C> {
                     .context("Failed to rollback")?;
                 self.status = XactStatus::Rollbacked(info.clone());
             }
-            _ => {}
+            XactStatus::Committed
+            | XactStatus::Rollbacked(_)
+            | XactStatus::Waiting
+            | XactStatus::Uninitialized => {
+                // Do nothing
+            }
         }
         Ok(&self.status)
     }

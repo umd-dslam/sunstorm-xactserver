@@ -1,11 +1,17 @@
+mod controller;
+#[cfg(test)]
+mod fake;
 mod watcher;
-mod xact_controller;
 
+pub use controller::{LocalXactController, SurrogateXactController, XactController};
 pub use watcher::PgWatcher;
-pub use xact_controller::{LocalXactController, SurrogateXactController, XactController};
 
 use bb8::{ErrorSink, Pool};
-use bb8_postgres::{tokio_postgres::NoTls, PostgresConnectionManager};
+use bb8_postgres::tokio_postgres::NoTls;
+#[cfg(not(test))]
+use bb8_postgres::PostgresConnectionManager;
+#[cfg(test)]
+use fake::FakePostgresConnectionManager as PostgresConnectionManager;
 use tracing::error;
 
 type PgConnectionError = <PostgresConnectionManager<NoTls> as bb8::ManageConnection>::Error;
