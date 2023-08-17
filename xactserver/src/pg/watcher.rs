@@ -13,7 +13,8 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::{mpsc, oneshot},
 };
-use tracing::{debug, error};
+use tokio_util::sync::CancellationToken;
+use tracing::{debug, error, info};
 
 /// A `PgWatcher` listens for new connections from a postgres instance. For each
 /// new connection, a [`PostgresBackend`] is created in a new thread. This postgres
@@ -36,22 +37,32 @@ impl PgWatcher {
         }
     }
 
-    pub async fn run(&self) -> anyhow::Result<()> {
+    pub async fn run(&self, cancel: CancellationToken) -> anyhow::Result<()> {
         let listener = tokio::net::TcpListener::bind(self.listen_pg)
             .await
             .context("Failed to start postgres watcher")?;
 
         loop {
-            match listener.accept().await {
-                Ok((socket, peer_addr)) => {
-                    debug!("accepted connection from {}", peer_addr);
-                    tokio::spawn(Self::conn_main(self.xact_manager_tx.clone(), socket));
+            tokio::select! {
+                msg = listener.accept() => {
+                    match msg {
+                        Ok((socket, peer_addr)) => {
+                            debug!("accepted connection from {}", peer_addr);
+                            tokio::spawn(Self::conn_main(self.xact_manager_tx.clone(), socket));
+                        }
+                        Err(err) => {
+                            error!("accept() failed: {:?}", err);
+                        }
+                    };
                 }
-                Err(err) => {
-                    error!("accept() failed: {:?}", err);
+                _ = cancel.cancelled() => {
+                    break;
                 }
             }
         }
+
+        info!("Postgres watcher stopped");
+        Ok(())
     }
 
     async fn conn_main(

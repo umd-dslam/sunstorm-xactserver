@@ -5,8 +5,8 @@ use prometheus::{Encoder, TextEncoder};
 use routerify::{Router, RouterService};
 use std::net::{SocketAddr, TcpListener};
 use std::thread::{self, JoinHandle};
-use std::{panic, process};
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 use tracing::info;
 use tracing::metadata::LevelFilter;
 use url::Url;
@@ -73,14 +73,9 @@ struct Cli {
     listen_http: SocketAddr,
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     init_tracing(LevelFilter::INFO)?;
-
-    let orig_hook = panic::take_hook();
-    panic::set_hook(Box::new(move |panic_info| {
-        orig_hook(panic_info);
-        process::exit(1);
-    }));
 
     let cli = Cli::parse();
 
@@ -99,9 +94,10 @@ fn main() -> anyhow::Result<()> {
     }
 
     let nodes = parse_node_addresses(cli.nodes);
+    let cancel = CancellationToken::new();
 
-    let (pg_watcher_handle, watcher_rx) = start_pg_watcher(cli.listen_pg)?;
-    let (node_handle, node_rx) = start_peer_listener(cli.listen_peer)?;
+    let (pg_watcher_handle, watcher_rx) = start_pg_watcher(cli.listen_pg, cancel.clone());
+    let (node_handle, node_rx) = start_peer_listener(cli.listen_peer, cancel.clone());
     let manager_handle = start_manager(
         cli.node_id,
         connect_pg,
@@ -109,8 +105,16 @@ fn main() -> anyhow::Result<()> {
         nodes,
         watcher_rx,
         node_rx,
-    )?;
-    let http_server_handle = start_http_server(cli.listen_http)?;
+        cancel.clone(),
+    );
+    let http_server_handle = start_http_server(cli.listen_http, cancel.clone());
+
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {},
+        _ = cancel.cancelled() => {},
+    }
+
+    cancel.cancel();
 
     for handle in [
         pg_watcher_handle,
@@ -159,8 +163,9 @@ type HandleAndReceiver = (
     mpsc::Receiver<XsMessage>,
 );
 
-fn start_pg_watcher(listen_pg: SocketAddr) -> anyhow::Result<HandleAndReceiver> {
+fn start_pg_watcher(listen_pg: SocketAddr, cancel: CancellationToken) -> HandleAndReceiver {
     let (watcher_tx, watcher_rx) = mpsc::channel(100);
+
     info!("Listening to PostgreSQL on {}", listen_pg);
     let pg_watcher = PgWatcher::new(listen_pg, watcher_tx);
     let handle = thread::Builder::new()
@@ -169,14 +174,15 @@ fn start_pg_watcher(listen_pg: SocketAddr) -> anyhow::Result<HandleAndReceiver> 
             tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()?
-                .block_on(pg_watcher.run())?;
+                .block_on(pg_watcher.run(cancel))?;
             Ok(())
-        })?;
+        })
+        .unwrap();
 
-    Ok((handle, watcher_rx))
+    (handle, watcher_rx)
 }
 
-fn start_peer_listener(listen_peer: SocketAddr) -> anyhow::Result<HandleAndReceiver> {
+fn start_peer_listener(listen_peer: SocketAddr, cancel: CancellationToken) -> HandleAndReceiver {
     let (node_tx, node_rx) = mpsc::channel(100);
 
     info!("Listening to peers on {}", listen_peer);
@@ -187,11 +193,12 @@ fn start_peer_listener(listen_peer: SocketAddr) -> anyhow::Result<HandleAndRecei
             tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()?
-                .block_on(node.run())?;
+                .block_on(node.run(cancel))?;
             Ok(())
-        })?;
+        })
+        .unwrap();
 
-    Ok((handle, node_rx))
+    (handle, node_rx)
 }
 
 fn start_manager(
@@ -201,7 +208,8 @@ fn start_manager(
     nodes: Vec<Url>,
     watcher_rx: mpsc::Receiver<XsMessage>,
     node_rx: mpsc::Receiver<XsMessage>,
-) -> anyhow::Result<JoinHandle<Result<(), anyhow::Error>>> {
+    cancel: CancellationToken,
+) -> JoinHandle<Result<(), anyhow::Error>> {
     let manager = Manager::new(
         node_id,
         connect_pg,
@@ -211,40 +219,49 @@ fn start_manager(
         node_rx,
     );
 
-    Ok(thread::Builder::new()
+    thread::Builder::new()
         .name("xact manager".into())
         .spawn(move || {
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()?
-                .block_on(manager.run())?;
+                .block_on(manager.run(cancel))?;
             Ok(())
-        })?)
+        })
+        .unwrap()
 }
 
 fn start_http_server(
     listen_http: SocketAddr,
-) -> anyhow::Result<JoinHandle<Result<(), anyhow::Error>>> {
+    cancel: CancellationToken,
+) -> JoinHandle<Result<(), anyhow::Error>> {
     let router_builder = Router::builder().get("/metrics", prometheus_metrics_handler);
 
-    Ok(thread::Builder::new().name("http".into()).spawn(move || {
-        let listener = TcpListener::bind(listen_http)?;
+    thread::Builder::new()
+        .name("http".into())
+        .spawn(move || {
+            let listener = TcpListener::bind(listen_http)?;
 
-        info!("Listening to HTTP on {}", listener.local_addr()?);
+            info!("Listening to HTTP on {}", listener.local_addr()?);
 
-        let service =
-            RouterService::new(router_builder.build().map_err(|err| anyhow::anyhow!(err))?)
-                .unwrap();
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
+            let service =
+                RouterService::new(router_builder.build().map_err(|err| anyhow::anyhow!(err))?)
+                    .unwrap();
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?;
 
-        let _guard = runtime.enter();
-        let server = Server::from_tcp(listener)?.serve(service);
-        runtime.block_on(server)?;
+            let _guard = runtime.enter();
+            let server = Server::from_tcp(listener)?
+                .serve(service)
+                .with_graceful_shutdown(cancel.cancelled());
+            runtime.block_on(server)?;
 
-        Ok(())
-    })?)
+            info!("HTTP server stopped");
+
+            Ok(())
+        })
+        .unwrap()
 }
 
 async fn prometheus_metrics_handler(_req: Request<Body>) -> anyhow::Result<Response<Body>> {

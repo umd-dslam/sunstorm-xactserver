@@ -1,14 +1,3 @@
-use anyhow::{anyhow, ensure, Context};
-use bytes::Bytes;
-use futures::{future, Future};
-use prometheus::HistogramTimer;
-use std::collections::HashMap;
-use std::convert::TryInto;
-use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot};
-use tracing::{debug, error, warn};
-use url::Url;
-
 use crate::decoder::RWSet;
 use crate::metrics::{get_rollback_reason_label, FINISHED_XACTS, STARTED_XACTS, TOTAL_DURATION};
 use crate::node::client;
@@ -16,6 +5,18 @@ use crate::pg::{create_pg_conn_pool, PgConnectionPool};
 use crate::proto::{PrepareMessage, VoteMessage};
 use crate::xact::XactType;
 use crate::{NodeId, RollbackInfo, XactId, XactStatus, XsMessage};
+use anyhow::{anyhow, ensure, Context};
+use bytes::Bytes;
+use futures::{future, Future};
+use prometheus::HistogramTimer;
+use std::cell::OnceCell;
+use std::collections::HashMap;
+use std::convert::TryInto;
+use std::sync::Arc;
+use tokio::sync::{mpsc, oneshot};
+use tokio_util::sync::CancellationToken;
+use tracing::{debug, error, info, instrument, warn};
+use url::Url;
 
 pub struct Manager {
     /// Id of current xactserver
@@ -29,11 +30,11 @@ pub struct Manager {
     /// Connection for sending messages to postgres
     pg_url: Url,
     pg_max_conn_pool_size: u32,
-    pg_conn_pool: Option<PgConnectionPool>,
+    pg_conn_pool: OnceCell<PgConnectionPool>,
 
     /// Connections for sending messages to other xactserver nodes
     peer_addrs: Vec<Url>,
-    peers: Option<Arc<client::Nodes>>,
+    peers: OnceCell<Arc<client::Nodes>>,
 
     /// State of all transactions
     xact_state_managers: HashMap<XactId, mpsc::Sender<XsMessage>>,
@@ -56,45 +57,51 @@ impl Manager {
             peer_addrs,
             pg_url,
             pg_max_conn_pool_size,
-            pg_conn_pool: None,
+            pg_conn_pool: OnceCell::new(),
             xact_state_managers: HashMap::new(),
             xact_id_counter: 0,
-            peers: None,
+            peers: OnceCell::new(),
         }
     }
 
-    pub async fn run(mut self) -> anyhow::Result<()> {
-        self.peers = Some(Arc::new(client::Nodes::connect(&self.peer_addrs).await?));
-        self.pg_conn_pool =
-            Some(create_pg_conn_pool(&self.pg_url, self.pg_max_conn_pool_size).await?);
+    pub async fn run(mut self, cancel: CancellationToken) -> anyhow::Result<()> {
+        let _drop_guard = cancel.clone().drop_guard();
+
+        let peers = Arc::new(client::Nodes::connect(&self.peer_addrs).await?);
+        self.peers.set(peers).unwrap();
+
+        let pg_conn_pool = create_pg_conn_pool(&self.pg_url, self.pg_max_conn_pool_size).await?;
+        self.pg_conn_pool.set(pg_conn_pool).unwrap();
 
         loop {
             tokio::select! {
                 Some(msg) = self.local_rx.recv() => {
-                    self.process_message(msg).await;
+                    self.process_message(msg, cancel.clone()).await;
                 }
                 Some(msg) = self.remote_rx.recv() => {
-                    self.process_message(msg).await;
+                    self.process_message(msg, cancel.clone()).await;
                 }
-                else => {
+                _ = cancel.cancelled() => {
                     break;
                 }
             };
         }
 
+        info!("Manager stopped");
+
         Ok(())
     }
 
-    async fn process_message(&mut self, msg: XsMessage) {
+    async fn process_message(&mut self, msg: XsMessage, cancel: CancellationToken) {
         // Get the sender for the xact state manager
         let (msg_tx, xact_id) = match &msg {
             XsMessage::LocalXact { .. } => {
                 self.xact_id_counter += 1;
                 let xact_id = XactId::new(self.xact_id_counter, self.node_id);
-                (self.new_xact_state_manager(xact_id), xact_id)
+                (self.new_xact_state_manager(xact_id, cancel), xact_id)
             }
             XsMessage::Prepare(prepare_req) => (
-                self.new_xact_state_manager(prepare_req.xact_id.into()),
+                self.new_xact_state_manager(prepare_req.xact_id.into(), cancel),
                 prepare_req.xact_id.into(),
             ),
             XsMessage::Vote(vote_req) => {
@@ -121,7 +128,11 @@ impl Manager {
         }
     }
 
-    fn new_xact_state_manager(&mut self, id: XactId) -> anyhow::Result<&mpsc::Sender<XsMessage>> {
+    fn new_xact_state_manager(
+        &mut self,
+        id: XactId,
+        cancel: CancellationToken,
+    ) -> anyhow::Result<&mpsc::Sender<XsMessage>> {
         ensure!(
             !self.xact_state_managers.contains_key(&id),
             "xact state manager already exists for exact {}",
@@ -132,10 +143,10 @@ impl Manager {
         let xact_state_man = XactStateManager::new(
             id,
             self.node_id,
-            self.pg_conn_pool.as_ref().unwrap().clone(),
-            self.peers.as_ref().unwrap().clone(),
+            self.pg_conn_pool.get().unwrap().clone(),
+            self.peers.get().unwrap().clone(),
         );
-        tokio::spawn(xact_state_man.run(msg_rx));
+        tokio::spawn(xact_state_man.run(msg_rx, cancel));
         // Save and return the sender of the new xact state manager
         // TODO: Clean up state of finished transactions
         Ok(self.xact_state_managers.entry(id).or_insert(msg_tx))
@@ -179,40 +190,48 @@ impl XactStateManager {
         }
     }
 
-    async fn run(mut self, mut msg_rx: mpsc::Receiver<XsMessage>) {
-        while let Some(msg) = msg_rx.recv().await {
-            let result = match msg {
-                XsMessage::LocalXact { data, commit_tx } => self
-                    .handle_local_xact_msg(data, commit_tx)
-                    .await
-                    .context("failed to handle local xact msg"),
-                XsMessage::Prepare(prepare_req) => self
-                    .handle_prepare_msg(prepare_req)
-                    .await
-                    .context("failed to handle prepare msg"),
-                XsMessage::Vote(vote_req) => self
-                    .handle_vote_msg(vote_req)
-                    .await
-                    .context("failed to handle vote msg"),
-            };
+    #[instrument(skip_all, fields(xact_id = %self.xact_id, node_id = %self.node_id))]
+    async fn run(mut self, mut msg_rx: mpsc::Receiver<XsMessage>, cancel: CancellationToken) {
+        loop {
+            tokio::select! {
+                Some(msg) = msg_rx.recv() => {
+                    let result = match msg {
+                        XsMessage::LocalXact { data, commit_tx } => self
+                            .handle_local_xact_msg(data, commit_tx)
+                            .await
+                            .context("failed to handle local xact msg"),
+                        XsMessage::Prepare(prepare_req) => self
+                            .handle_prepare_msg(prepare_req)
+                            .await
+                            .context("failed to handle prepare msg"),
+                        XsMessage::Vote(vote_req) => self
+                            .handle_vote_msg(vote_req)
+                            .await
+                            .context("failed to handle vote msg"),
+                    };
 
-            match result {
-                Ok(finish) => {
-                    if finish {
-                        break;
-                    }
+                    match result {
+                        Ok(finish) => {
+                            if finish {
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            error!("{}", e);
+                            break;
+                        }
+                    };
                 }
-                Err(e) => {
-                    error!(
-                        "xact state manager {} encountered an error: {:?}",
-                        self.xact_id, e
-                    );
+                _ = cancel.cancelled() => {
                     break;
                 }
-            };
+                else => {
+                    break;
+                }
+            }
         }
 
-        debug!("stopped xact state manager {}", self.xact_id);
+        debug!("Stopped");
     }
 
     async fn handle_local_xact_msg(
@@ -228,7 +247,7 @@ impl XactStateManager {
 
         // Deserialize the transaction data
         let mut rwset = RWSet::decode(data.clone()).context("Failed to decode read/write set")?;
-        debug!("New local xact: {:#?}", rwset.decode_rest());
+        debug!("{:#?}", rwset.decode_rest());
 
         // Create and initialize a new local xact
         let status = self
@@ -273,12 +292,12 @@ impl XactStateManager {
         // Deserialize the transaction data
         let data = Bytes::from(prepare.data);
         let mut rwset = RWSet::decode(data.clone()).context("Failed to decode read/write set")?;
-        debug!("New surrogate xact: {:#?}", rwset.decode_rest());
+        debug!("{:#?}", rwset.decode_rest());
 
         // If this node does not involve in the remotexact, stop the transaction immediately.
         if !rwset.participants().contains(self.node_id.into()) {
             warn!(
-                "Received a transaction from region {} that I do not participate in",
+                "Received a transaction from {:?} that I do not participate in",
                 self.node_id
             );
             return Ok(true);

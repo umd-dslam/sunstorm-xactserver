@@ -2636,7 +2636,7 @@ dependencies = [
  "routerify",
  "tokio",
  "tokio-postgres 0.7.7",
- "tokio-stream",
+ "tokio-util",
  "tonic",
  "tonic-build",
  "tracing",

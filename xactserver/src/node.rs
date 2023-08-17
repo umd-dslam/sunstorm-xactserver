@@ -1,11 +1,12 @@
-use std::net::SocketAddr;
-use tokio::sync::mpsc;
-use tonic::transport::Server;
-use tonic::{Request, Response, Status};
-
 use crate::proto::xact_coordination_server::{XactCoordination, XactCoordinationServer};
 use crate::proto::{DummyResponse, PrepareMessage, VoteMessage};
 use crate::XsMessage;
+use std::net::SocketAddr;
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
+use tonic::transport::Server;
+use tonic::{Request, Response, Status};
+use tracing::info;
 
 pub struct Node {
     addr: SocketAddr,
@@ -20,10 +21,15 @@ impl Node {
         }
     }
 
-    pub async fn run(self) -> anyhow::Result<()> {
+    pub async fn run(self, cancel: CancellationToken) -> anyhow::Result<()> {
         let addr = self.addr;
         let svc = XactCoordinationServer::new(self);
-        Server::builder().add_service(svc).serve(addr).await?;
+        Server::builder()
+            .add_service(svc)
+            .serve_with_shutdown(addr, cancel.cancelled())
+            .await?;
+
+        info!("Node stopped");
 
         Ok(())
     }
@@ -60,6 +66,7 @@ pub mod client {
     use crate::proto::xact_coordination_client::XactCoordinationClient;
     use crate::NodeId;
 
+    #[derive(Debug)]
     pub struct Nodes {
         conn_pools: Vec<bb8::Pool<ConnectionManager>>,
     }
