@@ -5,7 +5,7 @@ use crate::pg::{create_pg_conn_pool, PgConnectionPool};
 use crate::proto::{PrepareMessage, VoteMessage};
 use crate::xact::XactType;
 use crate::{NodeId, RollbackInfo, XactId, XactStatus, XsMessage};
-use anyhow::{anyhow, ensure, Context};
+use anyhow::Context;
 use bytes::Bytes;
 use futures::{future, Future};
 use prometheus::HistogramTimer;
@@ -93,63 +93,36 @@ impl Manager {
     }
 
     async fn process_message(&mut self, msg: XsMessage, cancel: CancellationToken) {
-        // Get the sender for the xact state manager
-        let (msg_tx, xact_id) = match &msg {
+        // Extract the transaction id
+        let xact_id = match &msg {
             XsMessage::LocalXact { .. } => {
                 self.xact_id_counter += 1;
-                let xact_id = XactId::new(self.xact_id_counter, self.node_id);
-                (self.new_xact_state_manager(xact_id, cancel), xact_id)
+                XactId::new(self.xact_id_counter, self.node_id)
             }
-            XsMessage::Prepare(prepare_req) => (
-                self.new_xact_state_manager(prepare_req.xact_id.into(), cancel),
-                prepare_req.xact_id.into(),
-            ),
-            XsMessage::Vote(vote_req) => {
-                let msg_tx = self
-                    .xact_state_managers
-                    .get(&vote_req.xact_id.into())
-                    .ok_or_else(|| anyhow!("no xact state manager running to vote"));
-                (msg_tx, vote_req.xact_id.into())
-            }
+            XsMessage::Prepare(prepare_req) => prepare_req.xact_id.into(),
+            XsMessage::Vote(vote_req) => vote_req.xact_id.into(),
         };
 
-        match msg_tx {
-            Ok(msg_tx) => {
-                // Forward the message to the xact state manager
-                if msg_tx.send(msg).await.is_err() {
-                    debug!(
-                        "cannot send message to stopped xact state manager {}",
-                        xact_id
-                    );
-                    self.xact_state_managers.remove(&xact_id);
-                }
-            }
-            Err(err) => warn!("failed to obtain manager for xact {}: {:?}", xact_id, err),
-        }
-    }
+        // Get the sender to the state manager of the transaction. Create one if it does not exist.
+        let msg_tx = self.xact_state_managers.entry(xact_id).or_insert_with(|| {
+            let (msg_tx, msg_rx) = mpsc::channel(100);
 
-    fn new_xact_state_manager(
-        &mut self,
-        id: XactId,
-        cancel: CancellationToken,
-    ) -> anyhow::Result<&mpsc::Sender<XsMessage>> {
-        ensure!(
-            !self.xact_state_managers.contains_key(&id),
-            "xact state manager already exists for exact {}",
-            id
-        );
-        let (msg_tx, msg_rx) = mpsc::channel(2);
-        // Start a new xact state manager
-        let xact_state_man = XactStateManager::new(
-            id,
-            self.node_id,
-            self.pg_conn_pool.get().unwrap().clone(),
-            self.peers.get().unwrap().clone(),
-        );
-        tokio::spawn(xact_state_man.run(msg_rx, cancel));
-        // Save and return the sender of the new xact state manager
-        // TODO: Clean up state of finished transactions
-        Ok(self.xact_state_managers.entry(id).or_insert(msg_tx))
+            let xact_state_man = XactStateManager::new(
+                xact_id,
+                self.node_id,
+                self.pg_conn_pool.get().unwrap().clone(),
+                self.peers.get().unwrap().clone(),
+            );
+
+            tokio::spawn(xact_state_man.run(msg_rx, cancel));
+
+            msg_tx
+        });
+
+        // Send the message to the state manager
+        if msg_tx.send(msg).await.is_err() {
+            debug!("Cannot send message to stopped xact {}", xact_id);
+        }
     }
 }
 
