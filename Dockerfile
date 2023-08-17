@@ -1,8 +1,8 @@
-FROM rust:1.65 AS builder
+FROM rust:1.70 AS builder
 WORKDIR /home/nonroot
 
 RUN apt-get update
-RUN apt-get install -y cmake
+RUN apt-get install -y cmake protobuf-compiler
 
 COPY Cargo.toml .
 COPY Cargo.lock .
