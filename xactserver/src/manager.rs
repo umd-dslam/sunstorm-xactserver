@@ -226,7 +226,6 @@ impl XactStateManager {
         let status = self
             .xact
             .init_as_local(
-                self.xact_id,
                 self.node_id,
                 coordinator_id,
                 rwset.participants(),
@@ -328,6 +327,18 @@ impl XactStateManager {
         Ok(finished)
     }
 
+    async fn handle_vote_msg(&mut self, vote: VoteMessage) -> anyhow::Result<bool> {
+        self.xact.add_vote(vote.into()).await?;
+
+        let status = self.xact.try_finish().await?;
+        let finished = status.is_terminal();
+        if let Some(label) = get_rollback_reason_label(status) {
+            self.end_xact_measurement(label);
+        }
+
+        Ok(finished)
+    }
+
     async fn send_to_all_but_me<F, R>(
         &self,
         participants: &bit_set::BitSet,
@@ -346,20 +357,6 @@ impl XactStateManager {
         )
         .await?;
         Ok(())
-    }
-
-    async fn handle_vote_msg(&mut self, vote: VoteMessage) -> anyhow::Result<bool> {
-        self.xact.add_vote(vote.into()).await?;
-
-        let status = self.xact.try_finish().await?;
-
-        let finished = status.is_terminal();
-
-        if let Some(label) = get_rollback_reason_label(status) {
-            self.end_xact_measurement(label);
-        }
-
-        Ok(finished)
     }
 
     fn begin_xact_measurement(&mut self) {

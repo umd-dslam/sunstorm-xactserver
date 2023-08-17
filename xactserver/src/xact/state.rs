@@ -1,13 +1,12 @@
 use super::XactStatus;
 use crate::metrics::EXECUTION_DURATION;
 use crate::pg::XactController;
-use crate::{NodeId, RollbackInfo, RollbackReason, Vote, XactId};
+use crate::{NodeId, RollbackInfo, RollbackReason, Vote};
 use anyhow::{ensure, Context};
 use bit_set::BitSet;
-use tracing::{debug, warn};
+use tracing::{debug, instrument, warn};
 
 pub struct XactState<C: XactController> {
-    xact_id: XactId,
     node_id: NodeId,
     coordinator: NodeId,
     status: XactStatus,
@@ -18,14 +17,12 @@ pub struct XactState<C: XactController> {
 
 impl<C: XactController> XactState<C> {
     pub(super) fn new(
-        xact_id: XactId,
         node_id: NodeId,
         coordinator: NodeId,
         participants: BitSet,
         controller: C,
     ) -> Self {
         Self {
-            xact_id,
             node_id,
             coordinator,
             status: XactStatus::Uninitialized,
@@ -73,10 +70,7 @@ impl<C: XactController> XactState<C> {
             });
 
             if let Some(reason) = &rollback_reason {
-                debug!(
-                    "Rolled back surrogate xact {}. Reason: {:?}",
-                    self.xact_id, reason
-                );
+                debug!("Rollbacked. Reason: {:?}", reason);
             }
         }
 
@@ -95,14 +89,13 @@ impl<C: XactController> XactState<C> {
         Ok(&self.status)
     }
 
+    #[instrument(skip_all, fields(vote_from = %vote.from))]
     pub(super) async fn add_vote(&mut self, vote: Vote) -> anyhow::Result<&XactStatus> {
         ensure!(self.status != XactStatus::Committing && self.status != XactStatus::Committed);
 
         if !self.participants.contains(vote.from.into()) {
-            warn!(
-                "Node {} is not a participant of xact {}",
-                vote.from, self.xact_id
-            );
+            warn!("Not a participant");
+            return Ok(&self.status);
         }
 
         if self.status != XactStatus::Waiting {
@@ -173,7 +166,7 @@ mod tests {
         async fn execute(&mut self) -> anyhow::Result<()> {
             self.executed = true;
             if self.rollback_on_execution {
-                anyhow::bail!("rolled back");
+                anyhow::bail!("Rollbacked");
             }
             Ok(())
         }
@@ -231,7 +224,6 @@ mod tests {
                 participant_set.insert(p.into());
             }
             XactState {
-                xact_id: XactId(100),
                 node_id: self.node_id,
                 coordinator: self.coordinator,
                 controller: TestXactController {
@@ -284,9 +276,9 @@ mod tests {
             .build();
 
         let status = state_1.initialize(vec![]).await?;
-        assert!(is_rollbacking(status), "Actual status: {:?}", status);
+        assert!(is_rollbacking(status), "actual status: {:?}", status);
         let status = state_1.try_finish().await?;
-        assert!(is_rollbacked(status), "Actual status: {:?}", status);
+        assert!(is_rollbacked(status), "actual status: {:?}", status);
         state_1.controller.assert(true, false, true);
 
         Ok(())

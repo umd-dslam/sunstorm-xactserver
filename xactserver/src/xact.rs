@@ -39,14 +39,13 @@ impl Default for XactType {
 impl XactType {
     pub async fn init_as_local(
         &mut self,
-        xact_id: XactId,
         node_id: NodeId,
         coordinator: NodeId,
         participants: BitSet,
         commit_tx: oneshot::Sender<Option<RollbackInfo>>,
     ) -> anyhow::Result<&XactStatus> {
         let controller = LocalXactController::new(commit_tx);
-        let new_state = XactState::new(xact_id, node_id, coordinator, participants, controller);
+        let new_state = XactState::new(node_id, coordinator, participants, controller);
 
         let old_state = std::mem::replace(self, Self::Local(new_state));
 
@@ -66,7 +65,7 @@ impl XactType {
         pg_conn_pool: &PgConnectionPool,
     ) -> anyhow::Result<&XactStatus> {
         let controller = SurrogateXactController::new(xact_id, data, pg_conn_pool.clone());
-        let new_state = XactState::new(xact_id, node_id, coordinator, participants, controller);
+        let new_state = XactState::new(node_id, coordinator, participants, controller);
 
         let old_state = std::mem::replace(self, Self::Surrogate(new_state));
 
@@ -132,7 +131,6 @@ mod tests {
         let mut xact = XactType::default();
         let status = xact
             .init_as_local(
-                XactId(100),
                 NodeId(1),
                 NodeId(1),
                 participants(&[NodeId(1), NodeId(3), NodeId(4)]),
@@ -161,7 +159,6 @@ mod tests {
         let mut xact = XactType::default();
         let status = xact
             .init_as_local(
-                XactId(100),
                 NodeId(1),
                 NodeId(1),
                 participants(&[NodeId(1), NodeId(3), NodeId(4)]),
