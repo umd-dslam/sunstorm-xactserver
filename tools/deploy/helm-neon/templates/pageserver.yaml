@@ -80,4 +80,10 @@ spec:
                       operator: In
                       values:
                       - pageserver
+                namespaceSelector:
+                  matchExpressions:
+                    - key: part-of
+                      operator: In
+                      values:
+                      - neon
                 topologyKey: "kubernetes.io/hostname"

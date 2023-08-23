@@ -20,6 +20,13 @@ LOG = get_logger(
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
 
 
+def run_command(cmd, info_log, dry_run, **kwargs):
+    LOG.info(info_log)
+    LOG.debug(f"Executing: {' '.join(cmd)}")
+    if not dry_run:
+        subprocess.run(cmd, **kwargs)
+
+
 def try_with_timeout(fn, timeout: int):
     start_time = time.time()
     while True:
@@ -38,24 +45,21 @@ def try_with_timeout(fn, timeout: int):
 
 def set_up_load_balancer_for_coredns(regions: List[str], dry_run: bool) -> str:
     for region in regions:
-        LOG.info(f"Creating load balancer for CoreDNS in region {region}.")
-        cmd = [
-            "kubectl",
-            "apply",
-            "--context",
-            get_context(region),
-            "-f",
-            (BASE_PATH / "eks" / "dns-lb-eks.yaml").as_posix(),
-        ]
-
-        LOG.debug(f"Executing: {' '.join(cmd)}")
-        if not dry_run:
-            subprocess.run(
-                cmd,
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.STDOUT,
-            )
+        run_command(
+            [
+                "kubectl",
+                "apply",
+                "--context",
+                get_context(region),
+                "-f",
+                (BASE_PATH / "eks" / "dns-lb-eks.yaml").as_posix(),
+            ],
+            f"Creating load balancer for CoreDNS in region {region}.",
+            dry_run,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
+        )
         LOG.info(f"Load balancer for CoreDNS in region {region} created.")
 
 
@@ -108,67 +112,103 @@ def install_dns_configmap(regions: List[str], global_region: str, dry_run: bool)
     for region in regions:
         context = get_context(region)
         helm_name = f"dns-{region}"
-        cmd = [
-            "helm",
-            "uninstall",
-            helm_name,
-            "--kube-context",
-            context,
-        ]
-        LOG.info(
-            f"Uninstalling possibly existing CoreDNS configmap in region: {region}"
+        run_command(
+            [
+                "helm",
+                "uninstall",
+                helm_name,
+                "--kube-context",
+                context,
+            ],
+            f"Uninstalling possibly existing CoreDNS configmap in region: {region}",
+            dry_run,
+            check=False,
         )
-        LOG.debug(f"Executing: {' '.join(cmd)}")
-        if not dry_run:
-            subprocess.run(cmd, check=False)
 
-        cmd = [
-            "kubectl",
-            "delete",
-            "configmap",
-            "coredns",
-            "--context",
-            context,
-            "--namespace",
-            "kube-system",
-        ]
-        LOG.info(f"Deleting possibly existing CoreDNS configmap in region: {region}")
-        LOG.debug(f"Executing: {' '.join(cmd)}")
-        if not dry_run:
-            subprocess.run(cmd, check=False)
+        run_command(
+            [
+                "kubectl",
+                "delete",
+                "configmap",
+                "coredns",
+                "--context",
+                context,
+                "--namespace",
+                "kube-system",
+            ],
+            f"Deleting possibly existing CoreDNS configmap in region: {region}",
+            dry_run,
+            check=False,
+        )
 
-        cmd = [
-            "helm",
-            "install",
-            helm_name,
-            "--kube-context",
-            context,
-            "-f",
-            dns_config.name,
-            "--set",
-            f"region={region},global_region={global_region}",
-            (BASE_PATH / "helm-dns").as_posix(),
-        ]
-        LOG.info(f"Installing new CoreDNS configmap in region: {region}")
-        LOG.debug(f"Executing: {' '.join(cmd)}")
-        if not dry_run:
-            subprocess.run(cmd, check=True)
+        run_command(
+            [
+                "helm",
+                "install",
+                helm_name,
+                "--kube-context",
+                context,
+                "-f",
+                dns_config.name,
+                "--set",
+                f"region={region},global_region={global_region}",
+                (BASE_PATH / "helm-dns").as_posix(),
+            ],
+            f"Installing new CoreDNS configmap in region: {region}",
+            dry_run,
+            check=True,
+        )
 
 
 def create_namespaces(regions: List[str], global_region: str, dry_run: bool):
+    def clean_up_namespace(region, namespace):
+        run_command(
+            [
+                "kubectl",
+                "delete",
+                "namespace",
+                namespace,
+                "--context",
+                get_context(region),
+            ],
+            f'Deleting possibly existing namespace "{namespace}" in {region}',
+            dry_run,
+            check=False,
+        )
+
+    clean_up_namespace(global_region, "global")
+    for region in regions:
+        clean_up_namespace(region, region)
+
     def create_namespace(region, namespace):
-        cmd = [
-            "kubectl",
-            "create",
-            "namespace",
-            "--context",
-            get_context(region),
-            namespace,
-        ]
-        LOG.info(f'Creating namespace "{namespace}" in {region}')
-        LOG.debug(f"Executing: {' '.join(cmd)}")
-        if not dry_run:
-            subprocess.run(cmd, check=False)
+        run_command(
+            [
+                "kubectl",
+                "create",
+                "namespace",
+                namespace,
+                "--context",
+                get_context(region),
+            ],
+            f'Creating namespace "{namespace}" in {region}',
+            dry_run,
+            check=True,
+        )
+
+        run_command(
+            [
+                "kubectl",
+                "label",
+                "namespaces",
+                namespace,
+                "part-of=neon",
+                "--context",
+                get_context(region),
+            ],
+            f'Creating namespace "{namespace}" in {region}',
+            dry_run,
+            check=True,
+        )
 
     create_namespace(global_region, "global")
     for region in regions:
@@ -179,39 +219,39 @@ def deploy_neon(
     regions: List[str], global_region: str, cleanup_only: bool, dry_run: bool
 ):
     def clean_up_neon_one_namespace(region, namespace):
-        cmd = [
-            "helm",
-            "uninstall",
-            f"neon-{namespace}",
-            "--kube-context",
-            get_context(region),
-            "--namespace",
-            namespace,
-        ]
-        LOG.info(
-            f'Uninstalling possibly existing Neon in namespace "{namespace}" in region "{region}"'
+        run_command(
+            [
+                "helm",
+                "uninstall",
+                f"neon-{namespace}",
+                "--namespace",
+                namespace,
+                "--kube-context",
+                get_context(region),
+            ],
+            f'Uninstalling possibly existing Neon in namespace "{namespace}" in region "{region}"',
+            dry_run,
+            check=False,
         )
-        LOG.debug(f"Executing: {' '.join(cmd)}")
-        if not dry_run:
-            subprocess.run(cmd, check=False)
 
     def deploy_neon_one_namespace(region, namespace):
-        cmd = [
-            "helm",
-            "install",
-            f"neon-{namespace}",
-            "--kube-context",
-            get_context(region),
-            "--namespace",
-            namespace,
-            "--set",
-            f"regions={{global,{','.join(regions)}}}",
-            (BASE_PATH / "helm-neon").as_posix(),
-        ]
-        LOG.info(f'Installing Neon in namespace "{namespace}" in region "{region}"')
-        LOG.debug(f"Executing: {' '.join(cmd)}")
-        if not dry_run:
-            subprocess.run(cmd, check=True)
+        run_command(
+            [
+                "helm",
+                "install",
+                f"neon-{namespace}",
+                "--kube-context",
+                get_context(region),
+                "--namespace",
+                namespace,
+                "--set",
+                f"regions={{global,{','.join(regions)}}}",
+                (BASE_PATH / "helm-neon").as_posix(),
+            ],
+            f'Installing Neon in namespace "{namespace}" in region "{region}"',
+            dry_run,
+            check=True,
+        )
 
     for region in regions:
         clean_up_neon_one_namespace(region, region)

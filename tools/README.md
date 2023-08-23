@@ -132,12 +132,18 @@ You can get other types of resources by replacing `deploy` with the correspondin
 
 You can also add `-o wide` to get more information about the resources.
 
+It is useful to see the status of the pods to make sure every thing is up and running, for example:
+
+```
+kubectl get pod -A -o wide --context ctring@neon.us-east-1.eksctl.io
+```
+
 ## Logs
 
 Get the logs of the `xactserver` deployment in `us-east-1`
 
 ```
-kubectl logs deploy/xactserver --context ctring@neon.us-east-1.eksctl.io -n us-east-1
+kubectl logs deploy/xactserver -n us-east-1 --context ctring@neon.us-east-1.eksctl.io
 ```
 ```
 [2023-08-15T18:55:56Z INFO  xactserver] Listening to PostgreSQL on 0.0.0.0:10000
@@ -203,6 +209,15 @@ kubectl logs job/execute -n us-east-1 --context ctring@neon.us-east-1.eksctl.io
 ```
 
 The results can be found on Minio.
+
+Overwrite the values directly in the command line:
+
+```
+python3 tools/benchmark.py execute -s tag=hot0mr0 -s mr=0 -s hot=0
+python3 tools/benchmark.py execute -s tag=hot0mr5 -s mr=5 -s hot=0
+python3 tools/benchmark.py execute -s tag=hot0mr10 -s mr=10 -s hot=0
+...
+```
 
 # Clean up
 

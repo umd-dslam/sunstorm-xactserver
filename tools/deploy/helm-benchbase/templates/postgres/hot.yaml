@@ -35,7 +35,7 @@ data:
         <numRegions>{{ sub (len .Values.regions) 1 }}</numRegions>
         <region>{{ include "regionId" . }}</region>
         <!-- Percentage of multi-region transactions -->
-        <mrpct>{{ .Values.mrpct }}</mrpct>
+        <mrpct>{{ .Values.mr }}</mrpct>
 
         <!-- The workload -->
         <terminals>{{ .Values.terminals }}</terminals>
