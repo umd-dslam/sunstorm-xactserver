@@ -96,7 +96,7 @@ impl XactType {
 
     pub async fn try_finish(&mut self) -> anyhow::Result<&XactStatus> {
         match self {
-            Self::Unknown(_) => anyhow::bail!("Xact state is uninitialized"),
+            Self::Unknown(_) => Ok(&XactStatus::Uninitialized),
             Self::Local(xact) => xact
                 .try_finish()
                 .await
@@ -302,6 +302,7 @@ mod tests {
         let xact_id = XactId(100);
         let mut xact = XactType::default();
         xact.add_vote(Vote::yes(NodeId(3))).await?;
+        assert_eq!(xact.try_finish().await?, &XactStatus::Uninitialized);
 
         let status = xact
             .init_as_surrogate(
@@ -347,7 +348,10 @@ mod tests {
         let xact_id = XactId(100);
         let mut xact = XactType::default();
         xact.add_vote(Vote::yes(NodeId(3))).await?;
+        assert_eq!(xact.try_finish().await?, &XactStatus::Uninitialized);
+
         xact.add_vote(Vote::yes(NodeId(4))).await?;
+        assert_eq!(xact.try_finish().await?, &XactStatus::Uninitialized);
 
         let status = xact
             .init_as_surrogate(
@@ -396,6 +400,7 @@ mod tests {
             RollbackReason::Other("abort".to_string()),
         ))
         .await?;
+        assert_eq!(xact.try_finish().await?, &XactStatus::Uninitialized);
 
         let status = xact
             .init_as_surrogate(
