@@ -21,7 +21,6 @@ managedNodeGroups:
     securityGroups:
       attachIDs:
         - sg-018aeab319579349c
-        - sg-0000aedfbc146790e
     labels:
       role: server
     tags:
