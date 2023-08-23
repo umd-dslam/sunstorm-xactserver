@@ -190,7 +190,7 @@ impl XactStateManager {
                             }
                         }
                         Err(e) => {
-                            error!("{}", e);
+                            error!("{:?}", e);
                             break;
                         }
                     };
