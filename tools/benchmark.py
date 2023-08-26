@@ -39,10 +39,19 @@ def run_benchmark(region, namespace, sets, args):
         helm_output.seek(0)
         LOG.debug(f"Helm output: {helm_output.read().decode()}")
 
+        context = get_context(BASE_PATH, region)
+
         # Delete the existing deployment, if any
-        cmd = ["kubectl", "delete", "--namespace", namespace, "-f", "-"]
-        if not args.local:
-            cmd.extend(["--context", get_context(region)])
+        cmd = [
+            "kubectl",
+            "delete",
+            "--namespace",
+            namespace,
+            "-f",
+            "-",
+            "--context",
+            context,
+        ]
         LOG.debug(f"Executing: {' '.join(cmd)}")
         helm_output.seek(0)
         if not args.dry_run:
@@ -53,9 +62,16 @@ def run_benchmark(region, namespace, sets, args):
             )
 
         # Apply the new deployment
-        cmd = ["kubectl", "apply", "--namespace", namespace, "-f", "-"]
-        if not args.local:
-            cmd.extend(["--context", get_context(region)])
+        cmd = [
+            "kubectl",
+            "apply",
+            "--namespace",
+            namespace,
+            "-f",
+            "-",
+            "--context",
+            context,
+        ]
         LOG.debug(f"Executing: {' '.join(cmd)}")
         helm_output.seek(0)
         if not args.dry_run:
@@ -74,11 +90,6 @@ if __name__ == "__main__":
         "-s",
         action="append",
         help="Override the values in the config file. Each argument should be in the form of key=value.",
-    )
-    parser.add_argument(
-        "--local",
-        action="store_true",
-        help="Do not include context switching in kubectl. This is used for testing locally.",
     )
     parser.add_argument(
         "--dry-run",

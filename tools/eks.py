@@ -40,7 +40,7 @@ def parallel_eksctl(action: str, regions: List[str], dry_run: bool) -> str:
                 )
             if action == "create":
                 console.log(
-                    f"EKS cluster in {region} is up. Context: {get_context(region)}."
+                    f"EKS cluster in {region} is up. Context: {get_context(BASE_PATH, region)}."
                 )
 
     with ThreadPoolExecutor() as executor:
@@ -67,6 +67,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    info = get_regions(BASE_PATH)
+    regions, global_region = get_regions(BASE_PATH)
+    regions = set(regions)
+    regions.add(global_region)
 
-    parallel_eksctl(args.action, info["regions"], args.dry_run)
+    parallel_eksctl(args.action, regions, args.dry_run)

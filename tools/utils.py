@@ -1,5 +1,6 @@
 import logging
 import subprocess
+from typing import Optional
 import yaml
 
 from rich.logging import RichHandler
@@ -52,13 +53,22 @@ def initialize_and_run_commands(parser, commands, args=None):
     parsed_args.run(parsed_args)
 
 
-def get_regions(base_path):
+def get_regions(base_path) -> (list, str):
     with open(base_path / "regions.yaml", "r") as yaml_file:
-        return yaml.safe_load(yaml_file)
+        regions_info = yaml.safe_load(yaml_file)
+        regions = regions_info["regions"].keys()
+        global_region = regions_info["global_region"]
+        return regions, global_region
 
 
-def get_context(region: str) -> str:
-    kube_context = "-"
+def get_context(base_path: str, region: str) -> Optional[str]:
+    with open(base_path / "regions.yaml", "r") as yaml_file:
+        regions_info = yaml.safe_load(yaml_file)
+        region_info = regions_info["regions"][region]
+        if region_info and "context" in region_info:
+            return region_info["context"]
+
+    kube_context = None
     kube_config_file = Path.home() / ".kube" / "config"
     with open(kube_config_file, "r") as kube_config_file:
         kube_config = yaml.safe_load(kube_config_file)

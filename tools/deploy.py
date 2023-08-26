@@ -21,6 +21,11 @@ LOG = get_logger(
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
 
 
+def context_flag(region, flag_name="--context"):
+    context = get_context(BASE_PATH, region)
+    return [flag_name, context] if context else []
+
+
 def try_with_timeout(fn, timeout: int):
     start_time = time.time()
     console = Console()
@@ -42,11 +47,10 @@ def set_up_load_balancer_for_coredns(regions: List[str], dry_run: bool) -> str:
             [
                 "kubectl",
                 "apply",
-                "--context",
-                get_context(region),
                 "-f",
                 (BASE_PATH / "eks" / "dns-lb-eks.yaml").as_posix(),
-            ],
+            ]
+            + context_flag(region),
             (LOG, f"Creating load balancer for CoreDNS in region {region}."),
             dry_run,
             check=True,
@@ -103,16 +107,14 @@ def install_dns_configmap(regions: List[str], global_region: str, dry_run: bool)
     LOG.info(f"Helm config for DNS configmap written to: {dns_config.name}")
 
     for region in regions:
-        context = get_context(region)
         helm_name = f"dns-{region}"
         run_command(
             [
                 "helm",
                 "uninstall",
                 helm_name,
-                "--kube-context",
-                context,
-            ],
+            ]
+            + context_flag(region, "--kube-context"),
             (
                 LOG,
                 f"Uninstalling possibly existing CoreDNS configmap in region: {region}",
@@ -127,11 +129,10 @@ def install_dns_configmap(regions: List[str], global_region: str, dry_run: bool)
                 "delete",
                 "configmap",
                 "coredns",
-                "--context",
-                context,
                 "--namespace",
                 "kube-system",
-            ],
+            ]
+            + context_flag(region),
             (LOG, f"Deleting possibly existing CoreDNS configmap in region: {region}"),
             dry_run,
             check=False,
@@ -142,14 +143,13 @@ def install_dns_configmap(regions: List[str], global_region: str, dry_run: bool)
                 "helm",
                 "install",
                 helm_name,
-                "--kube-context",
-                context,
                 "-f",
                 dns_config.name,
                 "--set",
                 f"region={region},global_region={global_region}",
                 (BASE_PATH / "helm-dns").as_posix(),
-            ],
+            ]
+            + context_flag(region, "--kube-context"),
             (LOG, f"Installing new CoreDNS configmap in region: {region}"),
             dry_run,
             check=True,
@@ -164,9 +164,8 @@ def create_namespaces(regions: List[str], global_region: str, dry_run: bool):
                 "delete",
                 "namespace",
                 namespace,
-                "--context",
-                get_context(region),
-            ],
+            ]
+            + context_flag(region),
             (LOG, f'Deleting possibly existing namespace "{namespace}" in {region}'),
             dry_run,
             check=False,
@@ -183,9 +182,8 @@ def create_namespaces(regions: List[str], global_region: str, dry_run: bool):
                 "create",
                 "namespace",
                 namespace,
-                "--context",
-                get_context(region),
-            ],
+            ]
+            + context_flag(region),
             (LOG, f'Creating namespace "{namespace}" in {region}'),
             dry_run,
             check=True,
@@ -198,9 +196,8 @@ def create_namespaces(regions: List[str], global_region: str, dry_run: bool):
                 "namespaces",
                 namespace,
                 "part-of=neon",
-                "--context",
-                get_context(region),
-            ],
+            ]
+            + context_flag(region),
             (LOG, f'Creating namespace "{namespace}" in {region}'),
             dry_run,
             check=True,
@@ -222,9 +219,8 @@ def deploy_neon(
                 f"neon-{namespace}",
                 "--namespace",
                 namespace,
-                "--kube-context",
-                get_context(region),
-            ],
+            ]
+            + context_flag(region, "--kube-context"),
             (
                 LOG,
                 f'Uninstalling possibly existing Neon in namespace "{namespace}" in region "{region}"',
@@ -239,14 +235,13 @@ def deploy_neon(
                 "helm",
                 "install",
                 f"neon-{namespace}",
-                "--kube-context",
-                get_context(region),
                 "--namespace",
                 namespace,
                 "--set",
                 f"regions={{global,{','.join(regions)}}}",
                 (BASE_PATH / "helm-neon").as_posix(),
-            ],
+            ]
+            + context_flag(region, "--kube-context"),
             (LOG, f'Installing Neon in namespace "{namespace}" in region "{region}"'),
             dry_run,
             check=True,
@@ -315,7 +310,7 @@ if __name__ == "__main__":
 
     unskipped_stages = STAGES[skip_before_index : skip_after_index + 1]
 
-    regions_info = get_regions(BASE_PATH)
+    regions, global_region = get_regions(BASE_PATH)
 
     log_tag = "bold yellow"
 
@@ -324,27 +319,23 @@ if __name__ == "__main__":
             f"[{log_tag}]Setting up load balancer for CoreDNS[/{log_tag}]",
             extra={"markup": True},
         )
-        set_up_load_balancer_for_coredns(regions_info["regions"], args.dry_run)
+        set_up_load_balancer_for_coredns(regions, args.dry_run)
 
     if "dns-config" in unskipped_stages:
         LOG.info(
             f"[{log_tag}]Installing DNS configmap[/{log_tag}]", extra={"markup": True}
         )
-        install_dns_configmap(
-            regions_info["regions"], regions_info["global_region"], args.dry_run
-        )
+        install_dns_configmap(regions, global_region, args.dry_run)
 
     if "namespace" in unskipped_stages:
         LOG.info(f"[{log_tag}]Creating namespaces[/{log_tag}]", extra={"markup": True})
-        create_namespaces(
-            regions_info["regions"], regions_info["global_region"], args.dry_run
-        )
+        create_namespaces(regions, global_region, args.dry_run)
 
     if "neon" in unskipped_stages:
         LOG.info(f"[{log_tag}]Deploying Neon[/{log_tag}]", extra={"markup": True})
         deploy_neon(
-            regions_info["regions"],
-            regions_info["global_region"],
+            regions,
+            global_region,
             args.clean_up_neon,
             args.dry_run,
         )
