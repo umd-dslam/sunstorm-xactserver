@@ -1,0 +1,156 @@
+{{ if eq .Release.Namespace "global" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: center
+  labels:
+    app: center
+    part-of: neon
+spec:
+  ports:
+    - name: minio-api
+      targetPort: minio-api
+      port: 9000
+    - name: minio-console
+      targetPort: minio-console
+      port: 9001
+    - name: prometheus
+      targetPort: prometheus
+      port: 9090
+    - name: grafana
+      targetPort: grafana
+      port: 3000
+  selector:
+    app: center
+  # In general, service IPs and pod IPs come from different CIDR ranges.
+  # In AWS, the pods are assigned IPs direclty from the VPC subnet whereas
+  # the service IPs are assigned from a virtual range, which is not easily
+  # accessible from a different region. The VPC subnets, however, can be easily
+  # routed between regions. Therefore, we use a headless service (setting 
+  # clusterIP to None) to expose the pod IPs directly instead of using the service IP.
+  clusterIP: None
+---
+{{ if .Values.center_ebs_volume_id }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: center-data
+  labels:
+    type: amazonEBS
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  awsElasticBlockStore:
+    volumeID: {{ .Values.center_ebs_volume_id }}
+    fsType: ext4
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: center-data
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+{{ end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: center
+  labels:
+    app: center
+    part-of: neon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: center
+  template:
+    metadata:
+      labels:
+        app: center
+        part-of: neon
+    spec:
+      containers:
+        - name: minio
+          image: quay.io/minio/minio:RELEASE.2022-11-17T23-20-09Z
+          args: 
+            - server
+            - /data/minio
+            - --console-address
+            - :9001
+          volumeMounts:
+            - name: center-data
+              mountPath: /data
+            - name: center-config
+              mountPath: /config
+          ports: 
+            - name: minio-api
+              containerPort: 9000
+            - name: minio-console
+              containerPort: 9001
+        - name: prometheus
+          image: prom/prometheus:v2.28.1
+          args:
+            - --config.file=/config/prometheus.yaml
+            - --storage.tsdb.path=/data/prometheus
+          ports:
+            - name: prometheus
+              containerPort: 9090
+          volumeMounts:
+            - name: center-data
+              mountPath: /data
+            - name: center-config
+              mountPath: /config
+        - name: grafana
+          image: grafana/grafana:8.2.2
+          env:
+            - name: GF_PATHS_DATA
+              value: /data/grafana
+          ports:
+            - name: grafana
+              containerPort: 3000            
+          volumeMounts:
+            - name: center-data
+              mountPath: /data
+      volumes:
+        - name: center-config
+          configMap:
+            name: center-config
+        - name: center-data
+          {{ if .Values.center_ebs_volume_id }}
+          persistentVolumeClaim:
+            claimName: center-data
+          {{ else }}
+          emptyDir:
+            sizeLimit: 2Gi
+          {{ end }}
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              preference:
+                matchExpressions:
+                  - key: role
+                    operator: In
+                    values:
+                      - server
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - pageserver
+                topologyKey: "kubernetes.io/hostname"
+{{ end }}

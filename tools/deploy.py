@@ -171,8 +171,10 @@ def create_namespaces(regions: List[str], global_region: str, dry_run: bool):
             check=False,
         )
 
+    clean_up_neon_one_namespace(global_region, "global", dry_run)
     clean_up_namespace(global_region, "global")
     for region in regions:
+        clean_up_neon_one_namespace(region, region, dry_run)
         clean_up_namespace(region, region)
 
     def create_namespace(region, namespace):
@@ -211,24 +213,6 @@ def create_namespaces(regions: List[str], global_region: str, dry_run: bool):
 def deploy_neon(
     regions: List[str], global_region: str, cleanup_only: bool, dry_run: bool
 ):
-    def clean_up_neon_one_namespace(region, namespace):
-        run_command(
-            [
-                "helm",
-                "uninstall",
-                f"neon-{namespace}",
-                "--namespace",
-                namespace,
-            ]
-            + context_flag(region, "--kube-context"),
-            (
-                LOG,
-                f'Uninstalling possibly existing Neon in namespace "{namespace}" in region "{region}"',
-            ),
-            dry_run,
-            check=False,
-        )
-
     def deploy_neon_one_namespace(region, namespace):
         run_command(
             [
@@ -248,8 +232,8 @@ def deploy_neon(
         )
 
     for region in regions:
-        clean_up_neon_one_namespace(region, region)
-    clean_up_neon_one_namespace(global_region, "global")
+        clean_up_neon_one_namespace(region, region, dry_run)
+    clean_up_neon_one_namespace(global_region, "global", dry_run)
 
     if cleanup_only:
         return
@@ -257,6 +241,25 @@ def deploy_neon(
     deploy_neon_one_namespace(global_region, "global")
     for region in regions:
         deploy_neon_one_namespace(region, region)
+
+
+def clean_up_neon_one_namespace(region, namespace, dry_run):
+    run_command(
+        [
+            "helm",
+            "uninstall",
+            f"neon-{namespace}",
+            "--namespace",
+            namespace,
+        ]
+        + context_flag(region, "--kube-context"),
+        (
+            LOG,
+            f'Uninstalling possibly existing Neon in namespace "{namespace}" in region "{region}"',
+        ),
+        dry_run,
+        check=False,
+    )
 
 
 STAGES = [

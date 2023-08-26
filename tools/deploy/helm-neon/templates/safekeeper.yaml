@@ -64,11 +64,18 @@ spec:
               --listen-pg=0.0.0.0:5454
               --listen-http=0.0.0.0:7676
               --broker-endpoint=http://storage-broker.global:50051
+          volumeMounts:
+            - name: data
+              mountPath: /data
           ports:
             - name: postgres
               containerPort: 5454
             - name: http
               containerPort: 7676
+      volumes:
+        - name: data
+          emptyDir:
+            sizeLimit: 10Gi
       restartPolicy: Always
       affinity:
         nodeAffinity:
