@@ -45,7 +45,7 @@ spec:
             - -c
           args:
             - |
-              until (/usr/bin/mc alias set minio http://minio.global:9000 minioadmin minioadmin) do
+              until (/usr/bin/mc alias set minio http://center.global:9000 minioadmin minioadmin) do
                   echo 'Waiting to start minio...' && sleep 1
               done
               rm -rf /data/.neon
@@ -54,11 +54,18 @@ spec:
                                         -c "broker_endpoint='http://storage-broker.global:50051'"  \
                                         -c "listen_pg_addr='0.0.0.0:6400'"                         \
                                         -c "listen_http_addr='0.0.0.0:9898'"
+          volumeMounts:
+            - name: data
+              mountPath: /data
           ports:
             - name: postgres
               containerPort: 6400
             - name: http
               containerPort: 9898
+      volumes:
+        - name: data
+          emptyDir:
+            sizeLimit: 10Gi
       affinity:
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:

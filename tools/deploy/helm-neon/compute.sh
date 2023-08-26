@@ -38,7 +38,7 @@ sed -i "s/REGION/${REGION}/" ${SPEC_FILE}
 cat ${SPEC_FILE}
 
 echo "Start compute node"
-/usr/local/bin/compute_ctl --pgdata /var/db/postgres/compute  \
+/usr/local/bin/compute_ctl --pgdata /data/compute  \
     -C "postgresql://cloud_admin@localhost:55433/postgres"    \
     -b /usr/local/bin/postgres                                \
     -S /tmp/spec.json

@@ -1,0 +1,38 @@
+{{ if eq .Release.Namespace "global" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: center-config
+  labels:
+    app: center-config
+    part-of: neon
+data:
+  prometheus.yaml: |
+    global:
+      scrape_interval: 5s
+
+    scrape_configs:
+      - job_name: pageserver
+        scrape_interval: 1s 
+        static_configs:
+          - targets:
+          {{- range $r := .Values.regions }}
+            - pageserver.{{ $r }}:9898
+          {{- end }}
+
+      - job_name: compute
+        scrape_interval: 1s
+        static_configs:
+          - targets: 
+          {{- range $r := .Values.regions }}
+            - compute.{{ $r }}:9187
+          {{- end }}
+
+      - job_name: xactserver
+        scrape_interval: 1s
+        static_configs:
+          - targets:
+          {{- range $r := .Values.regions }}
+            - xactserver.{{ $r }}:8080
+          {{- end }}
+{{ end }}
