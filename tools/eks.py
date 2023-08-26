@@ -1,32 +1,25 @@
 import argparse
 import os
+import time
 import subprocess
-
-import yaml
 
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List
-from utils import get_logger, spin_while, reset_spinner, get_regions, get_context
+from rich.console import Console
+from utils import get_logger, get_regions, get_context
 
-LOG = get_logger(
-    __name__,
-    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
-    fmt="%(asctime)s %(threadName)s %(levelname)5s - %(message)s",
-)
 
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
 
 
 def parallel_eksctl(action: str, regions: List[str], dry_run: bool) -> str:
+    console = Console()
+
     def create_eks_cluster(region: str):
         eks_config_file = f"eks/{region}.yaml"
         eks_log_file = f"eks/{region}.log"
 
-        reset_spinner()
-        LOG.info(
-            f'Running "{action}" on EKS cluster in: {eks_config_file}. See logs in {eks_log_file}'
-        )
         cmd = [
             "eksctl",
             action,
@@ -34,8 +27,9 @@ def parallel_eksctl(action: str, regions: List[str], dry_run: bool) -> str:
             "-f",
             (BASE_PATH / eks_config_file).as_posix(),
         ]
-        reset_spinner()
-        LOG.debug(f"Executing: {' '.join(cmd)}")
+
+        console.log(f"Running: {' '.join(cmd)}. See logs in {eks_log_file}.")
+
         if not dry_run:
             with open(BASE_PATH / eks_log_file, "w") as log_file:
                 subprocess.run(
@@ -45,13 +39,16 @@ def parallel_eksctl(action: str, regions: List[str], dry_run: bool) -> str:
                     stderr=subprocess.STDOUT,
                 )
             if action == "create":
-                LOG.info(
+                console.log(
                     f"EKS cluster in {region} is up. Context: {get_context(region)}."
                 )
 
     with ThreadPoolExecutor() as executor:
         tasks = [executor.submit(create_eks_cluster, region) for region in regions]
-        spin_while(lambda _: any(task.running() for task in tasks))
+        with console.status("[bold green]Waiting for the EKS clusters..."):
+            while any(task.running() for task in tasks):
+                time.sleep(1)
+
         # Consume the exceptions if any
         for task in tasks:
             task.result()

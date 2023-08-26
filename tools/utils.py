@@ -1,36 +1,9 @@
 import logging
-import itertools
-import time
+import subprocess
 import yaml
 
+from rich.logging import RichHandler
 from pathlib import Path
-
-
-class CustomFormatter(logging.Formatter):
-    """Logging colored formatter"""
-
-    grey = "\x1b[38;21m"
-    blue = "\x1b[38;5;39m"
-    yellow = "\x1b[38;5;226m"
-    red = "\x1b[38;5;196m"
-    bold_red = "\x1b[31;1m"
-    reset = "\x1b[0m"
-
-    def __init__(self, fmt):
-        super().__init__()
-        self.fmt = fmt
-        self.FORMATS = {
-            logging.DEBUG: self.grey + self.fmt + self.reset,
-            logging.INFO: self.blue + self.fmt + self.reset,
-            logging.WARNING: self.yellow + self.fmt + self.reset,
-            logging.ERROR: self.red + self.fmt + self.reset,
-            logging.CRITICAL: self.bold_red + self.fmt + self.reset,
-        }
-
-    def format(self, record):
-        log_fmt = self.FORMATS.get(record.levelno)
-        formatter = logging.Formatter(log_fmt)
-        return formatter.format(record)
 
 
 def get_logger(
@@ -38,11 +11,10 @@ def get_logger(
     level: int = logging.INFO,
     fmt: str = "%(asctime)s %(levelname)5s - %(message)s",
 ):
+    handler = RichHandler()
+    handler.setLevel(level)
     logger = logging.getLogger(name)
-    ch = logging.StreamHandler()
-    ch.setLevel(level)
-    ch.setFormatter(CustomFormatter(fmt))
-    logger.addHandler(ch)
+    logger.addHandler(RichHandler())
     logger.setLevel(level)
     return logger
 
@@ -80,19 +52,6 @@ def initialize_and_run_commands(parser, commands, args=None):
     parsed_args.run(parsed_args)
 
 
-def reset_spinner():
-    print("\r", end="")
-
-
-def spin_while(cond_fn):
-    spinner = itertools.cycle(["-", "/", "|", "\\"])
-    start_time = time.time()
-    while cond_fn(time.time() - start_time):
-        time.sleep(0.1)
-        print(f"\r{next(spinner)}", end="")
-    print("\r", end="")
-
-
 def get_regions(base_path):
     with open(base_path / "regions.yaml", "r") as yaml_file:
         return yaml.safe_load(yaml_file)
@@ -109,3 +68,11 @@ def get_context(region: str) -> str:
                 break
 
     return kube_context
+
+
+def run_command(cmd, logger_and_info_log, dry_run, **kwargs):
+    logger, info_log = logger_and_info_log
+    logger.info(info_log)
+    logger.debug(f"Executing: {' '.join(cmd)}")
+    if not dry_run:
+        subprocess.run(cmd, **kwargs)

@@ -29,7 +29,7 @@ class Neon:
 
     def run(self, args: List[str], check=True, **kwargs):
         cwd = kwargs.get("cwd", os.getcwd())
-        logger.info(f"[{cwd}]: {os.path.basename(self.bin)} {' '.join(args)}")
+        logger.info(f"[{cwd}] {os.path.basename(self.bin)} {' '.join(args)}")
 
         if self.dry_run:
             return
@@ -50,7 +50,7 @@ class XactServer:
     def run(self, args: List[str], **kwargs):
         cwd = kwargs.get("cwd", os.getcwd())
         bin_name = self.bin if self.dry_run else os.path.basename(self.bin)
-        logger.info(f"[{cwd}]: {bin_name} {' '.join(args)}")
+        logger.info(f"[{cwd}] {bin_name} {' '.join(args)}")
 
         if self.dry_run:
             return
@@ -259,7 +259,7 @@ class CreateCommand(NeonCommand):
 
         region_names = [f"{args.region_prefix}{i}" for i in range(args.num_regions + 1)]
 
-        logger.info("============== INITIALIZING THE GLOBAL REGION ==============")
+        logger.info("[b]INITIALIZING THE GLOBAL REGION[/b]", extra={"markup": True})
         global_region_dir = os.path.join(args.data_dir, region_names[0])
         if not args.dry_run:
             os.makedirs(global_region_dir, exist_ok=True)
@@ -271,7 +271,8 @@ class CreateCommand(NeonCommand):
         )
 
         logger.info(
-            f"============== CREATING TIMELINES FOR {args.num_regions} REGIONS =============="
+            f"[b]CREATING TIMELINES FOR {args.num_regions} REGIONS[/b]",
+            extra={"markup": True},
         )
         for i, region in enumerate(region_names):
             if i == 0:
@@ -292,19 +293,20 @@ class CreateCommand(NeonCommand):
             neon.run(["stop"], cwd=global_region_dir)
 
         logger.info(
-            "============== CLONING THE GLOBAL REGION TO OTHER REGIONS =============="
+            "[b]CLONING THE GLOBAL REGION TO OTHER REGIONS[/b]", extra={"markup": True}
         )
         for i, region in enumerate(region_names):
             if i == 0:
                 continue
             region_dir = os.path.join(args.data_dir, region)
-            logger.info(f'Cloning "{global_region_dir}" into "{region_dir}"')
+            logger.info(f"Cloning {global_region_dir} into {region_dir}")
             if not args.dry_run:
                 os.makedirs(region_dir, exist_ok=True)
                 clone_neon(global_region_dir, region_dir, i)
 
         logger.info(
-            "============== CREATING ENDPOINTS FOR EACH NON-GLOBAL REGION =============="
+            "[b]CREATING ENDPOINTS FOR EACH NON-GLOBAL REGION[/b]",
+            extra={"markup": True},
         )
         for i, region in enumerate(region_names):
             if i == 0:
