@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import tempfile
 import time
@@ -6,12 +7,14 @@ import subprocess
 
 import boto3
 import dns.resolver
+import kubernetes.client
 import yaml
 
 from pathlib import Path
+from kubernetes.client.rest import ApiException
 from typing import List
 from rich.console import Console
-from utils import get_logger, get_regions, get_context, run_command
+from utils import get_logger, get_regions, get_context, run_command, get_kube_config
 
 LOG = get_logger(
     __name__,
@@ -158,18 +161,19 @@ def install_dns_configmap(regions: List[str], global_region: str, dry_run: bool)
 
 def create_namespaces(regions: List[str], global_region: str, dry_run: bool):
     def clean_up_namespace(region, namespace):
-        run_command(
-            [
-                "kubectl",
-                "delete",
-                "namespace",
-                namespace,
-            ]
-            + context_flag(region),
-            (LOG, f'Deleting possibly existing namespace "{namespace}" in {region}'),
-            dry_run,
-            check=False,
-        )
+        config = get_kube_config(BASE_PATH, region)
+        LOG.info(f"Deleting namespace {namespace} in region {region}")
+        with kubernetes.client.ApiClient(config) as api_client:
+            kube = kubernetes.client.CoreV1Api(api_client)
+            try:
+                kube.delete_namespace(
+                    namespace, pretty="true", dry_run="All" if dry_run else None
+                )
+            except ApiException as e:
+                if e.status != 404:
+                    LOG.error(
+                        "Exception when calling CoreV1Api->delete_namespace: %s" % e
+                    )
 
     clean_up_neon_one_namespace(global_region, "global", dry_run)
     clean_up_namespace(global_region, "global")
@@ -178,32 +182,37 @@ def create_namespaces(regions: List[str], global_region: str, dry_run: bool):
         clean_up_namespace(region, region)
 
     def create_namespace(region, namespace):
-        run_command(
-            [
-                "kubectl",
-                "create",
-                "namespace",
-                namespace,
-            ]
-            + context_flag(region),
-            (LOG, f'Creating namespace "{namespace}" in {region}'),
-            dry_run,
-            check=True,
-        )
-
-        run_command(
-            [
-                "kubectl",
-                "label",
-                "namespaces",
-                namespace,
-                "part-of=neon",
-            ]
-            + context_flag(region),
-            (LOG, f'Creating namespace "{namespace}" in {region}'),
-            dry_run,
-            check=True,
-        )
+        config = get_kube_config(BASE_PATH, region)
+        LOG.info(f"Creating namespace {namespace} in region {region}")
+        with kubernetes.client.ApiClient(config) as api_client:
+            kube = kubernetes.client.CoreV1Api(api_client)
+            while True:
+                try:
+                    kube.create_namespace(
+                        kubernetes.client.V1Namespace(
+                            metadata=kubernetes.client.V1ObjectMeta(
+                                name=namespace,
+                                labels={
+                                    "part-of": "neon",
+                                },
+                            )
+                        ),
+                        pretty="true",
+                        dry_run="All" if dry_run else None,
+                    )
+                    break
+                except ApiException as e:
+                    body = json.loads(e.body)
+                    if "object is being deleted" in body["message"]:
+                        LOG.warning(
+                            f"Namespace {namespace} in region {region} is being deleted. Retrying after 2 second."
+                        )
+                        time.sleep(2)
+                    else:
+                        LOG.error(
+                            "Exception when calling CoreV1Api->create_namespace: %s" % e
+                        )
+                        break
 
     create_namespace(global_region, "global")
     for region in regions:

@@ -3,10 +3,10 @@
 regions:
   us-east-1:
     context: minikube
-  us-east-2:
-    context: minikube
-  us-west-1:
-    context: minikube
+  # us-east-2:
+  #   context: local
+  # us-west-1:
+  #   context: local
 
 # The region that contains the global resources. This region can
 # be one of the regions listed above, or a different region.
