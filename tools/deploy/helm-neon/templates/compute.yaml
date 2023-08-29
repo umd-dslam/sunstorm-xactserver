@@ -14,9 +14,9 @@ spec:
     - name: http
       targetPort: http
       port: 3080
-    - name: metrics
-      targetPort: metrics
-      port: 9187
+    # - name: metrics
+    #   targetPort: metrics
+    #   port: 9187
   selector:
     app: compute
 ---
@@ -41,7 +41,7 @@ spec:
         part-of: neon
     spec:
       containers:
-        - name: postgres
+        - name: compute
           image: ctring/compute-node-v14:latest
           env:
             - name: REGION
@@ -64,14 +64,14 @@ spec:
               containerPort: 55433
             - name: http
               containerPort: 3080
-        - name: metrics-exporter
-          image: quay.io/prometheuscommunity/postgres-exporter:master
-          env:
-            - name: DATA_SOURCE_NAME
-              value: postgresql://cloud_admin@localhost:55433/postgres?sslmode=disable
-          ports:
-            - name: metrics
-              containerPort: 9187
+        # - name: metrics-exporter
+        #   image: quay.io/prometheuscommunity/postgres-exporter:master
+        #   env:
+        #     - name: DATA_SOURCE_NAME
+        #       value: postgresql://cloud_admin@localhost:55433/postgres?sslmode=disable
+        #   ports:
+        #     - name: metrics
+        #       containerPort: 9187
       restartPolicy: Always
       volumes:
         - name: config

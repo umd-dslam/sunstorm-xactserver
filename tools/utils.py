@@ -1,10 +1,11 @@
 import logging
+import kubernetes.client
+import kubernetes.config
 import subprocess
-from typing import Optional
 import yaml
 
 from rich.logging import RichHandler
-from pathlib import Path
+from typing import Optional
 
 
 def get_logger(
@@ -61,23 +62,38 @@ def get_regions(base_path) -> (list, str):
         return regions, global_region
 
 
-def get_context(base_path: str, region: str) -> Optional[str]:
+def get_context(base_path, region: str) -> str:
+    contexts, _ = kubernetes.config.list_kube_config_contexts()
+    context_names = [c["name"] for c in contexts]
+
+    context = None
     with open(base_path / "regions.yaml", "r") as yaml_file:
         regions_info = yaml.safe_load(yaml_file)
-        region_info = regions_info["regions"][region]
-        if region_info and "context" in region_info:
-            return region_info["context"]
+        if region in regions_info["regions"]:
+            regions = regions_info["regions"]
+            if region in regions and regions[region] and "context" in regions[region]:
+                context = regions[region]["context"]
 
-    kube_context = None
-    kube_config_file = Path.home() / ".kube" / "config"
-    with open(kube_config_file, "r") as kube_config_file:
-        kube_config = yaml.safe_load(kube_config_file)
-        for ctx in kube_config["contexts"]:
-            if region in ctx["name"]:
-                kube_context = ctx["name"]
+    if context is None:
+        for ctx in context_names:
+            if region in ctx:
+                context = ctx
                 break
 
-    return kube_context
+    if context is None:
+        raise Exception(f"Could not find context for region: {region}")
+
+    return context
+
+
+def get_kube_config(base_path, region: str):
+    context = get_context(base_path, region)
+    config = kubernetes.client.Configuration()
+    kubernetes.config.load_kube_config(
+        context=context, client_configuration=config, persist_config=False
+    )
+
+    return config
 
 
 def run_command(cmd, logger_and_info_log, dry_run, **kwargs):
