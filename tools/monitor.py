@@ -5,10 +5,13 @@ import os
 import threading
 import signal
 
-from concurrent.futures import ThreadPoolExecutor
+from collections import defaultdict
 from pathlib import Path
-from rich.console import Console
+from rich.console import Console, Group
+from rich.live import Live
+from rich.table import Table
 from rich.prompt import Confirm
+from rich.layout import Layout
 from utils import (
     get_regions,
     get_logger,
@@ -80,29 +83,29 @@ def get_running_pods_in_deployment(region, namespace, deployment_name):
 def get_region_namespaces(args) -> list[tuple[str, str]]:
     regions, global_region = get_regions(BASE_PATH)
 
-    chosen_regions = []
-    if args.regions:
-        for r in args.regions:
-            if r == "global":
-                chosen_regions.append((global_region, r))
-            elif r in regions:
-                chosen_regions.append((r, r))
+    chosen = []
+    if args.namespaces:
+        for ns in args.namespaces:
+            if ns == "global":
+                chosen.append((global_region, ns))
+            elif ns in regions:
+                chosen.append((ns, ns))
             else:
-                raise ValueError(f"Region {r} is not defined in the config file.")
+                raise ValueError(f"Namespace {ns} is not defined in the config file.")
     else:
-        chosen_regions = [(r, r) for r in regions]
-        chosen_regions.append((global_region, "global"))
+        chosen = [(r, r) for r in regions]
+        chosen.append((global_region, "global"))
 
-    return chosen_regions
+    return chosen
 
 
 class MonitorCommand(Command):
     def add_arguments(self, parser):
         parser.add_argument(
-            "--regions",
-            "-r",
+            "--namespaces",
+            "-ns",
             nargs="*",
-            help="The regions to monitor. If not specified, all regions will be monitored.",
+            help="The namespaces to monitor. If not specified, all namespaces will be monitored.",
         )
 
 
@@ -232,10 +235,149 @@ class StatusCommand(MonitorCommand):
 
     def add_arguments(self, parser):
         super().add_arguments(parser)
-        pass
+        parser.add_argument(
+            "--refresh",
+            "-n",
+            type=int,
+            default=1,
+            help="The refresh rate in seconds.",
+        )
 
     def do_command(self, args):
-        pass
+        layout = Layout()
+        layout.split_column(
+            Layout(f"Refreshing every {args.refresh} seconds", size=1),
+            Layout(StatusCommand._generate_tables(args), name="table"),
+        )
+
+        exit_event = threading.Event()
+        signal.signal(signal.SIGINT, lambda *args: exit_event.set())
+
+        with Live(layout, screen=True):
+            while True:
+                layout["table"].update(StatusCommand._generate_tables(args))
+                if exit_event.wait(timeout=args.refresh):
+                    break
+
+    @staticmethod
+    def _generate_tables(args):
+        data = StatusCommand._get_data(args)
+
+        colors = itertools.cycle(COLORS)
+        node_to_color = {}
+        tables = []
+
+        def color_status(status):
+            if status in ["Running", "Succeeded"]:
+                return f"[b green]{status}[/b green]"
+            elif status == "Pending":
+                return "[b yellow]Pending[/b yellow]"
+            elif status == "Terminating":
+                return "[b]Terminating[/b]"
+            else:
+                return f"[b red]{status}[/b red]"
+
+        for region, namespaces in data.items():
+            table = Table(
+                "Namespace",
+                "Node",
+                "Capacity",
+                "Pod",
+                "Status",
+                title=f"[bold]{region}[/bold]",
+            )
+
+            for namespace, nodes in namespaces.items():
+                table.add_section()
+                namespace_cell = namespace
+                for node in nodes:
+                    node_cell = node
+
+                    cpu = nodes[node]["capacity"]["cpu"]
+                    memory = nodes[node]["capacity"]["memory"]
+                    capacity_cell = f"cpu: {cpu}, mem: {memory}"
+
+                    # Choose a color for the node
+                    if node not in node_to_color:
+                        node_to_color[node] = next(colors)
+                    color = node_to_color[node]
+
+                    for pod in nodes[node]["pods"]:
+                        table.add_row(
+                            namespace_cell,
+                            f"[{color}]{node_cell}[/{color}]",
+                            f"[{color}]{capacity_cell}[/{color}]",
+                            f"[{color}]{pod['name']}[/{color}]",
+                            color_status(pod["status"]),
+                        )
+                        node_cell = ""
+                        capacity_cell = ""
+                        namespace_cell = ""
+
+            tables.append(table)
+
+        return Group(*tables)
+
+    @staticmethod
+    def _get_data(args):
+        data = defaultdict(dict)
+        for region, namespace in get_region_namespaces(args):
+            config = get_kube_config(BASE_PATH, region)
+
+            nodes = defaultdict(lambda: {"pods": []})
+
+            with kubernetes.client.ApiClient(config) as api_client:
+                corev1 = kubernetes.client.CoreV1Api(api_client)
+                pods = corev1.list_namespaced_pod(
+                    namespace=namespace,
+                ).items
+
+                for pod in pods:
+                    node = pod.spec.node_name
+
+                    # Populate node capacity if not already done
+                    if "capacity" not in nodes[node]:
+                        node_obj = corev1.read_node(node)
+                        nodes[node]["capacity"] = node_obj.status.capacity
+
+                    # Add pod to node
+                    nodes[node]["pods"].append(
+                        {
+                            "name": pod.metadata.name,
+                            "status": StatusCommand._compute_status(pod),
+                        }
+                    )
+
+            data[region].update({namespace: nodes})
+
+        return data
+
+    @staticmethod
+    def _compute_status(pod):
+        if pod.status.phase != "Running":
+            return pod.status.phase
+
+        is_disrupted = False
+        containers_ready = False
+        for cond in pod.status.conditions or []:
+            if cond.type == "DisruptionTarget" and cond.status == "True":
+                is_disrupted = True
+                break
+            if cond.type == "ContainersReady" and cond.status == "True":
+                containers_ready = True
+
+        if is_disrupted:
+            return "Terminating"
+
+        if not containers_ready:
+            for container in pod.status.container_statuses or []:
+                if not container.ready:
+                    if container.state.waiting:
+                        return container.state.waiting.reason
+                    elif container.state.terminated:
+                        return container.state.terminated.reason
+
+        return "Running"
 
 
 if __name__ == "__main__":

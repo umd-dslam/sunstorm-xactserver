@@ -205,9 +205,9 @@ def create_namespaces(regions: List[str], global_region: str, dry_run: bool):
                     body = json.loads(e.body)
                     if "object is being deleted" in body["message"]:
                         LOG.warning(
-                            f"Namespace {namespace} in region {region} is being deleted. Retrying after 2 second."
+                            f"Namespace {namespace} in region {region} is being deleted. Retrying after 5 second."
                         )
-                        time.sleep(2)
+                        time.sleep(5)
                     else:
                         LOG.error(
                             "Exception when calling CoreV1Api->create_namespace: %s" % e
