@@ -6,11 +6,7 @@ from pathlib import Path
 from utils import get_regions, get_logger, get_context
 from tempfile import TemporaryFile
 
-LOG = get_logger(
-    __name__,
-    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
-)
-
+LOG = get_logger(__name__)
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
 
 

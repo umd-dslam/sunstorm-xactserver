@@ -10,7 +10,7 @@ from typing import List, Optional
 
 from utils import get_logger
 
-logger = get_logger(__name__)
+LOG = get_logger(__name__)
 
 
 class CloneError(Exception):
@@ -38,7 +38,7 @@ def update_inplace(prefix: str, d: dict, fn_or_val, path: List[str]):
         ref[last] = fn_or_val
     dotted = ".".join(path)
     if old != ref[last]:
-        logger.info(f"Updated '{prefix}{dotted}':\t{old} => {ref[last]}")
+        LOG.info(f"Updated '{prefix}{dotted}':\t{old} => {ref[last]}")
     return ref[last]
 
 
@@ -50,13 +50,13 @@ def deep_copy_neon(src: Path, dst: Path):
     if not src_neon.is_dir():
         raise CloneError(f"The '.neon' directory is not found in '{src}'")
 
-    logger.info(f"Found '.neon' in '{src}/'")
+    LOG.info(f"Found '.neon' in '{src}/'")
 
     if not dst.is_dir():
         raise CloneError(f"Destination directory not found or not a directory: '{dst}'")
 
     shutil.copytree(src_neon, dst / ".neon")
-    logger.info(f"Cloned '.neon' to '{dst}/'")
+    LOG.info(f"Cloned '.neon' to '{dst}/'")
 
 
 def edit_configs(ordinal: int, hostname: Optional[str], dst_neon: Path):
@@ -141,7 +141,7 @@ def edit_safekeeper_ids(ordinal: int, dst_neon: Path):
         sk_path = sk_path.rename(safekeepers_path / f"sk{new_id}")
         (sk_path / "safekeeper.id").unlink(missing_ok=True)
 
-        logger.info(f"Renamed 'safekeepers/sk{old_id}' to 'safekeepers/sk{new_id}'")
+        LOG.info(f"Renamed 'safekeepers/sk{old_id}' to 'safekeepers/sk{new_id}'")
         sk["id"] = new_id
 
     with config_path.open("w") as f:
@@ -181,4 +181,4 @@ if __name__ == "__main__":
     try:
         clone_neon(**vars(parser.parse_args()))
     except CloneError as e:
-        logger.error(e)
+        LOG.error(e)

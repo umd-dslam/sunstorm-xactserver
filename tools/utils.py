@@ -1,23 +1,17 @@
 import logging
 import kubernetes.client
 import kubernetes.config
+import os
 import subprocess
 import yaml
 
 from rich.logging import RichHandler
-from typing import Optional
 
 
-def get_logger(
-    name: str,
-    level: int = logging.INFO,
-    fmt: str = "%(asctime)s %(levelname)5s - %(message)s",
-):
-    handler = RichHandler()
-    handler.setLevel(level)
+def get_logger(name: str):
     logger = logging.getLogger(name)
     logger.addHandler(RichHandler())
-    logger.setLevel(level)
+    logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
     return logger
 
 

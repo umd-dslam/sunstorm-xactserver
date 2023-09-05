@@ -20,11 +20,7 @@ from utils import (
     initialize_and_run_commands,
 )
 
-LOG = get_logger(
-    __name__,
-    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
-)
-
+LOG = get_logger(__name__)
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
 
 # List of 20 distinct colors

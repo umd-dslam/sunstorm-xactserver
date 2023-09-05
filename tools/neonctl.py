@@ -18,7 +18,7 @@ from typing import List, Dict
 from utils import get_logger, Command, initialize_and_run_commands
 from neonclone import clone_neon
 
-logger = get_logger(__name__)
+LOG = get_logger(__name__)
 
 
 class Neon:
@@ -29,7 +29,7 @@ class Neon:
 
     def run(self, args: List[str], check=True, **kwargs):
         cwd = kwargs.get("cwd", os.getcwd())
-        logger.info(f"[{cwd}] {os.path.basename(self.bin)} {' '.join(args)}")
+        LOG.info(f"[{cwd}] {os.path.basename(self.bin)} {' '.join(args)}")
 
         if self.dry_run:
             return
@@ -37,7 +37,7 @@ class Neon:
         try:
             subprocess.run([self.bin] + args, env=self.env, check=check, **kwargs)
         except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to run {self.bin} {' '.join(args)}")
+            LOG.error(f"Failed to run {self.bin} {' '.join(args)}")
             raise e
 
 
@@ -50,7 +50,7 @@ class XactServer:
     def run(self, args: List[str], **kwargs):
         cwd = kwargs.get("cwd", os.getcwd())
         bin_name = self.bin if self.dry_run else os.path.basename(self.bin)
-        logger.info(f"[{cwd}] {bin_name} {' '.join(args)}")
+        LOG.info(f"[{cwd}] {bin_name} {' '.join(args)}")
 
         if self.dry_run:
             return
@@ -75,16 +75,16 @@ class XactServer:
         pid_file = os.path.join(cwd, "xactserver.pid")
 
         if not os.path.isfile(pid_file):
-            logger.info("No xactserver.pid file found. Skipping")
+            LOG.info("No xactserver.pid file found. Skipping")
             return
 
         with open(pid_file, "r") as f:
             pid = int(f.read())
-            logger.info(f"Stopping xactserver with pid {pid}")
+            LOG.info(f"Stopping xactserver with pid {pid}")
             try:
                 os.kill(pid, signal.SIGTERM)
             except ProcessLookupError:
-                logger.info(f"Process with pid {pid} does not exist. Skipping")
+                LOG.info(f"Process with pid {pid} does not exist. Skipping")
 
 
 class NeonCommand(Command):
@@ -116,15 +116,15 @@ class NeonCommand(Command):
                     break
 
             if neon_bin_path is None:
-                logger.critical(
+                LOG.critical(
                     "Cannot find neon_local binary. Specify --neon-dir or set NEON_DIR environment variable"
                 )
                 exit(1)
 
             pg_dir = args.pg_dir or os.path.join(neon_dir, "pg_install")
 
-            logger.info("Using neon_local binary at: %s", neon_bin_path)
-            logger.info("Using Postgres distribution at: %s", pg_dir)
+            LOG.info("Using neon_local binary at: %s", neon_bin_path)
+            LOG.info("Using Postgres distribution at: %s", pg_dir)
 
             self.neon_bin = Neon(
                 neon_bin_path,
@@ -157,12 +157,12 @@ class NeonCommand(Command):
                     break
 
             if xactserver_bin_path is None:
-                logger.critical(
+                LOG.critical(
                     "Cannot find xactserver binary. Specify --xactserver-dir or set XACTSERVER_DIR environment variable"
                 )
                 exit(1)
 
-            logger.info("Using xactserver binary at: %s", xactserver_bin_path)
+            LOG.info("Using xactserver binary at: %s", xactserver_bin_path)
 
             self.xactserver_bin = XactServer(
                 xactserver_bin_path, {}, args.dry_run or args.no_xactserver
@@ -185,7 +185,7 @@ class NeonCommand(Command):
             for r in self.get_regions_in_root_dir(args)
         ]
 
-        logger.info("Starting neon in all regions")
+        LOG.info("Starting neon in all regions")
 
         neon = self.get_neon(args)
         for region, dir in regions_and_dirs:
@@ -196,11 +196,11 @@ class NeonCommand(Command):
             )
 
         if args.no_xactserver:
-            logger.warning(
+            LOG.warning(
                 "Xactservers are not started. Run the following commands in separate terminals to start the xactservers"
             )
         else:
-            logger.info("Starting xactserver in all regions")
+            LOG.info("Starting xactserver in all regions")
 
         xactserver = self.get_xactserver(args)
         xactserver_nodes = [
@@ -231,12 +231,12 @@ class NeonCommand(Command):
         ]
         if not args.no_xactserver:
             xactserver = self.get_xactserver(args)
-            logger.info("Stopping xactserver in all regions")
+            LOG.info("Stopping xactserver in all regions")
             for dir in region_dirs:
                 xactserver.stop(cwd=dir)
 
         neon = self.get_neon(args)
-        logger.info("Stopping neon in all regions")
+        LOG.info("Stopping neon in all regions")
         for dir in region_dirs:
             neon.run(["stop"], cwd=dir, check=False)
 
@@ -259,7 +259,7 @@ class CreateCommand(NeonCommand):
 
         region_names = [f"{args.region_prefix}{i}" for i in range(args.num_regions + 1)]
 
-        logger.info("[b]INITIALIZING THE GLOBAL REGION[/b]", extra={"markup": True})
+        LOG.info("[b]INITIALIZING THE GLOBAL REGION[/b]", extra={"markup": True})
         global_region_dir = os.path.join(args.data_dir, region_names[0])
         if not args.dry_run:
             os.makedirs(global_region_dir, exist_ok=True)
@@ -270,7 +270,7 @@ class CreateCommand(NeonCommand):
             cwd=global_region_dir,
         )
 
-        logger.info(
+        LOG.info(
             f"[b]CREATING TIMELINES FOR {args.num_regions} REGIONS[/b]",
             extra={"markup": True},
         )
@@ -292,19 +292,19 @@ class CreateCommand(NeonCommand):
         if not args.keep_neon:
             neon.run(["stop"], cwd=global_region_dir)
 
-        logger.info(
+        LOG.info(
             "[b]CLONING THE GLOBAL REGION TO OTHER REGIONS[/b]", extra={"markup": True}
         )
         for i, region in enumerate(region_names):
             if i == 0:
                 continue
             region_dir = os.path.join(args.data_dir, region)
-            logger.info(f"Cloning {global_region_dir} into {region_dir}")
+            LOG.info(f"Cloning {global_region_dir} into {region_dir}")
             if not args.dry_run:
                 os.makedirs(region_dir, exist_ok=True)
                 clone_neon(global_region_dir, region_dir, i)
 
-        logger.info(
+        LOG.info(
             "[b]CREATING ENDPOINTS FOR EACH NON-GLOBAL REGION[/b]",
             extra={"markup": True},
         )
@@ -359,7 +359,7 @@ class DestroyCommand(NeonCommand):
         region_names = self.get_regions_in_root_dir(args)
         for region in region_names:
             region_dir = os.path.join(args.data_dir, region)
-            logger.info("Removing %s", region_dir)
+            LOG.info("Removing %s", region_dir)
             if not args.dry_run:
                 shutil.rmtree(region_dir)
 

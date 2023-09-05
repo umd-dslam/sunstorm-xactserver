@@ -16,11 +16,7 @@ from typing import List
 from rich.console import Console
 from utils import get_logger, get_regions, get_context, run_command, get_kube_config
 
-LOG = get_logger(
-    __name__,
-    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
-)
-
+LOG = get_logger(__name__)
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
 
 
