@@ -88,6 +88,7 @@ def delete_eks_cluster(info: RegionInfo, dry_run: bool):
             "eksctl",
             "delete",
             "cluster",
+            "--force",
             "--config-file",
             eks_config_file.as_posix(),
         ],
