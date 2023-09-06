@@ -13,7 +13,7 @@ from pathlib import Path
 from kubernetes.client.rest import ApiException
 from typing import List
 from rich.console import Console
-from utils import get_logger, get_regions, get_context, run_command, get_kube_config
+from utils import get_logger, get_main_config, get_context, run_command, get_kube_config
 
 LOG = get_logger(__name__)
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
@@ -42,7 +42,8 @@ def try_with_timeout(fn, timeout: int):
                 )
 
 
-def set_up_load_balancer_for_coredns(regions: List[str], dry_run: bool) -> str:
+def set_up_load_balancer_for_coredns(config, dry_run: bool) -> str:
+    regions = config["regions"]
     if len(regions) == 1:
         LOG.info(
             "Only one region is specified. Skipping load balancer for CoreDNS.",
@@ -67,7 +68,9 @@ def set_up_load_balancer_for_coredns(regions: List[str], dry_run: bool) -> str:
         LOG.info(f"Load balancer for CoreDNS in region {region} created.")
 
 
-def install_dns_configmap(regions: List[str], global_region: str, dry_run: bool):
+def install_dns_configmap(config, dry_run: bool):
+    global_region = config["global_region"]
+    regions = set(config["regions"]) | {config["global_region"]}
     if len(regions) == 1:
         LOG.info(
             "Only one region is specified. Skipping DNS configmap installation.",
@@ -169,7 +172,10 @@ def install_dns_configmap(regions: List[str], global_region: str, dry_run: bool)
         )
 
 
-def create_namespaces(regions: List[str], global_region: str, dry_run: bool):
+def create_namespaces(config, dry_run: bool):
+    global_region = config["global_region"]
+    regions = set(config["regions"]) | {global_region}
+
     def clean_up_namespace(region, namespace):
         config = get_kube_config(BASE_PATH, region)
         LOG.info(f'Deleting namespace "{namespace}" in region "{region}"')
@@ -229,10 +235,16 @@ def create_namespaces(regions: List[str], global_region: str, dry_run: bool):
         create_namespace(region, region)
 
 
-def deploy_neon(
-    regions: List[str], global_region: str, cleanup_only: bool, dry_run: bool
-):
+def deploy_neon(config, cleanup_only: bool, dry_run: bool):
+    global_region = config["global_region"]
+    regions = set(config["regions"]) | {global_region}
+
     def deploy_neon_one_namespace(region, namespace):
+        substitutions = f"regions={{global,{','.join(regions)}}}"
+        hub_ebs_volume_id = config.get("hub_ebs_volume_id")
+        if region == global_region and hub_ebs_volume_id:
+            substitutions += f",hub_ebs_volume_id={hub_ebs_volume_id}"
+
         run_command(
             [
                 "helm",
@@ -241,7 +253,7 @@ def deploy_neon(
                 "--namespace",
                 namespace,
                 "--set",
-                f"regions={{global,{','.join(regions)}}}",
+                substitutions,
                 (BASE_PATH / "helm-neon").as_posix(),
             ]
             + context_flag(region, "--kube-context"),
@@ -332,9 +344,7 @@ if __name__ == "__main__":
 
     unskipped_stages = STAGES[skip_before_index : skip_after_index + 1]
 
-    regions, global_region = get_regions(BASE_PATH)
-    regions = set(regions)
-    regions.add(global_region)
+    config = get_main_config(BASE_PATH)
 
     log_tag = "bold yellow"
 
@@ -343,23 +353,22 @@ if __name__ == "__main__":
             f"[{log_tag}]Setting up load balancer for CoreDNS[/{log_tag}]",
             extra={"markup": True},
         )
-        set_up_load_balancer_for_coredns(regions, args.dry_run)
+        set_up_load_balancer_for_coredns(config, args.dry_run)
 
     if "dns-config" in unskipped_stages:
         LOG.info(
             f"[{log_tag}]Installing DNS configmap[/{log_tag}]", extra={"markup": True}
         )
-        install_dns_configmap(regions, global_region, args.dry_run)
+        install_dns_configmap(config, args.dry_run)
 
     if "namespace" in unskipped_stages:
         LOG.info(f"[{log_tag}]Creating namespaces[/{log_tag}]", extra={"markup": True})
-        create_namespaces(regions, global_region, args.dry_run)
+        create_namespaces(config, args.dry_run)
 
     if "neon" in unskipped_stages:
         LOG.info(f"[{log_tag}]Deploying Neon[/{log_tag}]", extra={"markup": True})
         deploy_neon(
-            regions,
-            global_region,
+            config,
             args.clean_up_neon,
             args.dry_run,
         )

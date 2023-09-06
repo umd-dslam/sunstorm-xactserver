@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List
 from rich.console import Console
-from utils import get_regions, get_context, COLORS
+from utils import get_main_config, get_context, COLORS
 
 
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
@@ -119,7 +119,9 @@ if __name__ == "__main__":
     else:
         raise ValueError(f"Unknown action: {args.action}")
 
-    regions, global_region = get_regions(BASE_PATH)
+    config = get_main_config(BASE_PATH)
+    regions = config["regions"]
+    global_region = config["global_region"]
     regions = set(regions)
     regions.add(global_region)
 

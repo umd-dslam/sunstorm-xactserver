@@ -12,7 +12,7 @@ from rich.table import Table
 from rich.prompt import Confirm
 from rich.layout import Layout
 from utils import (
-    get_regions,
+    get_main_config,
     get_logger,
     get_kube_config,
     Command,
@@ -50,7 +50,9 @@ def get_running_pods_in_deployment(region, namespace, deployment_name):
 
 
 def get_region_namespaces(args) -> list[tuple[str, str]]:
-    regions, global_region = get_regions(BASE_PATH)
+    config = get_main_config(BASE_PATH)
+    regions = config["regions"]
+    global_region = config["global_region"]
 
     chosen = []
     if args.namespaces:

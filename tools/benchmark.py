@@ -2,7 +2,7 @@ import argparse
 import subprocess
 
 from pathlib import Path
-from utils import get_regions, get_logger, get_context
+from utils import get_main_config, get_logger, get_context
 from tempfile import TemporaryFile
 
 LOG = get_logger(__name__)
@@ -94,16 +94,20 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    regions_info = get_regions(BASE_PATH)
-    regions, global_region = regions_info
+    config = get_main_config(BASE_PATH)
+    regions = config["regions"]
 
     sets = args.set or []
     sets.append(f"regions={{global,{','.join(regions)}}}")
 
     if args.operation == "create":
-        run_benchmark(global_region, "global", ["operation=create"] + sets, args)
+        run_benchmark(
+            config["global_region"], "global", ["operation=create"] + sets, args
+        )
     elif args.operation == "load":
-        run_benchmark(global_region, "global", ["operation=load"] + sets, args)
+        run_benchmark(
+            config["global_region"], "global", ["operation=load"] + sets, args
+        )
     elif args.operation == "execute":
         for region in regions:
             LOG.info("Executing benchmark in region %s", region)

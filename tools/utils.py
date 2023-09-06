@@ -76,12 +76,9 @@ def initialize_and_run_commands(parser, commands, args=None):
     parsed_args.run(parsed_args)
 
 
-def get_regions(base_path) -> (list, str):
-    with open(base_path / "regions.yaml", "r") as yaml_file:
-        regions_info = yaml.safe_load(yaml_file)
-        regions = regions_info["regions"].keys()
-        global_region = regions_info["global_region"]
-        return regions, global_region
+def get_main_config(base_path) -> (list, str):
+    with open(base_path / "main.yaml", "r") as yaml_file:
+        return yaml.safe_load(yaml_file)
 
 
 def get_context(base_path, region: str) -> str:
@@ -89,7 +86,7 @@ def get_context(base_path, region: str) -> str:
     context_names = [c["name"] for c in contexts]
 
     context = None
-    with open(base_path / "regions.yaml", "r") as yaml_file:
+    with open(base_path / "main.yaml", "r") as yaml_file:
         regions_info = yaml.safe_load(yaml_file)
         if region in regions_info["regions"]:
             regions = regions_info["regions"]

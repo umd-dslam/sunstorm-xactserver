@@ -11,3 +11,7 @@ regions:
 # The region that contains the global resources. This region can
 # be one of the regions listed above, or a different region.
 global_region: us-east-1
+
+# EBS volume ID to store global data like metrics, minio, etc.
+# No EBS volume will be used if this is not set. 
+# hub_ebs_volume_id: vol-045f146f990cbcaa4

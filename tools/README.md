@@ -61,7 +61,7 @@ The full schema of this config file can be found [here](https://eksctl.io/usage/
 
 ### Specify AWS regions
 
-Specify the regions and global region in the `deploy/regions.yaml` file. The regions information in this file will be the source of truth for the rest of the deployment process.
+Specify the regions and global region in the `deploy/main.yaml` file. The region information in this file will be the source of truth for the rest of the deployment process.
 
 ### Run the EKS clusters creation script
 
