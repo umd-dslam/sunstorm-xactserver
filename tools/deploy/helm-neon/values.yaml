@@ -8,5 +8,6 @@ regions:
 safekeeper_replicas: 1
 
 # EBS volume ID to store global data like metrics, minio, etc.
-# If not specified, no EBS volume will be used.
-# center_ebs_volume_id: vol-045f146f990cbcaa4
+# No EBS volume will be used if this is empty. If you run deploy.py,
+# this value will be set automatically.
+hub_ebs_volume_id: vol-045f146f990cbcaa4

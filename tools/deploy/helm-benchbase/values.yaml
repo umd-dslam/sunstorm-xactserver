@@ -19,7 +19,7 @@ scalefactor: 30
 # Number of concurrent clients
 terminals: 16
 # Duration of the benchmark in seconds
-time: 30
+time: 10
 # Maximum throughput of the benchmark
 rate: 10000
 

@@ -252,10 +252,13 @@ fn start_http_server(
                 .build()?;
 
             let _guard = runtime.enter();
-            let server = Server::from_tcp(listener)?
-                .serve(service)
-                .with_graceful_shutdown(cancel.cancelled());
-            runtime.block_on(server)?;
+            let server = Server::from_tcp(listener)?.serve(service);
+            runtime.block_on(async {
+                tokio::select! {
+                    res = server => res,
+                    _ = cancel.cancelled() => Ok(()),
+                }
+            })?;
 
             info!("HTTP server stopped");
 

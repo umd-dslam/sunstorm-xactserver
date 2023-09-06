@@ -2,9 +2,9 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: center-config
+  name: hub-config
   labels:
-    app: center-config
+    app: hub-config
     part-of: neon
 data:
   prometheus.yaml: |

@@ -2,9 +2,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: center
+  name: hub
   labels:
-    app: center
+    app: hub
     part-of: neon
 spec:
   ports:
@@ -21,7 +21,7 @@ spec:
       targetPort: grafana
       port: 3000
   selector:
-    app: center
+    app: hub
   # In general, service IPs and pod IPs come from different CIDR ranges.
   # In AWS, the pods are assigned IPs direclty from the VPC subnet whereas
   # the service IPs are assigned from a virtual range, which is not easily
@@ -30,29 +30,33 @@ spec:
   # clusterIP to None) to expose the pod IPs directly instead of using the service IP.
   clusterIP: None
 ---
-{{ if .Values.center_ebs_volume_id }}
+{{ if .Values.hub_ebs_volume_id }}
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: center-data
+  name: hub-data-aws
   labels:
     type: amazonEBS
 spec:
-  storageClassName: manual
   capacity:
     storage: 2Gi
   accessModes:
     - ReadWriteOnce
   awsElasticBlockStore:
-    volumeID: {{ .Values.center_ebs_volume_id }}
+    volumeID: {{ .Values.hub_ebs_volume_id }}
     fsType: ext4
+  storageClassName: ""
+  claimRef:
+    name: hub-data
+    namespace: global
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: center-data
+  name: hub-data
 spec:
-  storageClassName: manual
+  storageClassName: ""
+  volumeName: hub-data-aws
   accessModes:
     - ReadWriteOnce
   resources:
@@ -63,21 +67,23 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: center
+  name: hub
   labels:
-    app: center
+    app: hub
     part-of: neon
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: center
+      app: hub
   template:
     metadata:
       labels:
-        app: center
+        app: hub
         part-of: neon
     spec:
+      securityContext:
+        fsGroup: 2000
       containers:
         - name: minio
           image: quay.io/minio/minio:RELEASE.2022-11-17T23-20-09Z
@@ -87,9 +93,9 @@ spec:
             - --console-address
             - :9001
           volumeMounts:
-            - name: center-data
+            - name: hub-data
               mountPath: /data
-            - name: center-config
+            - name: hub-config
               mountPath: /config
           ports: 
             - name: minio-api
@@ -105,9 +111,9 @@ spec:
             - name: prometheus
               containerPort: 9090
           volumeMounts:
-            - name: center-data
+            - name: hub-data
               mountPath: /data
-            - name: center-config
+            - name: hub-config
               mountPath: /config
         - name: grafana
           image: grafana/grafana:8.2.2
@@ -118,16 +124,16 @@ spec:
             - name: grafana
               containerPort: 3000            
           volumeMounts:
-            - name: center-data
+            - name: hub-data
               mountPath: /data
       volumes:
-        - name: center-config
+        - name: hub-config
           configMap:
-            name: center-config
-        - name: center-data
-          {{ if .Values.center_ebs_volume_id }}
+            name: hub-config
+        - name: hub-data
+          {{ if .Values.hub_ebs_volume_id }}
           persistentVolumeClaim:
-            claimName: center-data
+            claimName: hub-data
           {{ else }}
           emptyDir:
             sizeLimit: 2Gi
@@ -141,7 +147,7 @@ spec:
                   - key: role
                     operator: In
                     values:
-                      - server
+                      - hub
         podAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 1

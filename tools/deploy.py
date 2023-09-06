@@ -1,6 +1,5 @@
 import argparse
 import json
-import os
 import tempfile
 import time
 import subprocess
@@ -21,8 +20,11 @@ BASE_PATH = Path(__file__).parent.resolve() / "deploy"
 
 
 def context_flag(region, flag_name="--context"):
-    context = get_context(BASE_PATH, region)
-    return [flag_name, context] if context else []
+    try:
+        context = get_context(BASE_PATH, region)
+        return [flag_name, context]
+    except:
+        return []
 
 
 def try_with_timeout(fn, timeout: int):
@@ -41,6 +43,12 @@ def try_with_timeout(fn, timeout: int):
 
 
 def set_up_load_balancer_for_coredns(regions: List[str], dry_run: bool) -> str:
+    if len(regions) == 1:
+        LOG.info(
+            "Only one region is specified. Skipping load balancer for CoreDNS.",
+        )
+        return
+
     for region in regions:
         run_command(
             [
@@ -60,6 +68,12 @@ def set_up_load_balancer_for_coredns(regions: List[str], dry_run: bool) -> str:
 
 
 def install_dns_configmap(regions: List[str], global_region: str, dry_run: bool):
+    if len(regions) == 1:
+        LOG.info(
+            "Only one region is specified. Skipping DNS configmap installation.",
+        )
+        return
+
     TIMEOUT = 300
 
     region_lb_ip_addresses = {"addresses": {}}
@@ -158,7 +172,7 @@ def install_dns_configmap(regions: List[str], global_region: str, dry_run: bool)
 def create_namespaces(regions: List[str], global_region: str, dry_run: bool):
     def clean_up_namespace(region, namespace):
         config = get_kube_config(BASE_PATH, region)
-        LOG.info(f"Deleting namespace {namespace} in region {region}")
+        LOG.info(f'Deleting namespace "{namespace}" in region "{region}"')
         with kubernetes.client.ApiClient(config) as api_client:
             kube = kubernetes.client.CoreV1Api(api_client)
             try:
@@ -179,7 +193,7 @@ def create_namespaces(regions: List[str], global_region: str, dry_run: bool):
 
     def create_namespace(region, namespace):
         config = get_kube_config(BASE_PATH, region)
-        LOG.info(f"Creating namespace {namespace} in region {region}")
+        LOG.info(f'Creating namespace "{namespace}" in region "{region}"')
         with kubernetes.client.ApiClient(config) as api_client:
             kube = kubernetes.client.CoreV1Api(api_client)
             while True:
@@ -201,7 +215,7 @@ def create_namespaces(regions: List[str], global_region: str, dry_run: bool):
                     body = json.loads(e.body)
                     if "object is being deleted" in body["message"]:
                         LOG.warning(
-                            f"Namespace {namespace} in region {region} is being deleted. Retrying after 5 second."
+                            f'Namespace "{namespace}" in region "{region}" is being deleted. Retrying after 5 second.'
                         )
                         time.sleep(5)
                     else:
@@ -319,6 +333,8 @@ if __name__ == "__main__":
     unskipped_stages = STAGES[skip_before_index : skip_after_index + 1]
 
     regions, global_region = get_regions(BASE_PATH)
+    regions = set(regions)
+    regions.add(global_region)
 
     log_tag = "bold yellow"
 

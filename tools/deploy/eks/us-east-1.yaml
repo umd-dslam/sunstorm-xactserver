@@ -17,7 +17,7 @@ managedNodeGroups:
   - name: servers
     instanceType: c5.4xlarge
     spot: true
-    desiredCapacity: 2
+    desiredCapacity: 1
     securityGroups:
       attachIDs:
         - sg-018aeab319579349c
@@ -25,6 +25,19 @@ managedNodeGroups:
       role: server
     tags:
       role: server
+  - name: hub
+    subnets:
+      - us-east-1a
+    instanceType: c5.4xlarge
+    spot: true
+    desiredCapacity: 1
+    securityGroups:
+      attachIDs:
+        - sg-018aeab319579349c
+    labels:
+      role: hub
+    tags:
+      role: hub
   - name: safekeepers
     instanceType: c5.2xlarge
     spot: true
@@ -47,3 +60,18 @@ managedNodeGroups:
       role: client
     tags:
       role: client
+
+iam:
+  withOIDC: true
+  serviceAccounts:
+    - metadata:
+        name: ebs-csi-controller-sa
+        namespace: kube-system
+      roleName: AmazonEKS_EBS_CSI_DriverRole
+      roleOnly: true
+      wellKnownPolicies:
+        ebsCSIController: true
+
+addons:
+  - name: aws-ebs-csi-driver
+    serviceAccountRoleARN: arn:aws:iam::970400548469:role/AmazonEKS_EBS_CSI_DriverRole

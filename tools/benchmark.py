@@ -1,5 +1,4 @@
 import argparse
-import os
 import subprocess
 
 from pathlib import Path
@@ -96,8 +95,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     regions_info = get_regions(BASE_PATH)
-    regions = regions_info["regions"]
-    global_region = regions_info["global_region"]
+    regions, global_region = regions_info
 
     sets = args.set or []
     sets.append(f"regions={{global,{','.join(regions)}}}")
@@ -107,7 +105,7 @@ if __name__ == "__main__":
     elif args.operation == "load":
         run_benchmark(global_region, "global", ["operation=load"] + sets, args)
     elif args.operation == "execute":
-        for region in regions_info["regions"]:
+        for region in regions:
             LOG.info("Executing benchmark in region %s", region)
             run_benchmark(
                 region,

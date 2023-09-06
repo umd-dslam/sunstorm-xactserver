@@ -1,7 +1,6 @@
 import argparse
 import kubernetes.client
 import itertools
-import os
 import threading
 import signal
 
@@ -18,37 +17,11 @@ from utils import (
     get_kube_config,
     Command,
     initialize_and_run_commands,
+    COLORS,
 )
 
 LOG = get_logger(__name__)
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
-
-# List of 20 distinct colors
-# https://sashat.me/2017/01/11/list-of-20-simple-distinct-colors/
-COLORS = [
-    "#e6194b",
-    "#3cb44b",
-    "#ffe119",
-    "#4363d8",
-    "#f58231",
-    "#911eb4",
-    "#46f0f0",
-    "#f032e6",
-    "#bcf60c",
-    "#fabebe",
-    "#008080",
-    "#e6beff",
-    "#9a6324",
-    "#fffac8",
-    "#800000",
-    "#aaffc3",
-    "#808000",
-    "#ffd8b1",
-    "#000075",
-    "#808080",
-    "#ffffff",
-    "#000000",
-]
 
 
 def get_running_pods_in_deployment(region, namespace, deployment_name):
@@ -199,7 +172,7 @@ class LogsCommand(MonitorCommand):
         def print_log(log_stream, color):
             name = f"{log_stream['namespace']}|{log_stream['deployment']}"
             for line in log_stream["logs"]:
-                decoded = line.decode("utf-8").strip()
+                decoded = line.decode("utf-8").rstrip("\n")
                 console.print(
                     f"[bold]\[{name}][/bold] {decoded}", style=color, highlight=False
                 )
@@ -286,19 +259,19 @@ class StatusCommand(MonitorCommand):
             for namespace, nodes in namespaces.items():
                 table.add_section()
                 namespace_cell = namespace
-                for node in nodes:
-                    node_cell = node
-
-                    cpu = nodes[node]["capacity"]["cpu"]
-                    memory = nodes[node]["capacity"]["memory"]
-                    capacity_cell = f"cpu: {cpu}, mem: {memory}"
+                for node_cell, node in nodes.items():
+                    capacity_cell = ""
+                    if "capacity" in node:
+                        cpu = node["capacity"]["cpu"]
+                        memory = node["capacity"]["memory"]
+                        capacity_cell = f"cpu: {cpu}, mem: {memory}"
 
                     # Choose a color for the node
-                    if node not in node_to_color:
-                        node_to_color[node] = next(colors)
-                    color = node_to_color[node]
+                    if node_cell not in node_to_color:
+                        node_to_color[node_cell] = next(colors)
+                    color = node_to_color[node_cell]
 
-                    for pod in nodes[node]["pods"]:
+                    for pod in node["pods"]:
                         table.add_row(
                             namespace_cell,
                             f"[{color}]{node_cell}[/{color}]",
@@ -330,9 +303,8 @@ class StatusCommand(MonitorCommand):
 
                 for pod in pods:
                     node = pod.spec.node_name
-
                     # Populate node capacity if not already done
-                    if "capacity" not in nodes[node]:
+                    if node and "capacity" not in nodes[node]:
                         node_obj = corev1.read_node(node)
                         nodes[node]["capacity"] = node_obj.status.capacity
 
