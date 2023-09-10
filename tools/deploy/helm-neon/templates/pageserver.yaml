@@ -48,6 +48,9 @@ spec:
               until (/usr/bin/mc alias set minio http://hub.global:9000 minioadmin minioadmin) do
                   echo 'Waiting to start minio...' && sleep 1
               done
+              until (/usr/bin/mc stat minio/neon/.neon/.done) do
+                  echo 'Waiting for the base data...' && sleep 1
+              done
               rm -rf /data/.neon
               /usr/bin/mc cp -r minio/neon/.neon /data
               /usr/local/bin/pageserver -D /data/.neon/                                            \

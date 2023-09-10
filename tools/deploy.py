@@ -240,10 +240,10 @@ def deploy_neon(config, cleanup_only: bool, dry_run: bool):
     regions = set(config["regions"]) | {global_region}
 
     def deploy_neon_one_namespace(region, namespace):
-        substitutions = f"regions={{global,{','.join(regions)}}}"
+        substitutions = [f"regions={{global,{','.join(regions)}}}"]
         hub_ebs_volume_id = config.get("hub_ebs_volume_id")
         if region == global_region and hub_ebs_volume_id:
-            substitutions += f",hub_ebs_volume_id={hub_ebs_volume_id}"
+            substitutions.append(f"hub_ebs_volume_id={hub_ebs_volume_id}")
 
         run_command(
             [
@@ -253,7 +253,7 @@ def deploy_neon(config, cleanup_only: bool, dry_run: bool):
                 "--namespace",
                 namespace,
                 "--set",
-                substitutions,
+                ",".join(substitutions),
                 (BASE_PATH / "helm-neon").as_posix(),
             ]
             + context_flag(region, "--kube-context"),

@@ -31,7 +31,9 @@ spec:
                 echo 'Waiting to start minio...' && sleep 1
               done
               mc mb minio/neon
-              mc rm -r minio/neon/.neon
-              mc cp -r ./r0/.neon minio/neon
+              mc rm -r --force minio/neon/.neon
+              mc cp -r ./r0/.neon minio/neon/
+              touch .done
+              mc cp .done minio/neon/.neon/
       restartPolicy: Never
 {{ end }}
