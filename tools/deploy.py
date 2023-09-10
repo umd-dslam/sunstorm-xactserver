@@ -236,13 +236,23 @@ def create_namespaces(config, dry_run: bool):
 
 
 def deploy_neon(config, cleanup_only: bool, dry_run: bool):
-    global_region = config["global_region"]
-    regions = set(config["regions"]) | {global_region}
+    namespaces = {"global": {"region": config["global_region"]}}
+    for r in config["regions"]:
+        namespaces[r] = {"region": r}
+    ordered_namespaces = namespaces.keys()
 
-    def deploy_neon_one_namespace(region, namespace):
-        substitutions = [f"regions={{global,{','.join(regions)}}}"]
+    def deploy_neon_one_namespace(namespace):
+        region = namespaces[namespace]["region"]
+
+        substitutions = []
+        for ns, ns_info in namespaces.items():
+            for k, v in ns_info.items():
+                substitutions.append(f"namespaces.{ns}.{k}={v}")
+
+        substitutions.append(f"ordered_namespaces={{{','.join(ordered_namespaces)}}}")
+
         hub_ebs_volume_id = config.get("hub_ebs_volume_id")
-        if region == global_region and hub_ebs_volume_id:
+        if namespace == "global" and hub_ebs_volume_id:
             substitutions.append(f"hub_ebs_volume_id={hub_ebs_volume_id}")
 
         run_command(
@@ -262,16 +272,14 @@ def deploy_neon(config, cleanup_only: bool, dry_run: bool):
             check=True,
         )
 
-    for region in regions:
-        clean_up_neon_one_namespace(region, region, dry_run)
-    clean_up_neon_one_namespace(global_region, "global", dry_run)
+    for ns, ns_info in namespaces.items():
+        clean_up_neon_one_namespace(ns_info["region"], ns, dry_run)
 
     if cleanup_only:
         return
 
-    deploy_neon_one_namespace(global_region, "global")
-    for region in regions:
-        deploy_neon_one_namespace(region, region)
+    for ns in namespaces:
+        deploy_neon_one_namespace(ns)
 
 
 def clean_up_neon_one_namespace(region, namespace, dry_run):

@@ -1,5 +1,6 @@
 import argparse
 import subprocess
+import time
 
 from pathlib import Path
 from utils import get_main_config, get_logger, get_context
@@ -98,7 +99,16 @@ if __name__ == "__main__":
     regions = config["regions"]
 
     sets = args.set or []
-    sets.append(f"regions={{global,{','.join(regions)}}}")
+
+    namespaces = {"global": {"region": config["global_region"]}}
+    for r in regions:
+        namespaces[r] = {"region": r}
+
+    for ns, ns_info in namespaces.items():
+        for k, v in ns_info.items():
+            sets.append(f"namespaces.{ns}.{k}={v}")
+
+    sets.append(f"ordered_namespaces={{{','.join(namespaces.keys())}}}")
 
     if args.operation == "create":
         run_benchmark(
@@ -109,11 +119,12 @@ if __name__ == "__main__":
             config["global_region"], "global", ["operation=load"] + sets, args
         )
     elif args.operation == "execute":
+        timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
         for region in regions:
             LOG.info("Executing benchmark in region %s", region)
             run_benchmark(
                 region,
                 region,
-                ["operation=execute"] + sets,
+                ["operation=execute", f"timestamp={timestamp}"] + sets,
                 args,
             )

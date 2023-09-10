@@ -1,6 +1,13 @@
-# The first region should always be the global region.
 # If you run deploy.py, this value will be set automatically.
-regions:
+namespaces:
+  global:
+    region: us-east-1
+  us-east-1:
+    region: us-east-1
+
+# An ordered list of the namespaces. 
+# If you run deploy.py, this value will be set automatically.
+ordered_namespaces:
   - global
   - us-east-1
 

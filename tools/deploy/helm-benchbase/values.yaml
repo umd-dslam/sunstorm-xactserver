@@ -1,8 +1,18 @@
-# The first region should always be the global region
 # If you run benchmark.py, this value will be set automatically.
-regions: 
+namespaces:
+  global:
+    region: us-east-1
+  us-east-1:
+    region: us-east-1
+
+# An ordered list of the namespaces. 
+# If you run benchmark.py, this value will be set automatically.
+ordered_namespaces:
   - global
   - us-east-1
+
+# Timestamp set by the benchmark.py tool
+timestamp: "0000-00-00_00-00-00"
 
 # The operation to perform, can be "create", "load", or "execute".
 # If you run benchmark.py, this value will be set automatically.

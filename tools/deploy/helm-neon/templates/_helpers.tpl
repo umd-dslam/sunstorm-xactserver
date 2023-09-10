@@ -1,15 +1,15 @@
 {{/*
-Compute the region id.
+Compute the namespace id.
 */}}
-{{- define "regionId" }}
-{{- $regionId := "" }}
-{{- $currentRegion := .Release.Namespace }}
-{{- range $i, $region := .Values.regions }}
-  {{- if eq $region $currentRegion }}
-    {{- $regionId = $i }}
+{{- define "namespaceId" }}
+{{- $namespaceId := "" }}
+{{- $curNamespace := .Release.Namespace }}
+{{- range $i, $namespace := .Values.ordered_namespaces }}
+  {{- if eq $namespace $curNamespace }}
+    {{- $namespaceId = $i }}
   {{- end }}
 {{- end }}
-{{- $regionId | required (printf "Unknown region \"%s\"" .Release.Namespace) }}
+{{- $namespaceId | required (printf "Unknown namespace \"%s\"" .Release.Namespace) }}
 {{- end }}
 
 {{/*
@@ -17,7 +17,7 @@ Compute the addresses of the xactserver nodes.
 */}}
 {{- define "xactserverNodes" }}
 {{- $nodes := list }}
-{{- range $r := .Values.regions }}
+{{- range $r := .Values.ordered_namespaces }}
 {{- $nodes = append $nodes (printf "http://xactserver.%s:23000" $r) }}
 {{- end -}}
 {{ join "," $nodes }}

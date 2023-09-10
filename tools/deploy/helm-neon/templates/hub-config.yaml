@@ -16,7 +16,7 @@ data:
         scrape_interval: 1s 
         static_configs:
           - targets:
-          {{- range $r := .Values.regions }}
+          {{- range $r := .Values.ordered_namespaces }}
             - pageserver.{{ $r }}:9898
           {{- end }}
 
@@ -24,7 +24,7 @@ data:
         scrape_interval: 1s
         static_configs:
           - targets: 
-          {{- range $r := .Values.regions }}
+          {{- range $r := .Values.ordered_namespaces }}
             - compute.{{ $r }}:9187
           {{- end }}
 
@@ -32,7 +32,7 @@ data:
         scrape_interval: 1s
         static_configs:
           - targets:
-          {{- range $r := .Values.regions }}
+          {{- range $r := .Values.ordered_namespaces }}
             - xactserver.{{ $r }}:8080
           {{- end }}
 {{ end }}

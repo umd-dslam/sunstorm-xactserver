@@ -32,8 +32,8 @@ data:
         <hot>{{ .Values.hot }}</hot>
 
         <!-- Number of regions, excluding the global region -->
-        <numRegions>{{ sub (len .Values.regions) 1 }}</numRegions>
-        <region>{{ include "regionId" . }}</region>
+        <numRegions>{{ sub (len .Values.ordered_namespaces) 1 }}</numRegions>
+        <region>{{ include "namespaceId" . }}</region>
         <!-- Percentage of multi-region transactions -->
         <mrpct>{{ .Values.mr }}</mrpct>
 
@@ -76,7 +76,7 @@ data:
     ) PARTITION BY RANGE (ycsb_key);
 
     {{ $numRows := (mul .Values.scalefactor 1000) }}
-    {{ $numRegions := (sub (len .Values.regions) 1) }}
+    {{ $numRegions := (sub (len .Values.ordered_namespaces) 1) }}
     {{- $numRowsPerRegion := (div $numRows $numRegions) }}
     {{- range $i := until (int (sub $numRegions 1)) }}
     {{- $from := (mul $i $numRowsPerRegion) }}

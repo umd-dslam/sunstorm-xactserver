@@ -47,7 +47,7 @@ spec:
           args:
             - --listen-pg=0.0.0.0:10000
             - --connect-pg=postgresql://cloud_admin@compute:55433/postgres
-            - --node-id={{ include "regionId" . }}
+            - --node-id={{ include "namespaceId" . }}
             - --nodes={{ include "xactserverNodes" . }}
             - --listen-http=0.0.0.0:8080
           ports:
