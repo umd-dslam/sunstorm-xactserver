@@ -1,14 +1,4 @@
-import itertools
-import logging
-import kubernetes.client
-import kubernetes.config
-import os
-import subprocess
-import threading
 import yaml
-
-from rich.console import Console
-from rich.logging import RichHandler
 
 # List of 20 distinct colors
 # https://sashat.me/2017/01/11/list-of-20-simple-distinct-colors/
@@ -39,6 +29,10 @@ COLORS = [
 
 
 def get_logger(name: str):
+    import logging
+    import os
+    from rich.logging import RichHandler
+
     logger = logging.getLogger(name)
     logger.addHandler(RichHandler())
     logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
@@ -79,6 +73,8 @@ def initialize_and_run_commands(parser, commands, args=None):
 
 
 def run_subprocess(cmd, logger_and_info_log, dry_run, **kwargs):
+    import subprocess
+
     logger, info_log = logger_and_info_log
     logger.info(info_log)
     logger.debug(f"Executing: {' '.join(cmd)}")
@@ -98,76 +94,93 @@ def get_namespaces(config):
     return namespaces
 
 
-def get_context(base_path, region: str) -> str:
-    contexts, _ = kubernetes.config.list_kube_config_contexts()
-    context_names = [c["name"] for c in contexts]
-
-    context = None
-    with open(base_path / "main.yaml", "r") as yaml_file:
-        regions_info = yaml.safe_load(yaml_file)
-        if region in regions_info["regions"]:
-            regions = regions_info["regions"]
-            if region in regions and regions[region] and "context" in regions[region]:
-                context = regions[region]["context"]
-
-    if context is None:
-        for ctx in context_names:
-            if region in ctx:
-                context = ctx
-                break
-
-    if context is None:
-        raise Exception(f"Could not find context for region: {region}")
-
-    return context
+import kubernetes.client
+import kubernetes.config
 
 
-def get_kube_config(base_path, region: str):
-    context = get_context(base_path, region)
-    config = kubernetes.client.Configuration()
-    kubernetes.config.load_kube_config(
-        context=context, client_configuration=config, persist_config=False
-    )
+class Kube:
+    @staticmethod
+    def get_context(base_path, region: str) -> str:
+        contexts, _ = kubernetes.config.list_kube_config_contexts()
+        context_names = [c["name"] for c in contexts]
 
-    return config
+        context = None
+        with open(base_path / "main.yaml", "r") as yaml_file:
+            regions_info = yaml.safe_load(yaml_file)
+            if region in regions_info["regions"]:
+                regions = regions_info["regions"]
+                if (
+                    region in regions
+                    and regions[region]
+                    and "context" in regions[region]
+                ):
+                    context = regions[region]["context"]
 
+        if context is None:
+            for ctx in context_names:
+                if region in ctx:
+                    context = ctx
+                    break
 
-def get_running_pods(kube_config, namespace, selector):
-    with kubernetes.client.ApiClient(kube_config) as api_client:
-        corev1 = kubernetes.client.CoreV1Api(api_client)
-        pods = []
-        pod_list = corev1.list_namespaced_pod(
-            namespace=namespace,
-            label_selector=",".join([f"{k}={v}" for k, v in selector.items()]),
+        if context is None:
+            raise Exception(f"Could not find context for region: {region}")
+
+        return context
+
+    @staticmethod
+    def get_config(base_path, region: str):
+        context = Kube.get_context(base_path, region)
+        config = kubernetes.client.Configuration()
+        kubernetes.config.load_kube_config(
+            context=context, client_configuration=config, persist_config=False
         )
-        for pod in pod_list.items:
-            if pod.status.phase == "Running":
-                pods.append(pod.metadata.name)
 
-        return pods
+        return config
 
-
-def print_kube_logs_streams(logs_streams, follow=False, console=None):
-    if not console:
-        console = Console()
-
-    def print_log(log_stream, color):
-        name = f"{log_stream['namespace']}|{log_stream['deployment']}"
-        for line in log_stream["logs"]:
-            decoded = line.decode("utf-8").rstrip("\n")
-            console.print(
-                f"[bold]\[{name}][/bold] {decoded}", style=color, highlight=False
+    @staticmethod
+    def get_running_pods(kube_config, namespace, selector):
+        with kubernetes.client.ApiClient(kube_config) as api_client:
+            corev1 = kubernetes.client.CoreV1Api(api_client)
+            pods = []
+            pod_list = corev1.list_namespaced_pod(
+                namespace=namespace,
+                label_selector=",".join([f"{k}={v}" for k, v in selector.items()]),
             )
+            for pod in pod_list.items:
+                if pod.status.phase == "Running":
+                    pods.append(pod.metadata.name)
 
-    colors = itertools.cycle(COLORS)
-    threads = []
-    for log_stream in logs_streams:
-        color = next(colors)
-        t = threading.Thread(target=print_log, args=(log_stream, color), daemon=True)
-        t.start()
-        threads.append(t)
+            return pods
 
-    if not follow:
-        # Wait for all threads to finish
-        for t in threads:
-            t.join()
+    @staticmethod
+    def print_logs(logs_streams, follow=False, console=None):
+        import itertools
+        import threading
+
+        from rich.console import Console
+
+        if not console:
+            console = Console()
+
+        def print_log(log_stream, color):
+            name = f"{log_stream['namespace']}|{log_stream['deployment']}"
+            for line in log_stream["logs"]:
+                decoded = line.decode("utf-8").rstrip("\n")
+                console.print(
+                    f"[bold]\[{name}][/bold] {decoded}", style=color, highlight=False
+                )
+
+        colors = itertools.cycle(COLORS)
+        threads = []
+        for log_stream in logs_streams:
+            color = next(colors)
+            t = threading.Thread(
+                target=print_log, args=(log_stream, color), daemon=True
+            )
+            t.start()
+            threads.append(t)
+
+        if not follow:
+            # Wait for all threads to finish
+            for t in threads:
+                t.join()

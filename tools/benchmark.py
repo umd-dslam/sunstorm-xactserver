@@ -4,9 +4,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from utils import (
+    Kube,
     get_main_config,
     get_logger,
-    get_context,
     get_namespaces,
     run_subprocess,
 )
@@ -39,7 +39,7 @@ def run_benchmark(namespace, region, sets, dry_run):
         helm_output.seek(0)
         LOG.debug(f"Helm output: {helm_output.read().decode()}")
 
-        context = get_context(BASE_PATH, region)
+        context = Kube.get_context(BASE_PATH, region)
 
         # Delete the existing deployment, if any
         helm_output.seek(0)

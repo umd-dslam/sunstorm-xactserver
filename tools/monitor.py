@@ -13,15 +13,13 @@ from rich.table import Table
 from rich.prompt import Confirm
 from rich.layout import Layout
 from utils import (
+    COLORS,
+    Command,
     get_main_config,
     get_namespaces,
     get_logger,
-    get_kube_config,
-    get_running_pods,
-    print_kube_logs_streams,
-    Command,
     initialize_and_run_commands,
-    COLORS,
+    Kube,
 )
 
 LOG = get_logger(__name__)
@@ -115,22 +113,20 @@ class LogsCommand(MonitorCommand):
                 for d in args.deployment:
                     tasks.append(
                         executor.submit(
-                            LogsCommand._get_log_stream, args, ns, region, deployment=d
+                            LogsCommand._get_logs, args, ns, region, deployment=d
                         )
                     )
                 for p in args.pod:
                     tasks.append(
-                        executor.submit(
-                            LogsCommand._get_log_stream, args, ns, region, pod=p
-                        )
+                        executor.submit(LogsCommand._get_logs, args, ns, region, pod=p)
                     )
 
-        logs_streams = [task.result() for task in tasks if task.result()]
+        logs = [task.result() for task in tasks if task.result()]
 
         if not Confirm.ask("Start watching logs?", default=True):
             return
 
-        print_kube_logs_streams(logs_streams, args.follow)
+        Kube.print_logs(logs, args.follow)
 
         if args.follow:
             # Wait for Ctrl-C
@@ -139,8 +135,8 @@ class LogsCommand(MonitorCommand):
             exit_event.wait()
 
     @staticmethod
-    def _get_log_stream(args, namespace, region, deployment=None, pod=None):
-        kube_config = get_kube_config(BASE_PATH, region)
+    def _get_logs(args, namespace, region, deployment=None, pod=None):
+        kube_config = Kube.get_config(BASE_PATH, region)
 
         if deployment:
             with kubernetes.client.ApiClient(kube_config) as api_client:
@@ -151,7 +147,7 @@ class LogsCommand(MonitorCommand):
                 )
                 selector = deployment_info.spec.selector.match_labels
 
-            pods = get_running_pods(kube_config, namespace, selector)
+            pods = Kube.get_running_pods(kube_config, namespace, selector)
         elif pod:
             pods = [pod]
         else:
@@ -294,7 +290,7 @@ class StatusCommand(MonitorCommand):
         data = defaultdict(dict)
         for ns, ns_info in namespaces.items():
             region = ns_info["region"]
-            kube_config = get_kube_config(BASE_PATH, region)
+            kube_config = Kube.get_config(BASE_PATH, region)
 
             nodes = defaultdict(lambda: {"pods": []})
 

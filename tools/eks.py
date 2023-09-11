@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List
 from rich.console import Console
-from utils import get_main_config, get_context, COLORS
+from utils import get_main_config, Kube, COLORS
 
 
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
@@ -54,7 +54,7 @@ def create_eks_cluster(info: RegionInfo, dry_run: bool):
     if not dry_run:
         CONSOLE.log(
             f"EKS cluster in {info.name} is up. "
-            f"Context: {get_context(BASE_PATH, info.name)}."
+            f"Context: {Kube.get_context(BASE_PATH, info.name)}."
         )
 
 

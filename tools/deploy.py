@@ -9,12 +9,14 @@ import dns.resolver
 import kubernetes.client
 import yaml
 
+from concurrent.futures import ThreadPoolExecutor
+from itertools import repeat
 from pathlib import Path
+
 from kubernetes.client.rest import ApiException
 from rich.console import Console
 from utils import (
-    get_context,
-    get_kube_config,
+    Kube,
     get_logger,
     get_main_config,
     get_namespaces,
@@ -27,7 +29,7 @@ BASE_PATH = Path(__file__).parent.resolve() / "deploy"
 
 def context_flag(region, flag_name="--context"):
     try:
-        context = get_context(BASE_PATH, region)
+        context = Kube.get_context(BASE_PATH, region)
         return [flag_name, context]
     except:
         return []
@@ -181,8 +183,9 @@ def install_dns_configmap(config, dry_run: bool):
 def create_namespaces(config, dry_run: bool):
     namespaces = get_namespaces(config)
 
-    def clean_up_namespace(namespace, region):
-        config = get_kube_config(BASE_PATH, region)
+    def clean_up_namespace(namespace, namespace_info):
+        region = namespace_info["region"]
+        config = Kube.get_config(BASE_PATH, region)
         LOG.info(f'Deleting namespace "{namespace}" in region "{region}"')
         with kubernetes.client.ApiClient(config) as api_client:
             kube = kubernetes.client.CoreV1Api(api_client)
@@ -196,12 +199,20 @@ def create_namespaces(config, dry_run: bool):
                         "Exception when calling CoreV1Api->delete_namespace: %s" % e
                     )
 
-    for ns, ns_info in namespaces.items():
-        clean_up_neon_one_namespace(ns, ns_info["region"], dry_run)
-        clean_up_namespace(ns, ns_info["region"])
+    with ThreadPoolExecutor(max_workers=len(namespaces)) as executor:
+        executor.map(
+            clean_up_neon_one_namespace,
+            namespaces.keys(),
+            namespaces.values(),
+            repeat(dry_run),
+        )
 
-    def create_namespace(namespace, region):
-        config = get_kube_config(BASE_PATH, region)
+    with ThreadPoolExecutor(max_workers=len(namespaces)) as executor:
+        executor.map(clean_up_namespace, namespaces.keys(), namespaces.values())
+
+    def create_namespace(namespace, namespace_info):
+        region = namespace_info["region"]
+        config = Kube.get_config(BASE_PATH, region)
         LOG.info(f'Creating namespace "{namespace}" in region "{region}"')
         with kubernetes.client.ApiClient(config) as api_client:
             kube = kubernetes.client.CoreV1Api(api_client)
@@ -233,8 +244,8 @@ def create_namespaces(config, dry_run: bool):
                         )
                         break
 
-    for ns, ns_info in namespaces.items():
-        create_namespace(ns, ns_info["region"])
+    with ThreadPoolExecutor(max_workers=len(namespaces)) as executor:
+        executor.map(create_namespace, namespaces.keys(), namespaces.values())
 
 
 def deploy_neon(config, cleanup_only: bool, dry_run: bool):
@@ -274,17 +285,23 @@ def deploy_neon(config, cleanup_only: bool, dry_run: bool):
             check=True,
         )
 
-    for ns, ns_info in namespaces.items():
-        clean_up_neon_one_namespace(ns, ns_info["region"], dry_run)
+    with ThreadPoolExecutor(max_workers=len(namespaces)) as executor:
+        executor.map(
+            clean_up_neon_one_namespace,
+            namespaces.keys(),
+            namespaces.values(),
+            repeat(dry_run),
+        )
 
     if cleanup_only:
         return
 
-    for ns in namespaces:
-        deploy_neon_one_namespace(ns)
+    with ThreadPoolExecutor(max_workers=len(namespaces)) as executor:
+        executor.map(deploy_neon_one_namespace, namespaces.keys())
 
 
-def clean_up_neon_one_namespace(namespace, region, dry_run):
+def clean_up_neon_one_namespace(namespace, namespace_info, dry_run):
+    region = namespace_info["region"]
     run_subprocess(
         [
             "helm",
