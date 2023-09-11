@@ -33,4 +33,17 @@ spec:
         - name: config
           configMap:
             name: benchbase-config
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              preference:
+                matchExpressions:
+                  - key: role
+                    operator: In
+                    values:
+                      - client
+            - weight: 1
+              preference:
+                {{- include "nodesInCurrentRegion" . | indent 16 }}
 {{ end }}

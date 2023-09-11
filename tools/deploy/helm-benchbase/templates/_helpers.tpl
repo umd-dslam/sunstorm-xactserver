@@ -11,3 +11,14 @@ Compute the namespace id.
 {{- end }}
 {{- $namespaceId | required (printf "Unknown namespace \"%s\"" .Release.Namespace) }}
 {{- end }}
+
+{{/*
+  Match with nodes that are labeled with the current region.
+  */}}
+  {{- define "nodesInCurrentRegion" }}
+  matchExpressions:
+    - key: region
+      operator: In
+      values:
+        - {{ dig .Release.Namespace "region" "" .Values.namespaces }}
+  {{- end }}

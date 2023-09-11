@@ -65,15 +65,13 @@ class LogsCommand(MonitorCommand):
             "-d",
             nargs="*",
             choices=["compute", "xactserver", "pageserver"],
-            default=["compute", "xactserver"],
-            help="The deployment to watch. If not specified, "
-            "only 'compute' and 'xactserver' will be watched.",
+            help="The deployment to watch. If no pod or deployment is specified, "
+            "the 'compute' and 'xactserver' deployment will be watched.",
         )
         parser.add_argument(
             "--pod",
             "-p",
             nargs="*",
-            default=[],
             help="The pod to watch.",
         )
         parser.add_argument(
@@ -110,32 +108,36 @@ class LogsCommand(MonitorCommand):
         with ThreadPoolExecutor() as executor:
             for ns, ns_info in get_chosen_namespaces(args).items():
                 region = ns_info["region"]
-                for d in args.deployment:
+                if args.deployment is None and args.pod is None:
+                    args.deployment = ["compute", "xactserver"]
+                for d in args.deployment or []:
                     tasks.append(
                         executor.submit(
-                            LogsCommand._get_logs, args, ns, region, deployment=d
+                            LogsCommand._get_named_logs, args, ns, region, deployment=d
                         )
                     )
-                for p in args.pod:
+                for p in args.pod or []:
                     tasks.append(
-                        executor.submit(LogsCommand._get_logs, args, ns, region, pod=p)
+                        executor.submit(
+                            LogsCommand._get_named_logs, args, ns, region, pod=p
+                        )
                     )
 
-        logs = [task.result() for task in tasks if task.result()]
+        named_logs = [task.result() for task in tasks if task.result()]
 
         if not Confirm.ask("Start watching logs?", default=True):
             return
 
-        Kube.print_logs(logs, args.follow)
+        exit_event = threading.Event()
+        Kube.print_logs(named_logs, args.follow, exit_event=exit_event)
 
         if args.follow:
             # Wait for Ctrl-C
-            exit_event = threading.Event()
             signal.signal(signal.SIGINT, lambda *args: exit_event.set())
             exit_event.wait()
 
     @staticmethod
-    def _get_logs(args, namespace, region, deployment=None, pod=None):
+    def _get_named_logs(args, namespace, region, deployment=None, pod=None):
         kube_config = Kube.get_config(BASE_PATH, region)
 
         if deployment:
@@ -147,7 +149,7 @@ class LogsCommand(MonitorCommand):
                 )
                 selector = deployment_info.spec.selector.match_labels
 
-            pods = Kube.get_running_pods(kube_config, namespace, selector)
+            pods = Kube.get_pods(kube_config, namespace, selector)
         elif pod:
             pods = [pod]
         else:
@@ -165,27 +167,23 @@ class LogsCommand(MonitorCommand):
             )
 
         try:
-            with kubernetes.client.ApiClient(kube_config) as api_client:
-                corev1 = kubernetes.client.CoreV1Api(api_client)
-                logs = corev1.read_namespaced_pod_log(
-                    name=pods[0],
-                    namespace=namespace,
-                    container=deployment,
-                    follow=args.follow,
-                    tail_lines=None if args.all else args.lines,
-                    _preload_content=False,
-                )
+            logs = Kube.get_logs(
+                kube_config,
+                namespace,
+                pods[0],
+                follow=args.follow,
+                lines=None if args.all else args.lines,
+            )
 
-                LOG.info(
-                    f'Showing logs from pod "{pods[0]}" in namespace "{namespace}" (region "{region}").'
-                )
+            LOG.info(
+                f'Showing logs from pod "{pods[0]}" in namespace "{namespace}" (region "{region}").'
+            )
 
-                return {
-                    "region": region,
-                    "namespace": namespace,
-                    "deployment": deployment,
-                    "logs": logs,
-                }
+            return Kube.NamedLogs(
+                namespace=namespace,
+                name=deployment,
+                stream=logs,
+            )
         except kubernetes.client.rest.ApiException as e:
             LOG.error(
                 f'Pod "{pods[0]}" in namespace "{namespace}" (region "{region}"): {e}'

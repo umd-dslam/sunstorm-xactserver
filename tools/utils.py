@@ -1,4 +1,7 @@
+from typing import Iterator
 import yaml
+
+from collections import namedtuple
 
 # List of 20 distinct colors
 # https://sashat.me/2017/01/11/list-of-20-simple-distinct-colors/
@@ -138,7 +141,7 @@ class Kube:
         return config
 
     @staticmethod
-    def get_running_pods(kube_config, namespace, selector):
+    def get_pods(kube_config, namespace, selector, phases=None):
         with kubernetes.client.ApiClient(kube_config) as api_client:
             corev1 = kubernetes.client.CoreV1Api(api_client)
             pods = []
@@ -147,36 +150,63 @@ class Kube:
                 label_selector=",".join([f"{k}={v}" for k, v in selector.items()]),
             )
             for pod in pod_list.items:
-                if pod.status.phase == "Running":
+                if not phases or pod.status.phase in phases:
                     pods.append(pod.metadata.name)
 
             return pods
 
     @staticmethod
-    def print_logs(logs_streams, follow=False, console=None):
+    def get_logs(kube_config, namespace, pod, follow, lines=None, container=None):
+        with kubernetes.client.ApiClient(kube_config) as api_client:
+            corev1 = kubernetes.client.CoreV1Api(api_client)
+            return corev1.read_namespaced_pod_log(
+                name=pod,
+                namespace=namespace,
+                container=container,
+                follow=follow,
+                tail_lines=lines,
+                _preload_content=False,
+            )
+
+    NamedLogs = namedtuple("NamedLogs", ["namespace", "name", "stream"])
+
+    @staticmethod
+    def print_logs(named_logs: NamedLogs, follow, console=None, exit_event=None):
         import itertools
         import threading
 
         from rich.console import Console
 
+        if not isinstance(named_logs, Iterator):
+            named_logs = [named_logs]
+        else:
+            named_logs = list(named_logs)
+
         if not console:
             console = Console()
 
-        def print_log(log_stream, color):
-            name = f"{log_stream['namespace']}|{log_stream['deployment']}"
-            for line in log_stream["logs"]:
+        alive_threads = len(named_logs)
+        lock = threading.Lock()
+
+        def print_log(logs, color):
+            name = f"{logs.namespace}|{logs.name}"
+            for line in logs.stream:
                 decoded = line.decode("utf-8").rstrip("\n")
                 console.print(
                     f"[bold]\[{name}][/bold] {decoded}", style=color, highlight=False
                 )
 
+            nonlocal alive_threads
+            with lock:
+                alive_threads -= 1
+                if alive_threads == 0 and exit_event:
+                    exit_event.set()
+
         colors = itertools.cycle(COLORS)
         threads = []
-        for log_stream in logs_streams:
+        for logs in named_logs:
             color = next(colors)
-            t = threading.Thread(
-                target=print_log, args=(log_stream, color), daemon=True
-            )
+            t = threading.Thread(target=print_log, args=(logs, color), daemon=True)
             t.start()
             threads.append(t)
 

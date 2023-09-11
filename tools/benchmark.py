@@ -1,5 +1,10 @@
 import argparse
+import json
 import time
+import threading
+import signal
+
+import kubernetes.client
 
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -80,6 +85,50 @@ def run_benchmark(namespace, region, sets, dry_run):
         )
 
 
+def get_job_logs(namespace, region, job):
+    kube_config = Kube.get_config(BASE_PATH, region)
+    with kubernetes.client.ApiClient(kube_config) as api_client:
+        batchv1 = kubernetes.client.BatchV1Api(api_client)
+
+        job_info = batchv1.read_namespaced_job(name=job, namespace=namespace)
+        selector = job_info.spec.selector.match_labels
+
+    pods = []
+    while len(pods) == 0:
+        try:
+            pods = Kube.get_pods(kube_config, namespace, selector)
+            if len(pods) > 1:
+                raise Exception(f'More than one pod found for job "{job}"')
+        except kubernetes.client.rest.ApiException as e:
+            body = json.loads(e.body)
+            LOG.warning(
+                f'Getting pods "{job}" in namespace "{namespace}": {body["message"]}.'
+            )
+            time.sleep(1)
+
+    if not pods:
+        raise Exception(f'No pods found for job "{job}" in namespace "{namespace}"')
+
+    attempt = 10
+    while attempt > 0:
+        try:
+            return Kube.get_logs(
+                kube_config,
+                namespace,
+                pods[0],
+                follow=True,
+            )
+        except kubernetes.client.rest.ApiException as e:
+            body = json.loads(e.body)
+            LOG.warning(
+                f'Getting logs for "{job}" in namespace "{namespace}": {body["message"]}.'
+            )
+            time.sleep(1)
+            attempt -= 1
+
+    raise Exception(f'Could not get logs for job "{job}" in namespace "{namespace}"')
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("operation", choices=["create", "load", "execute"])
@@ -112,14 +161,30 @@ if __name__ == "__main__":
 
     sets.append(f"ordered_namespaces={{{','.join(ordered_namespaces)}}}")
 
-    if args.operation == "create":
+    exit_event = threading.Event()
+
+    if args.operation == "create" or args.operation == "load":
+        global_region = config["global_region"]
+
         run_benchmark(
-            "global", config["global_region"], ["operation=create"] + sets, args.dry_run
+            "global",
+            global_region,
+            [f"operation={args.operation}"] + sets,
+            args.dry_run,
         )
-    elif args.operation == "load":
-        run_benchmark(
-            "global", config["global_region"], ["operation=load"] + sets, args.dry_run
-        )
+
+        if not args.dry_run:
+            logs = get_job_logs("global", global_region, "create-load")
+            Kube.print_logs(
+                Kube.NamedLogs(
+                    namespace="global",
+                    name=args.operation,
+                    stream=logs,
+                ),
+                follow=True,
+                exit_event=exit_event,
+            )
+
     elif args.operation == "execute":
         timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
         with ThreadPoolExecutor(max_workers=len(regions)) as executor:
@@ -131,3 +196,23 @@ if __name__ == "__main__":
                     ["operation=execute", f"timestamp={timestamp}"] + sets,
                     args.dry_run,
                 )
+
+        if not args.dry_run:
+            with ThreadPoolExecutor(max_workers=len(regions)) as executor:
+                named_logs = executor.map(
+                    lambda region: Kube.NamedLogs(
+                        namespace=region,
+                        name="execute",
+                        stream=get_job_logs(region, region, "execute"),
+                    ),
+                    regions,
+                )
+
+            Kube.print_logs(named_logs, follow=True, exit_event=exit_event)
+    else:
+        raise ValueError(f"Unknown operation: {args.operation}")
+
+    if not args.dry_run:
+        # Wait for Ctrl-C
+        signal.signal(signal.SIGINT, lambda *args: exit_event.set())
+        exit_event.wait()
