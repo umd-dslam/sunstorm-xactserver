@@ -16,7 +16,6 @@ vpc:
 managedNodeGroups:
   - name: servers
     instanceType: c5.4xlarge
-    spot: true
     desiredCapacity: 1
     securityGroups:
       attachIDs:
@@ -27,7 +26,6 @@ managedNodeGroups:
       role: server
   - name: safekeepers
     instanceType: c5.2xlarge
-    spot: true
     desiredCapacity: 1
     securityGroups:
       attachIDs:
@@ -38,7 +36,6 @@ managedNodeGroups:
       role: safekeeper
   - name: clients
     instanceType: c5.2xlarge
-    spot: true
     desiredCapacity: 1
     securityGroups:
       attachIDs:
