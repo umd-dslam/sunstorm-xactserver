@@ -11,9 +11,15 @@ import yaml
 
 from pathlib import Path
 from kubernetes.client.rest import ApiException
-from typing import List
 from rich.console import Console
-from utils import get_logger, get_main_config, get_context, run_command, get_kube_config
+from utils import (
+    get_context,
+    get_kube_config,
+    get_logger,
+    get_main_config,
+    get_namespaces,
+    run_command,
+)
 
 LOG = get_logger(__name__)
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
@@ -236,24 +242,24 @@ def create_namespaces(config, dry_run: bool):
 
 
 def deploy_neon(config, cleanup_only: bool, dry_run: bool):
-    namespaces = {"global": {"region": config["global_region"]}}
-    for r in config["regions"]:
-        namespaces[r] = {"region": r}
-    ordered_namespaces = namespaces.keys()
+    namespaces = get_namespaces(config)
+    ordered_namespaces = [
+        item[0] for item in sorted(namespaces.items(), key=lambda x: x[1]["id"])
+    ]
 
     def deploy_neon_one_namespace(namespace):
         region = namespaces[namespace]["region"]
 
-        substitutions = []
+        sets = []
         for ns, ns_info in namespaces.items():
             for k, v in ns_info.items():
-                substitutions.append(f"namespaces.{ns}.{k}={v}")
+                sets.append(f"namespaces.{ns}.{k}={v}")
 
-        substitutions.append(f"ordered_namespaces={{{','.join(ordered_namespaces)}}}")
+        sets.append(f"ordered_namespaces={{{','.join(ordered_namespaces)}}}")
 
         hub_ebs_volume_id = config.get("hub_ebs_volume_id")
         if namespace == "global" and hub_ebs_volume_id:
-            substitutions.append(f"hub_ebs_volume_id={hub_ebs_volume_id}")
+            sets.append(f"hub_ebs_volume_id={hub_ebs_volume_id}")
 
         run_command(
             [
@@ -263,7 +269,7 @@ def deploy_neon(config, cleanup_only: bool, dry_run: bool):
                 "--namespace",
                 namespace,
                 "--set",
-                ",".join(substitutions),
+                ",".join(sets),
                 (BASE_PATH / "helm-neon").as_posix(),
             ]
             + context_flag(region, "--kube-context"),

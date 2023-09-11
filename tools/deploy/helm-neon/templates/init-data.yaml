@@ -36,4 +36,21 @@ spec:
               touch .done
               mc cp .done minio/neon/.neon/
       restartPolicy: Never
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              preference:
+                {{- include "nodesInCurrentRegion" . | indent 16 }}
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - hub
+                topologyKey: "kubernetes.io/hostname"
 {{ end }}

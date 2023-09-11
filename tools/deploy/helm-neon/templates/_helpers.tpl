@@ -33,3 +33,14 @@ Compute the addresses of the safekeepers.
 {{- end -}}
 {{ join "," $nodes }}
 {{- end }}
+
+{{/*
+Match with nodes that are labeled with the current region.
+*/}}
+{{- define "nodesInCurrentRegion" }}
+matchExpressions:
+  - key: region
+    operator: In
+    values:
+      - {{ dig .Release.Namespace "region" "" .Values.namespaces }}
+{{- end }}

@@ -76,9 +76,16 @@ def initialize_and_run_commands(parser, commands, args=None):
     parsed_args.run(parsed_args)
 
 
-def get_main_config(base_path) -> (list, str):
+def get_main_config(base_path):
     with open(base_path / "main.yaml", "r") as yaml_file:
         return yaml.safe_load(yaml_file)
+
+
+def get_namespaces(config):
+    namespaces = {"global": {"region": config["global_region"], "id": 0}}
+    for i, r in enumerate(config["regions"]):
+        namespaces[r] = {"region": r, "id": i + 1}
+    return namespaces
 
 
 def get_context(base_path, region: str) -> str:

@@ -148,6 +148,9 @@ spec:
                     operator: In
                     values:
                       - hub
+            - weight: 1
+              preference:
+                {{- include "nodesInCurrentRegion" . | indent 16 }}
         podAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 1

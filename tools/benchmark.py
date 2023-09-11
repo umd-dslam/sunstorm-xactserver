@@ -3,7 +3,7 @@ import subprocess
 import time
 
 from pathlib import Path
-from utils import get_main_config, get_logger, get_context
+from utils import get_main_config, get_logger, get_context, get_namespaces
 from tempfile import TemporaryFile
 
 LOG = get_logger(__name__)
@@ -100,15 +100,15 @@ if __name__ == "__main__":
 
     sets = args.set or []
 
-    namespaces = {"global": {"region": config["global_region"]}}
-    for r in regions:
-        namespaces[r] = {"region": r}
-
+    namespaces = get_namespaces(config)
+    ordered_namespaces = [
+        item[0] for item in sorted(namespaces.items(), key=lambda x: x[1]["id"])
+    ]
     for ns, ns_info in namespaces.items():
         for k, v in ns_info.items():
             sets.append(f"namespaces.{ns}.{k}={v}")
 
-    sets.append(f"ordered_namespaces={{{','.join(namespaces.keys())}}}")
+    sets.append(f"ordered_namespaces={{{','.join(ordered_namespaces)}}}")
 
     if args.operation == "create":
         run_benchmark(
