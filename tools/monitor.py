@@ -4,6 +4,7 @@ import itertools
 import threading
 import signal
 
+from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
 from pathlib import Path
 from rich.console import Console, Group
@@ -13,6 +14,7 @@ from rich.prompt import Confirm
 from rich.layout import Layout
 from utils import (
     get_main_config,
+    get_namespaces,
     get_logger,
     get_kube_config,
     Command,
@@ -49,23 +51,20 @@ def get_running_pods_in_deployment(region, namespace, deployment_name):
         return pods
 
 
-def get_region_namespaces(args) -> list[tuple[str, str]]:
+def get_chosen_namespaces(args):
     config = get_main_config(BASE_PATH)
-    regions = config["regions"]
-    global_region = config["global_region"]
+    namespaces = get_namespaces(config)
 
-    chosen = []
+    chosen = {
+        ns: info
+        for ns, info in namespaces.items()
+        if not args.namespaces or ns in args.namespaces
+    }
+
     if args.namespaces:
         for ns in args.namespaces:
-            if ns == "global":
-                chosen.append((global_region, ns))
-            elif ns in regions:
-                chosen.append((ns, ns))
-            else:
-                raise ValueError(f"Namespace {ns} is not defined in the config file.")
-    else:
-        chosen = [(r, r) for r in regions]
-        chosen.append((global_region, "global"))
+            if ns not in chosen:
+                LOG.warning(f'Namespace "{ns}" not found in config.')
 
     return chosen
 
@@ -126,45 +125,18 @@ class LogsCommand(MonitorCommand):
         if args.follow:
             LOG.info("Following logs after that.")
 
-        logs_streams = []
-        for region, namespace in get_region_namespaces(args):
-            config = get_kube_config(BASE_PATH, region)
-
-            for deploy in deployments:
-                pod = get_running_pods_in_deployment(region, namespace, deploy)
-                if not pod:
-                    LOG.warning(
-                        f'Cannot find any running pods in deployment "{deploy}" in region "{region}".'
-                    )
-                    continue
-                elif len(pod) > 1:
-                    LOG.warning(
-                        f'Found more than one running pods in deployment "{deploy}" in region "{region}".'
-                        f' Only watch the first pod "{pod[0]}".'
-                    )
-                LOG.info(
-                    f'Showing logs from pod "{pod[0]}" in "{namespace}" ("{region}").'
-                )
-
-                with kubernetes.client.ApiClient(config) as api_client:
-                    corev1 = kubernetes.client.CoreV1Api(api_client)
-                    logs = corev1.read_namespaced_pod_log(
-                        name=pod[0],
-                        namespace=namespace,
-                        container=deploy,
-                        follow=args.follow,
-                        tail_lines=None if args.all else args.lines,
-                        _preload_content=False,
+        tasks = []
+        with ThreadPoolExecutor() as executor:
+            for ns, ns_info in get_chosen_namespaces(args).items():
+                region = ns_info["region"]
+                for deploy in deployments:
+                    tasks.append(
+                        executor.submit(
+                            LogsCommand._get_log_stream, args, ns, region, deploy
+                        )
                     )
 
-                    logs_streams.append(
-                        {
-                            "region": region,
-                            "namespace": namespace,
-                            "deployment": deploy,
-                            "logs": logs,
-                        }
-                    )
+        logs_streams = [task.result() for task in tasks if task.result()]
 
         if not Confirm.ask("Start watching logs?", default=True):
             return
@@ -198,6 +170,42 @@ class LogsCommand(MonitorCommand):
             # Wait for all threads to finish
             for t in threads:
                 t.join()
+
+    @staticmethod
+    def _get_log_stream(args, namespace, region, deployment):
+        kube_config = get_kube_config(BASE_PATH, region)
+        pod = get_running_pods_in_deployment(region, namespace, deployment)
+        if not pod:
+            LOG.warning(
+                f'Cannot find any running pods in deployment "{deployment}" in region "{region}".'
+            )
+            return None
+        elif len(pod) > 1:
+            LOG.warning(
+                f'Found more than one running pods in deployment "{deployment}" in region "{region}".'
+                f' Only watch the first pod "{pod[0]}".'
+            )
+        LOG.info(
+            f'Showing logs from pod "{pod[0]}" in namespace "{namespace}" (region "{region}").'
+        )
+
+        with kubernetes.client.ApiClient(kube_config) as api_client:
+            corev1 = kubernetes.client.CoreV1Api(api_client)
+            logs = corev1.read_namespaced_pod_log(
+                name=pod[0],
+                namespace=namespace,
+                container=deployment,
+                follow=args.follow,
+                tail_lines=None if args.all else args.lines,
+                _preload_content=False,
+            )
+
+            return {
+                "region": region,
+                "namespace": namespace,
+                "deployment": deployment,
+                "logs": logs,
+            }
 
 
 class StatusCommand(MonitorCommand):
@@ -291,16 +299,19 @@ class StatusCommand(MonitorCommand):
 
     @staticmethod
     def _get_data(args):
+        namespaces = get_chosen_namespaces(args)
+
         data = defaultdict(dict)
-        for region, namespace in get_region_namespaces(args):
-            config = get_kube_config(BASE_PATH, region)
+        for ns, ns_info in namespaces.items():
+            region = ns_info["region"]
+            kube_config = get_kube_config(BASE_PATH, region)
 
             nodes = defaultdict(lambda: {"pods": []})
 
-            with kubernetes.client.ApiClient(config) as api_client:
+            with kubernetes.client.ApiClient(kube_config) as api_client:
                 corev1 = kubernetes.client.CoreV1Api(api_client)
                 pods = corev1.list_namespaced_pod(
-                    namespace=namespace,
+                    namespace=ns,
                 ).items
 
                 for pod in pods:
@@ -318,7 +329,7 @@ class StatusCommand(MonitorCommand):
                         }
                     )
 
-            data[region].update({namespace: nodes})
+            data[region].update({ns: nodes})
 
         return data
 

@@ -179,10 +179,9 @@ def install_dns_configmap(config, dry_run: bool):
 
 
 def create_namespaces(config, dry_run: bool):
-    global_region = config["global_region"]
-    regions = set(config["regions"]) | {global_region}
+    namespaces = get_namespaces(config)
 
-    def clean_up_namespace(region, namespace):
+    def clean_up_namespace(namespace, region):
         config = get_kube_config(BASE_PATH, region)
         LOG.info(f'Deleting namespace "{namespace}" in region "{region}"')
         with kubernetes.client.ApiClient(config) as api_client:
@@ -197,13 +196,11 @@ def create_namespaces(config, dry_run: bool):
                         "Exception when calling CoreV1Api->delete_namespace: %s" % e
                     )
 
-    clean_up_neon_one_namespace(global_region, "global", dry_run)
-    clean_up_namespace(global_region, "global")
-    for region in regions:
-        clean_up_neon_one_namespace(region, region, dry_run)
-        clean_up_namespace(region, region)
+    for ns, ns_info in namespaces.items():
+        clean_up_neon_one_namespace(ns, ns_info["region"], dry_run)
+        clean_up_namespace(ns, ns_info["region"])
 
-    def create_namespace(region, namespace):
+    def create_namespace(namespace, region):
         config = get_kube_config(BASE_PATH, region)
         LOG.info(f'Creating namespace "{namespace}" in region "{region}"')
         with kubernetes.client.ApiClient(config) as api_client:
@@ -236,9 +233,8 @@ def create_namespaces(config, dry_run: bool):
                         )
                         break
 
-    create_namespace(global_region, "global")
-    for region in regions:
-        create_namespace(region, region)
+    for ns, ns_info in namespaces.items():
+        create_namespace(ns, ns_info["region"])
 
 
 def deploy_neon(config, cleanup_only: bool, dry_run: bool):
@@ -279,7 +275,7 @@ def deploy_neon(config, cleanup_only: bool, dry_run: bool):
         )
 
     for ns, ns_info in namespaces.items():
-        clean_up_neon_one_namespace(ns_info["region"], ns, dry_run)
+        clean_up_neon_one_namespace(ns, ns_info["region"], dry_run)
 
     if cleanup_only:
         return
@@ -288,7 +284,7 @@ def deploy_neon(config, cleanup_only: bool, dry_run: bool):
         deploy_neon_one_namespace(ns)
 
 
-def clean_up_neon_one_namespace(region, namespace, dry_run):
+def clean_up_neon_one_namespace(namespace, region, dry_run):
     run_command(
         [
             "helm",
