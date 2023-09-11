@@ -7,7 +7,7 @@ import signal
 from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
 from pathlib import Path
-from rich.console import Console, Group
+from rich.console import Group
 from rich.live import Live
 from rich.table import Table
 from rich.prompt import Confirm
@@ -17,6 +17,8 @@ from utils import (
     get_namespaces,
     get_logger,
     get_kube_config,
+    get_running_pods,
+    print_kube_logs_streams,
     Command,
     initialize_and_run_commands,
     COLORS,
@@ -24,31 +26,6 @@ from utils import (
 
 LOG = get_logger(__name__)
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
-
-
-def get_running_pods_in_deployment(region, namespace, deployment_name):
-    config = get_kube_config(BASE_PATH, region)
-    with kubernetes.client.ApiClient(config) as api_client:
-        appsv1 = kubernetes.client.AppsV1Api(api_client)
-        corev1 = kubernetes.client.CoreV1Api(api_client)
-
-        pods = []
-        deployment = appsv1.read_namespaced_deployment(
-            name=deployment_name, namespace=namespace
-        )
-
-        selector = deployment.spec.selector.match_labels
-
-        pod_list = corev1.list_namespaced_pod(
-            namespace=namespace,
-            label_selector=",".join([f"{k}={v}" for k, v in selector.items()]),
-        )
-
-        for pod in pod_list.items:
-            if pod.status.phase == "Running":
-                pods.append(pod.metadata.name)
-
-        return pods
 
 
 def get_chosen_namespaces(args):
@@ -90,8 +67,16 @@ class LogsCommand(MonitorCommand):
             "-d",
             nargs="*",
             choices=["compute", "xactserver", "pageserver"],
+            default=["compute", "xactserver"],
             help="The deployment to watch. If not specified, "
             "only 'compute' and 'xactserver' will be watched.",
+        )
+        parser.add_argument(
+            "--pod",
+            "-p",
+            nargs="*",
+            default=[],
+            help="The pod to watch.",
         )
         parser.add_argument(
             "--follow",
@@ -115,8 +100,6 @@ class LogsCommand(MonitorCommand):
         )
 
     def do_command(self, args):
-        deployments = args.deployment or ["compute", "xactserver"]
-
         if args.all:
             LOG.info("Showing all logs from the beginning.")
         else:
@@ -129,10 +112,16 @@ class LogsCommand(MonitorCommand):
         with ThreadPoolExecutor() as executor:
             for ns, ns_info in get_chosen_namespaces(args).items():
                 region = ns_info["region"]
-                for deploy in deployments:
+                for d in args.deployment:
                     tasks.append(
                         executor.submit(
-                            LogsCommand._get_log_stream, args, ns, region, deploy
+                            LogsCommand._get_log_stream, args, ns, region, deployment=d
+                        )
+                    )
+                for p in args.pod:
+                    tasks.append(
+                        executor.submit(
+                            LogsCommand._get_log_stream, args, ns, region, pod=p
                         )
                     )
 
@@ -141,71 +130,71 @@ class LogsCommand(MonitorCommand):
         if not Confirm.ask("Start watching logs?", default=True):
             return
 
-        console = Console()
-
-        def print_log(log_stream, color):
-            name = f"{log_stream['namespace']}|{log_stream['deployment']}"
-            for line in log_stream["logs"]:
-                decoded = line.decode("utf-8").rstrip("\n")
-                console.print(
-                    f"[bold]\[{name}][/bold] {decoded}", style=color, highlight=False
-                )
-
-        colors = itertools.cycle(COLORS)
-        threads = []
-        for log_stream in logs_streams:
-            color = next(colors)
-            t = threading.Thread(
-                target=print_log, args=(log_stream, color), daemon=True
-            )
-            t.start()
-            threads.append(t)
+        print_kube_logs_streams(logs_streams, args.follow)
 
         if args.follow:
             # Wait for Ctrl-C
             exit_event = threading.Event()
             signal.signal(signal.SIGINT, lambda *args: exit_event.set())
             exit_event.wait()
-        else:
-            # Wait for all threads to finish
-            for t in threads:
-                t.join()
 
     @staticmethod
-    def _get_log_stream(args, namespace, region, deployment):
+    def _get_log_stream(args, namespace, region, deployment=None, pod=None):
         kube_config = get_kube_config(BASE_PATH, region)
-        pod = get_running_pods_in_deployment(region, namespace, deployment)
-        if not pod:
+
+        if deployment:
+            with kubernetes.client.ApiClient(kube_config) as api_client:
+                appsv1 = kubernetes.client.AppsV1Api(api_client)
+
+                deployment_info = appsv1.read_namespaced_deployment(
+                    name=deployment, namespace=namespace
+                )
+                selector = deployment_info.spec.selector.match_labels
+
+            pods = get_running_pods(kube_config, namespace, selector)
+        elif pod:
+            pods = [pod]
+        else:
+            raise Exception("Either deployment or pod must be specified.")
+
+        if not pods:
             LOG.warning(
                 f'Cannot find any running pods in deployment "{deployment}" in region "{region}".'
             )
             return None
-        elif len(pod) > 1:
+        elif len(pods) > 1:
             LOG.warning(
                 f'Found more than one running pods in deployment "{deployment}" in region "{region}".'
-                f' Only watch the first pod "{pod[0]}".'
-            )
-        LOG.info(
-            f'Showing logs from pod "{pod[0]}" in namespace "{namespace}" (region "{region}").'
-        )
-
-        with kubernetes.client.ApiClient(kube_config) as api_client:
-            corev1 = kubernetes.client.CoreV1Api(api_client)
-            logs = corev1.read_namespaced_pod_log(
-                name=pod[0],
-                namespace=namespace,
-                container=deployment,
-                follow=args.follow,
-                tail_lines=None if args.all else args.lines,
-                _preload_content=False,
+                f' Only watch the first pod "{pods[0]}".'
             )
 
-            return {
-                "region": region,
-                "namespace": namespace,
-                "deployment": deployment,
-                "logs": logs,
-            }
+        try:
+            with kubernetes.client.ApiClient(kube_config) as api_client:
+                corev1 = kubernetes.client.CoreV1Api(api_client)
+                logs = corev1.read_namespaced_pod_log(
+                    name=pods[0],
+                    namespace=namespace,
+                    container=deployment,
+                    follow=args.follow,
+                    tail_lines=None if args.all else args.lines,
+                    _preload_content=False,
+                )
+
+                LOG.info(
+                    f'Showing logs from pod "{pods[0]}" in namespace "{namespace}" (region "{region}").'
+                )
+
+                return {
+                    "region": region,
+                    "namespace": namespace,
+                    "deployment": deployment,
+                    "logs": logs,
+                }
+        except kubernetes.client.rest.ApiException as e:
+            LOG.error(
+                f'Pod "{pods[0]}" in namespace "{namespace}" (region "{region}"): {e}'
+            )
+            return None
 
 
 class StatusCommand(MonitorCommand):
@@ -223,24 +212,26 @@ class StatusCommand(MonitorCommand):
         )
 
     def do_command(self, args):
+        self.exit_event = threading.Event()
+        signal.signal(signal.SIGINT, lambda *args: self.exit_event.set())
+
         layout = Layout()
         layout.split_column(
             Layout(f"Refreshing every {args.refresh} seconds", size=1),
-            Layout(StatusCommand._generate_tables(args), name="table"),
+            Layout(self._generate_tables(args), name="table"),
         )
-
-        exit_event = threading.Event()
-        signal.signal(signal.SIGINT, lambda *args: exit_event.set())
 
         with Live(layout, screen=True):
             while True:
-                layout["table"].update(StatusCommand._generate_tables(args))
-                if exit_event.wait(timeout=args.refresh):
+                try:
+                    layout["table"].update(self._generate_tables(args))
+                except InterruptedError:
+                    break
+                if self.exit_event.wait(timeout=args.refresh):
                     break
 
-    @staticmethod
-    def _generate_tables(args):
-        data = StatusCommand._get_data(args)
+    def _generate_tables(self, args):
+        data = self._get_data(args)
 
         colors = itertools.cycle(COLORS)
         node_to_color = {}
@@ -297,8 +288,7 @@ class StatusCommand(MonitorCommand):
 
         return Group(*tables)
 
-    @staticmethod
-    def _get_data(args):
+    def _get_data(self, args):
         namespaces = get_chosen_namespaces(args)
 
         data = defaultdict(dict)
@@ -328,6 +318,11 @@ class StatusCommand(MonitorCommand):
                             "status": StatusCommand._compute_status(pod),
                         }
                     )
+
+                    # Check if we need to exit here to exit as early as possible
+                    # when the interrupt signal is received
+                    if self.exit_event.is_set():
+                        raise InterruptedError()
 
             data[region].update({ns: nodes})
 

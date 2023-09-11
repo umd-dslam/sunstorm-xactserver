@@ -1,34 +1,38 @@
 import argparse
-import subprocess
 import time
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from utils import get_main_config, get_logger, get_context, get_namespaces
+from utils import (
+    get_main_config,
+    get_logger,
+    get_context,
+    get_namespaces,
+    run_subprocess,
+)
 from tempfile import TemporaryFile
 
 LOG = get_logger(__name__)
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
 
 
-def run_benchmark(region, namespace, sets, args):
-    sets_args = []
-    for arg in sets:
-        sets_args.extend(["--set", arg])
-
-    helm_cmd = [
-        "helm",
-        "template",
-        (BASE_PATH / "helm-benchbase").as_posix(),
-        "--namespace",
-        namespace,
-    ] + sets_args
-
-    LOG.debug(f"Executing: {' '.join(helm_cmd)}")
+def run_benchmark(namespace, region, sets, dry_run):
     with TemporaryFile() as helm_output:
-        subprocess.run(
+        helm_cmd = [
+            "helm",
+            "template",
+            (BASE_PATH / "helm-benchbase").as_posix(),
+            "--namespace",
+            namespace,
+        ]
+        for s in sets:
+            helm_cmd += ["--set", s]
+        run_subprocess(
             helm_cmd,
-            stdout=helm_output,
+            (LOG, f"[{namespace}] Generating Kubernetes configs from Helm templates"),
+            dry_run=False,
             check=True,
+            stdout=helm_output,
         )
         helm_output.flush()
 
@@ -38,44 +42,42 @@ def run_benchmark(region, namespace, sets, args):
         context = get_context(BASE_PATH, region)
 
         # Delete the existing deployment, if any
-        cmd = [
-            "kubectl",
-            "delete",
-            "--namespace",
-            namespace,
-            "-f",
-            "-",
-            "--context",
-            context,
-        ]
-        LOG.debug(f"Executing: {' '.join(cmd)}")
         helm_output.seek(0)
-        if not args.dry_run:
-            subprocess.run(
-                cmd,
-                stdin=helm_output,
-                check=False,
-            )
+        run_subprocess(
+            [
+                "kubectl",
+                "delete",
+                "--namespace",
+                namespace,
+                "-f",
+                "-",
+                "--context",
+                context,
+            ],
+            (LOG, f"[{namespace}] Deleting existing benchmark"),
+            dry_run,
+            stdin=helm_output,
+            check=False,
+        )
 
         # Apply the new deployment
-        cmd = [
-            "kubectl",
-            "apply",
-            "--namespace",
-            namespace,
-            "-f",
-            "-",
-            "--context",
-            context,
-        ]
-        LOG.debug(f"Executing: {' '.join(cmd)}")
         helm_output.seek(0)
-        if not args.dry_run:
-            subprocess.run(
-                cmd,
-                stdin=helm_output,
-                check=True,
-            )
+        run_subprocess(
+            [
+                "kubectl",
+                "apply",
+                "--namespace",
+                namespace,
+                "-f",
+                "-",
+                "--context",
+                context,
+            ],
+            (LOG, f"[{namespace}] Creating new benchmark"),
+            dry_run,
+            stdin=helm_output,
+            check=True,
+        )
 
 
 if __name__ == "__main__":
@@ -112,19 +114,20 @@ if __name__ == "__main__":
 
     if args.operation == "create":
         run_benchmark(
-            config["global_region"], "global", ["operation=create"] + sets, args
+            "global", config["global_region"], ["operation=create"] + sets, args.dry_run
         )
     elif args.operation == "load":
         run_benchmark(
-            config["global_region"], "global", ["operation=load"] + sets, args
+            "global", config["global_region"], ["operation=load"] + sets, args.dry_run
         )
     elif args.operation == "execute":
         timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
-        for region in regions:
-            LOG.info("Executing benchmark in region %s", region)
-            run_benchmark(
-                region,
-                region,
-                ["operation=execute", f"timestamp={timestamp}"] + sets,
-                args,
-            )
+        with ThreadPoolExecutor(max_workers=len(regions)) as executor:
+            for region in regions:
+                executor.submit(
+                    run_benchmark,
+                    region,
+                    region,
+                    ["operation=execute", f"timestamp={timestamp}"] + sets,
+                    args.dry_run,
+                )

@@ -19,7 +19,7 @@ CONSOLE = Console()
 RegionInfo = namedtuple("RegionInfo", ["name", "color", "is_global"])
 
 
-def run_command(cmd: List[str], info: RegionInfo, dry_run: bool):
+def run_subprocess_and_print_log(cmd: List[str], info: RegionInfo, dry_run: bool):
     CONSOLE.log(f"Running: {' '.join(cmd)}")
 
     if dry_run:
@@ -39,7 +39,7 @@ def create_eks_cluster(info: RegionInfo, dry_run: bool):
     eks_config_file = BASE_PATH / f"eks/{info.name}.yaml"
 
     # Create the cluster
-    run_command(
+    run_subprocess_and_print_log(
         [
             "eksctl",
             "create",
@@ -66,7 +66,7 @@ def delete_eks_cluster(info: RegionInfo, dry_run: bool):
         # is not deleted first.
         with open(eks_config_file, "r") as yaml_file:
             eks_config = yaml.safe_load(yaml_file)
-        run_command(
+        run_subprocess_and_print_log(
             [
                 "eksctl",
                 "delete",
@@ -83,7 +83,7 @@ def delete_eks_cluster(info: RegionInfo, dry_run: bool):
         )
 
     # Delete the cluster
-    run_command(
+    run_subprocess_and_print_log(
         [
             "eksctl",
             "delete",

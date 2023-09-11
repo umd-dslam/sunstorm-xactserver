@@ -1,12 +1,14 @@
+import itertools
 import logging
 import kubernetes.client
 import kubernetes.config
 import os
 import subprocess
+import threading
 import yaml
 
+from rich.console import Console
 from rich.logging import RichHandler
-
 
 # List of 20 distinct colors
 # https://sashat.me/2017/01/11/list-of-20-simple-distinct-colors/
@@ -76,6 +78,14 @@ def initialize_and_run_commands(parser, commands, args=None):
     parsed_args.run(parsed_args)
 
 
+def run_subprocess(cmd, logger_and_info_log, dry_run, **kwargs):
+    logger, info_log = logger_and_info_log
+    logger.info(info_log)
+    logger.debug(f"Executing: {' '.join(cmd)}")
+    if not dry_run:
+        subprocess.run(cmd, **kwargs)
+
+
 def get_main_config(base_path):
     with open(base_path / "main.yaml", "r") as yaml_file:
         return yaml.safe_load(yaml_file)
@@ -122,9 +132,42 @@ def get_kube_config(base_path, region: str):
     return config
 
 
-def run_command(cmd, logger_and_info_log, dry_run, **kwargs):
-    logger, info_log = logger_and_info_log
-    logger.info(info_log)
-    logger.debug(f"Executing: {' '.join(cmd)}")
-    if not dry_run:
-        subprocess.run(cmd, **kwargs)
+def get_running_pods(kube_config, namespace, selector):
+    with kubernetes.client.ApiClient(kube_config) as api_client:
+        corev1 = kubernetes.client.CoreV1Api(api_client)
+        pods = []
+        pod_list = corev1.list_namespaced_pod(
+            namespace=namespace,
+            label_selector=",".join([f"{k}={v}" for k, v in selector.items()]),
+        )
+        for pod in pod_list.items:
+            if pod.status.phase == "Running":
+                pods.append(pod.metadata.name)
+
+        return pods
+
+
+def print_kube_logs_streams(logs_streams, follow=False, console=None):
+    if not console:
+        console = Console()
+
+    def print_log(log_stream, color):
+        name = f"{log_stream['namespace']}|{log_stream['deployment']}"
+        for line in log_stream["logs"]:
+            decoded = line.decode("utf-8").rstrip("\n")
+            console.print(
+                f"[bold]\[{name}][/bold] {decoded}", style=color, highlight=False
+            )
+
+    colors = itertools.cycle(COLORS)
+    threads = []
+    for log_stream in logs_streams:
+        color = next(colors)
+        t = threading.Thread(target=print_log, args=(log_stream, color), daemon=True)
+        t.start()
+        threads.append(t)
+
+    if not follow:
+        # Wait for all threads to finish
+        for t in threads:
+            t.join()

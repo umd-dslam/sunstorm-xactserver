@@ -18,7 +18,7 @@ from utils import (
     get_logger,
     get_main_config,
     get_namespaces,
-    run_command,
+    run_subprocess,
 )
 
 LOG = get_logger(__name__)
@@ -57,7 +57,7 @@ def set_up_load_balancer_for_coredns(config, dry_run: bool) -> str:
         return
 
     for region in regions:
-        run_command(
+        run_subprocess(
             [
                 "kubectl",
                 "apply",
@@ -130,7 +130,7 @@ def install_dns_configmap(config, dry_run: bool):
 
     for region in regions:
         helm_name = f"dns-{region}"
-        run_command(
+        run_subprocess(
             [
                 "helm",
                 "uninstall",
@@ -145,7 +145,7 @@ def install_dns_configmap(config, dry_run: bool):
             check=False,
         )
 
-        run_command(
+        run_subprocess(
             [
                 "kubectl",
                 "delete",
@@ -160,7 +160,7 @@ def install_dns_configmap(config, dry_run: bool):
             check=False,
         )
 
-        run_command(
+        run_subprocess(
             [
                 "helm",
                 "install",
@@ -257,7 +257,7 @@ def deploy_neon(config, cleanup_only: bool, dry_run: bool):
         if namespace == "global" and hub_ebs_volume_id:
             sets.append(f"hub_ebs_volume_id={hub_ebs_volume_id}")
 
-        run_command(
+        run_subprocess(
             [
                 "helm",
                 "install",
@@ -285,7 +285,7 @@ def deploy_neon(config, cleanup_only: bool, dry_run: bool):
 
 
 def clean_up_neon_one_namespace(namespace, region, dry_run):
-    run_command(
+    run_subprocess(
         [
             "helm",
             "uninstall",
