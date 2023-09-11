@@ -81,13 +81,16 @@ spec:
         nodeAffinity:
           # Prefer to schedule safekeeper pods on nodes with the role "safekeeper".
           preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 1
-            preference:
-              matchExpressions:
-              - key: role
-                operator: In
-                values:
-                - safekeeper
+            - weight: 1
+              preference:
+                matchExpressions:
+                  - key: role
+                    operator: In
+                    values:
+                      - safekeeper
+            - weight: 10
+              preference:
+                {{- include "nodesInCurrentRegion" . | indent 16 }}
         podAntiAffinity:
           # We prefer that safekeeper pods are not scheduled on the same node.
           preferredDuringSchedulingIgnoredDuringExecution:

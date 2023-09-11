@@ -55,13 +55,20 @@ spec:
       affinity:
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 1
-            preference:
-              matchExpressions:
-                - key: role
-                  operator: In
-                  values:
-                    - server
+            - weight: 1
+              preference:
+                matchExpressions:
+                  - key: role
+                    operator: In
+                    values:
+                      - server
+            - weight: 10
+              preference:
+                matchExpressions:
+                  - key: region
+                    operator: In
+                    values:
+                      - {{ dig .Release.Namespace "region" "" .Values.namespaces }}
         podAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 1

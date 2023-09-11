@@ -79,6 +79,9 @@ spec:
                     operator: In
                     values:
                       - server
+            - weight: 10
+              preference:
+                {{- include "nodesInCurrentRegion" . | indent 16 }}
         podAntiAffinity:
           # This is to ensure that pageserver pods are not scheduled on the same node.
           preferredDuringSchedulingIgnoredDuringExecution:

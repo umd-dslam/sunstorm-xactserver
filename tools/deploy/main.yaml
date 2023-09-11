@@ -1,16 +1,16 @@
 # AWS regions to deploy to. If the context of a region is not set,
 # it will be inferred from the region name and the ".kube/config" file.
 regions:
-  us-east-1:
-    context: minikube
-  us-east-2:
-    context: minikube
-  us-west-1:
-    context: minikube
+  wisc:
+    context: kubernetes-admin@kubernetes
+  utah:
+    context: kubernetes-admin@kubernetes
+  # us-west-1:
+  #   context: kubernetes-admin@kubernetes
 
 # The region that contains the global resources. This region can
 # be one of the regions listed above, or a different region.
-global_region: us-east-1
+global_region: wisc
 
 # EBS volume ID to store global data like metrics, minio, etc.
 # No EBS volume will be used if this is not set. 
