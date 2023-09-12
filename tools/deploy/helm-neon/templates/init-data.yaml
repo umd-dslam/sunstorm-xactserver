@@ -39,12 +39,13 @@ spec:
       affinity:
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 1
+            - weight: 100
               preference:
-                {{- include "nodesInCurrentRegion" . | indent 16 }}
+                matchExpressions:
+                  - {{- include "nodesInCurrentRegion" . | indent 20 }}
         podAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 1
+            - weight: 100
               podAffinityTerm:
                 labelSelector:
                   matchExpressions:

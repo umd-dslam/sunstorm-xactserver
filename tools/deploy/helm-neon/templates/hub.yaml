@@ -70,6 +70,7 @@ metadata:
   name: hub
   labels:
     app: hub
+    component: hub
     part-of: neon
 spec:
   replicas: 1
@@ -80,6 +81,7 @@ spec:
     metadata:
       labels:
         app: hub
+        component: hub
         part-of: neon
     spec:
       securityContext:
@@ -140,17 +142,19 @@ spec:
           {{ end }}
       affinity:
         nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - {{- include "nodesInCurrentRegion" . | indent 18 }}
           preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 1
+            - weight: 100
               preference:
                 matchExpressions:
-                  - key: role
+                  - key: hub
                     operator: In
                     values:
+                      - all
                       - hub
-            - weight: 1
-              preference:
-                {{- include "nodesInCurrentRegion" . | indent 16 }}
         podAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 1

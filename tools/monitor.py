@@ -206,26 +206,27 @@ class StatusCommand(MonitorCommand):
         )
 
     def do_command(self, args):
-        self.exit_event = threading.Event()
-        signal.signal(signal.SIGINT, lambda *args: self.exit_event.set())
+        exit_event = threading.Event()
+        signal.signal(signal.SIGINT, lambda *args: exit_event.set())
 
         layout = Layout()
         layout.split_column(
             Layout(f"Refreshing every {args.refresh} seconds", size=1),
-            Layout(self._generate_tables(args), name="table"),
+            Layout(StatusCommand._generate_tables(args), name="table"),
         )
 
         with Live(layout, screen=True):
             while True:
                 try:
-                    layout["table"].update(self._generate_tables(args))
+                    layout["table"].update(StatusCommand._generate_tables(args))
                 except InterruptedError:
                     break
-                if self.exit_event.wait(timeout=args.refresh):
+                if exit_event.wait(timeout=args.refresh):
                     break
 
-    def _generate_tables(self, args):
-        data = self._get_data(args)
+    @staticmethod
+    def _generate_tables(args):
+        data = StatusCommand._get_data(args)
 
         colors = itertools.cycle(COLORS)
         node_to_color = {}
@@ -241,7 +242,7 @@ class StatusCommand(MonitorCommand):
             else:
                 return f"[b red]{status}[/b red]"
 
-        for region, namespaces in data.items():
+        for region, namespaces in sorted(data.items(), key=lambda x: x[0]):
             table = Table(
                 "Namespace",
                 "Node",
@@ -251,7 +252,7 @@ class StatusCommand(MonitorCommand):
                 title=f"[bold]{region}[/bold]",
             )
 
-            for namespace, nodes in namespaces.items():
+            for namespace, nodes in sorted(namespaces.items(), key=lambda x: x[0]):
                 table.add_section()
                 namespace_cell = namespace
                 for node_cell, node in nodes.items():
@@ -282,11 +283,14 @@ class StatusCommand(MonitorCommand):
 
         return Group(*tables)
 
-    def _get_data(self, args):
+    @staticmethod
+    def _get_data(args):
         namespaces = get_chosen_namespaces(args)
 
         data = defaultdict(dict)
-        for ns, ns_info in namespaces.items():
+        lock = threading.Lock()
+
+        def get_namespaced_data(ns, ns_info):
             region = ns_info["region"]
             kube_config = Kube.get_config(BASE_PATH, region)
 
@@ -313,12 +317,11 @@ class StatusCommand(MonitorCommand):
                         }
                     )
 
-                    # Check if we need to exit here to exit as early as possible
-                    # when the interrupt signal is received
-                    if self.exit_event.is_set():
-                        raise InterruptedError()
+            with lock:
+                data[region].update({ns: nodes})
 
-            data[region].update({ns: nodes})
+        with ThreadPoolExecutor() as executor:
+            executor.map(get_namespaced_data, namespaces.keys(), namespaces.values())
 
         return data
 

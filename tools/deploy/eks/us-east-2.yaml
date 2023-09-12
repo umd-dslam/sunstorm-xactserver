@@ -22,8 +22,7 @@ managedNodeGroups:
         - sg-05538d3ef06e925d8
     labels:
       role: server
-    tags:
-      role: server
+      region: us-east-2
   - name: safekeepers
     instanceType: c5.2xlarge
     desiredCapacity: 1
@@ -32,8 +31,7 @@ managedNodeGroups:
         - sg-05538d3ef06e925d8
     labels:
       role: safekeeper
-    tags:
-      role: safekeeper
+      region: us-east-2
   - name: clients
     instanceType: c5.2xlarge
     desiredCapacity: 1
@@ -42,5 +40,4 @@ managedNodeGroups:
         - sg-05538d3ef06e925d8
     labels:
       role: client
-    tags:
-      role: client
+      region: us-east-2

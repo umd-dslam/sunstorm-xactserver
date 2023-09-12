@@ -54,17 +54,19 @@ spec:
       restartPolicy: Always
       affinity:
         nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {{- include "nodesInCurrentRegion" . | indent 20 }}
           preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 1
+            - weight: 100
               preference:
                 matchExpressions:
-                  - key: role
+                  - key: hub
                     operator: In
                     values:
-                      - server
-            - weight: 1
-              preference:
-                {{- include "nodesInCurrentRegion" . | indent 16 }}
+                      - all
+                      - storage-broker
         podAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 1

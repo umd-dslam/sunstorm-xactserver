@@ -24,8 +24,7 @@ managedNodeGroups:
         - sg-0f6f9d8fed793f085
     labels:
       role: server
-    tags:
-      role: server
+      region: us-west-2
   - name: safekeepers
     instanceType: c5.2xlarge
     spot: true
@@ -35,8 +34,7 @@ managedNodeGroups:
         - sg-0f6f9d8fed793f085
     labels:
       role: safekeeper
-    tags:
-      role: safekeeper
+      region: us-west-2
   - name: clients
     instanceType: c5.2xlarge
     spot: true
@@ -46,5 +44,4 @@ managedNodeGroups:
         - sg-0f6f9d8fed793f085
     labels:
       role: client
-    tags:
-      role: client
+      region: us-west-2

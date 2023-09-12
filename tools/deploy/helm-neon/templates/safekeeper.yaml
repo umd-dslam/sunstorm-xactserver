@@ -79,18 +79,24 @@ spec:
       restartPolicy: Always
       affinity:
         nodeAffinity:
-          # Prefer to schedule safekeeper pods on nodes with the role "safekeeper".
+          {{- if ne .Release.Namespace "global" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {{- include "nodesInCurrentRegion" . | indent 20 }}
+                  - key: role
+                    operator: NotIn
+                    values:
+                      - client
+          {{- end }}
           preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 1
+            - weight: 100
               preference:
                 matchExpressions:
                   - key: role
                     operator: In
                     values:
                       - safekeeper
-            - weight: 1
-              preference:
-                {{- include "nodesInCurrentRegion" . | indent 16 }}
         podAntiAffinity:
           # We prefer that safekeeper pods are not scheduled on the same node.
           preferredDuringSchedulingIgnoredDuringExecution:

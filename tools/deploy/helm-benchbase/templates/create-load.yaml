@@ -27,6 +27,10 @@ spec:
             name: benchbase-config
       affinity:
         nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {{- include "nodesInCurrentRegion" . | indent 20 }}
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 1
               preference:
@@ -35,7 +39,4 @@ spec:
                     operator: In
                     values:
                       - client
-            - weight: 1
-              preference:
-                {{- include "nodesInCurrentRegion" . | indent 16 }}
 {{ end }}

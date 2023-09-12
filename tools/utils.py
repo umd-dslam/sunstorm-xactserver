@@ -92,8 +92,8 @@ def get_main_config(base_path):
 
 def get_namespaces(config):
     namespaces = {"global": {"region": config["global_region"], "id": 0}}
-    for i, r in enumerate(config["regions"]):
-        namespaces[r] = {"region": r, "id": i + 1}
+    for region, region_info in config["regions"].items():
+        namespaces[region] = {"region": region, "id": region_info["id"]}
     return namespaces
 
 
@@ -177,10 +177,10 @@ class Kube:
 
         from rich.console import Console
 
-        if not isinstance(named_logs, Iterator):
-            named_logs = [named_logs]
-        else:
+        if isinstance(named_logs, Iterator):
             named_logs = list(named_logs)
+        elif isinstance(named_logs, Kube.NamedLogs):
+            named_logs = [named_logs]
 
         if not console:
             console = Console()

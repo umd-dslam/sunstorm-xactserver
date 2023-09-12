@@ -96,7 +96,12 @@ def get_job_logs(namespace, region, job):
     pods = []
     while len(pods) == 0:
         try:
-            pods = Kube.get_pods(kube_config, namespace, selector)
+            pods = Kube.get_pods(
+                kube_config,
+                namespace,
+                selector,
+                phases=["Running", "Pending", "Succeeded"],
+            )
             if len(pods) > 1:
                 raise Exception(f'More than one pod found for job "{job}"')
         except kubernetes.client.rest.ApiException as e:
@@ -123,7 +128,7 @@ def get_job_logs(namespace, region, job):
             LOG.warning(
                 f'Getting logs for "{job}" in namespace "{namespace}": {body["message"]}.'
             )
-            time.sleep(1)
+            time.sleep(6)
             attempt -= 1
 
     raise Exception(f'Could not get logs for job "{job}" in namespace "{namespace}"')
@@ -142,6 +147,12 @@ if __name__ == "__main__":
         "--dry-run",
         action="store_true",
         help="Do not actually run the benchmark.",
+    )
+    parser.add_argument(
+        "--logs-only",
+        "-l",
+        action="store_true",
+        help="Only print the logs of the benchmark.",
     )
 
     args = parser.parse_args()
@@ -166,12 +177,13 @@ if __name__ == "__main__":
     if args.operation == "create" or args.operation == "load":
         global_region = config["global_region"]
 
-        run_benchmark(
-            "global",
-            global_region,
-            [f"operation={args.operation}"] + sets,
-            args.dry_run,
-        )
+        if not args.logs_only:
+            run_benchmark(
+                "global",
+                global_region,
+                [f"operation={args.operation}"] + sets,
+                args.dry_run,
+            )
 
         if not args.dry_run:
             logs = get_job_logs("global", global_region, "create-load")
@@ -186,16 +198,17 @@ if __name__ == "__main__":
             )
 
     elif args.operation == "execute":
-        timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
-        with ThreadPoolExecutor(max_workers=len(regions)) as executor:
-            for region in regions:
-                executor.submit(
-                    run_benchmark,
-                    region,
-                    region,
-                    ["operation=execute", f"timestamp={timestamp}"] + sets,
-                    args.dry_run,
-                )
+        if not args.logs_only:
+            timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+            with ThreadPoolExecutor(max_workers=len(regions)) as executor:
+                for region in regions:
+                    executor.submit(
+                        run_benchmark,
+                        region,
+                        region,
+                        ["operation=execute", f"timestamp={timestamp}"] + sets,
+                        args.dry_run,
+                    )
 
         if not args.dry_run:
             with ThreadPoolExecutor(max_workers=len(regions)) as executor:

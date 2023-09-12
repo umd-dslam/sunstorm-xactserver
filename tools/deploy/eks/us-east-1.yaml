@@ -34,8 +34,7 @@ managedNodeGroups:
         - sg-018aeab319579349c
     labels:
       role: hub
-    tags:
-      role: hub
+      region: us-east-1
   - name: safekeepers
     instanceType: c5.2xlarge
     desiredCapacity: 1
@@ -44,8 +43,7 @@ managedNodeGroups:
         - sg-018aeab319579349c
     labels:
       role: safekeeper
-    tags:
-      role: safekeeper
+      region: us-east-1
   - name: clients
     instanceType: c5.2xlarge
     desiredCapacity: 1
@@ -54,8 +52,7 @@ managedNodeGroups:
         - sg-018aeab319579349c
     labels:
       role: client
-    tags:
-      role: client
+      region: us-east-1
 
 iam:
   withOIDC: true

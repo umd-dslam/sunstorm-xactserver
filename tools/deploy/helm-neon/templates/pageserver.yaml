@@ -71,17 +71,35 @@ spec:
             sizeLimit: 10Gi
       affinity:
         nodeAffinity:
+          {{- if ne .Release.Namespace "global" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {{- include "nodesInCurrentRegion" . | indent 20 }}
+                  - key: role
+                    operator: NotIn
+                    values:
+                      - client
+          {{- end }}
           preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 1
+            {{- if eq .Release.Namespace "global" }}
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: hub
+                    operator: In
+                    values:
+                      - all
+                      - pageserver
+            {{- else }}
+            - weight: 100
               preference:
                 matchExpressions:
                   - key: role
                     operator: In
                     values:
                       - server
-            - weight: 1
-              preference:
-                {{- include "nodesInCurrentRegion" . | indent 16 }}
+            {{- end }}
         podAntiAffinity:
           # This is to ensure that pageserver pods are not scheduled on the same node.
           preferredDuringSchedulingIgnoredDuringExecution:
