@@ -176,6 +176,7 @@ class Kube:
         import threading
 
         from rich.console import Console
+        from rich.markup import escape
 
         if isinstance(named_logs, Iterator):
             named_logs = list(named_logs)
@@ -193,7 +194,9 @@ class Kube:
             for line in logs.stream:
                 decoded = line.decode("utf-8").rstrip("\n")
                 console.print(
-                    f"[bold]\[{name}][/bold] {decoded}", style=color, highlight=False
+                    f"[bold]\[{name}][/bold] {escape(decoded)}",
+                    style=color,
+                    highlight=False,
                 )
 
             nonlocal alive_threads
