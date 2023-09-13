@@ -322,7 +322,7 @@ def clean_up_neon_one_namespace(namespace, namespace_info, dry_run):
 
 STAGES = [
     "load-balancer",
-    "dns-config",
+    "dns",
     "namespace",
     "neon",
 ]
@@ -375,24 +375,24 @@ if __name__ == "__main__":
 
     log_tag = "bold yellow"
 
-    if "load-balancer" in unskipped_stages:
+    if STAGES[0] in unskipped_stages:
         LOG.info(
             f"[{log_tag}]Setting up load balancer for CoreDNS[/{log_tag}]",
             extra={"markup": True},
         )
         set_up_load_balancer_for_coredns(config, args.dry_run)
 
-    if "dns-config" in unskipped_stages:
+    if STAGES[1] in unskipped_stages:
         LOG.info(
             f"[{log_tag}]Installing DNS configmap[/{log_tag}]", extra={"markup": True}
         )
         install_dns_configmap(config, args.dry_run)
 
-    if "namespace" in unskipped_stages:
+    if STAGES[2] in unskipped_stages:
         LOG.info(f"[{log_tag}]Creating namespaces[/{log_tag}]", extra={"markup": True})
         create_namespaces(config, args.dry_run)
 
-    if "neon" in unskipped_stages:
+    if STAGES[3] in unskipped_stages:
         LOG.info(f"[{log_tag}]Deploying Neon[/{log_tag}]", extra={"markup": True})
         deploy_neon(
             config,
