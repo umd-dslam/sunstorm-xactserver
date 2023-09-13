@@ -2,10 +2,13 @@
 # it will be inferred from the region name and the ".kube/config" file.
 regions:
   us-east-1:
+    id: 1
     context: minikube
   us-east-2:
+    id: 2
     context: minikube
   us-west-1:
+    id: 3
     context: minikube
 
 # The region that contains the global resources. This region can
