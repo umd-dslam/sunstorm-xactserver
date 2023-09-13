@@ -16,8 +16,10 @@ vpc:
 
 managedNodeGroups:
   - name: servers
+    subnets:
+      - us-west-2a
     instanceType: c5.4xlarge
-    spot: true
+    # spot: true
     desiredCapacity: 1
     securityGroups:
       attachIDs:
@@ -25,19 +27,23 @@ managedNodeGroups:
     labels:
       role: server
       region: us-west-2
-  - name: safekeepers
-    instanceType: c5.2xlarge
-    spot: true
-    desiredCapacity: 1
-    securityGroups:
-      attachIDs:
-        - sg-0f6f9d8fed793f085
-    labels:
-      role: safekeeper
-      region: us-west-2
+  # - name: safekeepers
+  #   subnets:
+  #     - us-west-2a
+  #   instanceType: c5.2xlarge
+  #   spot: true
+  #   desiredCapacity: 1
+  #   securityGroups:
+  #     attachIDs:
+  #       - sg-0f6f9d8fed793f085
+  #   labels:
+  #     role: safekeeper
+  #     region: us-west-2
   - name: clients
+    subnets:
+      - us-west-2a
     instanceType: c5.2xlarge
-    spot: true
+    # spot: true
     desiredCapacity: 1
     securityGroups:
       attachIDs:
