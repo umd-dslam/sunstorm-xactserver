@@ -255,7 +255,7 @@ class StatusCommand(MonitorCommand):
             for namespace, nodes in sorted(namespaces.items(), key=lambda x: x[0]):
                 table.add_section()
                 namespace_cell = namespace
-                for node_cell, node in nodes.items():
+                for node_name, node in nodes.items():
                     capacity_cell = ""
                     if "capacity" in node:
                         cpu = node["capacity"]["cpu"]
@@ -263,9 +263,13 @@ class StatusCommand(MonitorCommand):
                         capacity_cell = f"cpu: {cpu}, mem: {memory}"
 
                     # Choose a color for the node
-                    if node_cell not in node_to_color:
-                        node_to_color[node_cell] = next(colors)
-                    color = node_to_color[node_cell]
+                    if node_name not in node_to_color:
+                        node_to_color[node_name] = next(colors)
+                    color = node_to_color[node_name]
+
+                    node_cell = node_name
+                    if node_name and not node.get("status", False):
+                        node_cell = f"[s]{node_cell}[/s] (not ready)"
 
                     for pod in node["pods"]:
                         table.add_row(
@@ -304,10 +308,14 @@ class StatusCommand(MonitorCommand):
 
                 for pod in pods:
                     node = pod.spec.node_name
-                    # Populate node capacity if not already done
+                    # Populate node capacity if not already populated
                     if node and "capacity" not in nodes[node]:
                         node_obj = corev1.read_node(node)
                         nodes[node]["capacity"] = node_obj.status.capacity
+                        for cond in node_obj.status.conditions or []:
+                            if cond.type == "Ready":
+                                nodes[node]["status"] = cond.status == "True"
+                                break
 
                     # Add pod to node
                     nodes[node]["pods"].append(
