@@ -136,7 +136,16 @@ def get_job_logs(namespace, region, job):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("operation", choices=["create", "load", "execute"])
+    parser.add_argument(
+        "operation",
+        choices=["create", "load", "sload", "execute"],
+        help="""The operation to run.
+        (create: run the DDL script, 
+        load: load the data in parallel,
+        sload: load the data sequentially,
+        execute: execute the benchmark)
+        """,
+    )
     parser.add_argument(
         "--set",
         "-s",
@@ -174,14 +183,14 @@ if __name__ == "__main__":
 
     exit_event = threading.Event()
 
-    if args.operation == "create" or args.operation == "load":
-        global_region = config["global_region"]
+    global_region = config["global_region"]
 
+    if args.operation == "create" or args.operation == "sload":
         if not args.logs_only:
             run_benchmark(
                 "global",
                 global_region,
-                [f"operation={args.operation}"] + sets,
+                [f"operation={args.operation}", "parallel_load=false"] + sets,
                 args.dry_run,
             )
 
@@ -197,16 +206,53 @@ if __name__ == "__main__":
                 exit_event=exit_event,
             )
 
+    elif args.operation == "load":
+        if not args.logs_only:
+            with ThreadPoolExecutor(max_workers=len(regions)) as executor:
+                for region in regions:
+                    namespace_id = ordered_namespaces.index(region)
+                    executor.submit(
+                        run_benchmark,
+                        region,
+                        region,
+                        [
+                            "operation=load",
+                            "parallel_load=true",
+                            f"namespace_id={namespace_id}",
+                        ]
+                        + sets,
+                        args.dry_run,
+                    )
+
+        if not args.dry_run:
+            with ThreadPoolExecutor(max_workers=len(regions)) as executor:
+                named_logs = executor.map(
+                    lambda region: Kube.NamedLogs(
+                        namespace=region,
+                        name="load",
+                        stream=get_job_logs(region, region, "create-load"),
+                    ),
+                    regions,
+                )
+
+            Kube.print_logs(named_logs, follow=True, exit_event=exit_event)
+
     elif args.operation == "execute":
         if not args.logs_only:
             timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
             with ThreadPoolExecutor(max_workers=len(regions)) as executor:
                 for region in regions:
+                    namespace_id = ordered_namespaces.index(region)
                     executor.submit(
                         run_benchmark,
                         region,
                         region,
-                        ["operation=execute", f"timestamp={timestamp}"] + sets,
+                        [
+                            "operation=execute",
+                            f"timestamp={timestamp}",
+                            f"namespace_id={namespace_id}",
+                        ]
+                        + sets,
                         args.dry_run,
                     )
 

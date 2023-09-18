@@ -1,16 +1,3 @@
-# If you run deploy.py, this value will be set automatically.
-namespaces:
-  global:
-    region: us-east-1
-  us-east-1:
-    region: us-east-1
-
-# An ordered list of the namespaces. 
-# If you run deploy.py, this value will be set automatically.
-ordered_namespaces:
-  - global
-  - us-east-1
-
 # Number of safekeeper replicas
 safekeeper_replicas: 1
 
@@ -18,3 +5,18 @@ safekeeper_replicas: 1
 # No EBS volume will be used if this is empty. If you run deploy.py,
 # this value will be set automatically.
 hub_ebs_volume_id: null
+
+#---------------------------------------------------------------------------
+#       The following values are modified by the benchmark.py tool
+#---------------------------------------------------------------------------
+namespaces:
+  global:
+    region: us-east-1
+  us-east-1:
+    region: us-east-1
+
+ordered_namespaces:
+  - global
+  - us-east-1
+
+namespace_id: 0

@@ -1,25 +1,6 @@
-# If you run benchmark.py, this value will be set automatically.
-namespaces:
-  global:
-    region: us-east-1
-  us-east-1:
-    region: us-east-1
-
-# An ordered list of the namespaces. 
-# If you run benchmark.py, this value will be set automatically.
-ordered_namespaces:
-  - global
-  - us-east-1
-
-# Timestamp set by the benchmark.py tool
-timestamp: "0000-00-00_00-00-00"
-
 # The operation to perform, can be "create", "load", or "execute".
 # If you run benchmark.py, this value will be set automatically.
-operation: "create"
-
-# The benchmark to run 
-benchmark: "hot"
+operation: create
 
 # Name of the result directory. Timestamp will be used if this is not set
 tag: null
@@ -29,16 +10,37 @@ scalefactor: 30
 # Number of concurrent clients
 terminals: 16
 # Duration of the benchmark in seconds
-time: 10
+time: 30
 # Maximum throughput of the benchmark
 rate: 10000
 
+# The benchmark to run 
+benchmark: hot
+
 # Benchmark specific parameters
+benchmark_params:
+  hot:
+    # Number of hot keys per partition
+    hot: 0
+    # Percentage of multi-region transactions
+    mr: 0
 
-# ============= HOT =============
-# Number of hot keys per partition
-hot: 0
-# Percentage of multi-region transactions
-mr: 0
+#---------------------------------------------------------------------------
+#       The following values are modified by the benchmark.py tool
+#---------------------------------------------------------------------------
+namespaces:
+  global:
+    region: us-east-1
+  us-east-1:
+    region: us-east-1
 
+# An ordered list of the namespaces. 
+ordered_namespaces:
+  - global
+  - us-east-1
 
+namespace_id: 0
+
+timestamp: "0000-00-00_00-00-00"
+
+parallel_load: false

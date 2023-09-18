@@ -45,7 +45,7 @@ spec:
           image: ctring/compute-node-v14:latest
           env:
             - name: REGION
-              value: {{ include "namespaceId" . | quote }}
+              value: {{ .Values.namespace_id | quote }}
             - name: SAFEKEEPERS_ADDR
               value: {{ include "safekeeperNodes" . }}
           command:
