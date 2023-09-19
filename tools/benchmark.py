@@ -21,7 +21,7 @@ LOG = get_logger(__name__)
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
 
 
-def run_benchmark(namespace, region, sets, dry_run):
+def run_benchmark(namespace, region, sets, delete_only, dry_run):
     with TemporaryFile() as helm_output:
         helm_cmd = [
             "helm",
@@ -64,6 +64,9 @@ def run_benchmark(namespace, region, sets, dry_run):
             stdin=helm_output,
             check=False,
         )
+
+        if delete_only:
+            return
 
         # Apply the new deployment
         helm_output.seek(0)
@@ -138,12 +141,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "operation",
-        choices=["create", "load", "sload", "execute"],
+        choices=["create", "load", "sload", "execute", "delete"],
         help="""The operation to run.
         (create: run the DDL script, 
         load: load the data in parallel,
         sload: load the data sequentially,
-        execute: execute the benchmark)
+        execute: execute the benchmark,
+        delete: terminate all running benchmarks,
         """,
     )
     parser.add_argument(
@@ -191,7 +195,8 @@ if __name__ == "__main__":
                 "global",
                 global_region,
                 [f"operation={args.operation}", "parallel_load=false"] + sets,
-                args.dry_run,
+                delete_only=False,
+                dry_run=args.dry_run,
             )
 
         if not args.dry_run:
@@ -221,7 +226,8 @@ if __name__ == "__main__":
                             f"namespace_id={namespace_id}",
                         ]
                         + sets,
-                        args.dry_run,
+                        delete_only=False,
+                        dry_run=args.dry_run,
                     )
 
         if not args.dry_run:
@@ -253,7 +259,8 @@ if __name__ == "__main__":
                             f"namespace_id={namespace_id}",
                         ]
                         + sets,
-                        args.dry_run,
+                        delete_only=False,
+                        dry_run=args.dry_run,
                     )
 
         if not args.dry_run:
@@ -268,6 +275,38 @@ if __name__ == "__main__":
                 )
 
             Kube.print_logs(named_logs, follow=True, exit_event=exit_event)
+    elif args.operation == "delete":
+        if args.logs_only:
+            raise ValueError("Cannot print logs for delete operation")
+
+        run_benchmark(
+            "global",
+            global_region,
+            [f"operation=create"],
+            delete_only=True,
+            dry_run=args.dry_run,
+        )
+
+        with ThreadPoolExecutor(max_workers=len(regions)) as executor:
+            for region in regions:
+                executor.submit(
+                    run_benchmark,
+                    region,
+                    region,
+                    ["operation=load"],
+                    delete_only=True,
+                    dry_run=args.dry_run,
+                )
+                executor.submit(
+                    run_benchmark,
+                    region,
+                    region,
+                    ["operation=execute"],
+                    delete_only=True,
+                    dry_run=args.dry_run,
+                )
+        
+        exit_event.set()
     else:
         raise ValueError(f"Unknown operation: {args.operation}")
 
