@@ -213,9 +213,9 @@ The results can be found on Minio.
 Overwrite the values directly in the command line:
 
 ```
-python3 tools/benchmark.py execute -s tag=hot0mr0 -s mr=0 -s hot=0
-python3 tools/benchmark.py execute -s tag=hot0mr5 -s mr=5 -s hot=0
-python3 tools/benchmark.py execute -s tag=hot0mr10 -s mr=10 -s hot=0
+python3 tools/benchmark.py execute -s tag=hot0mr0 -s hot.mr=0 -s hot.hot=0
+python3 tools/benchmark.py execute -s tag=hot0mr5 -s hot.mr=5 -s hot.hot=0
+python3 tools/benchmark.py execute -s tag=hot0mr10 -s hot.mr=10 -s hot.hot=0
 ...
 ```
 

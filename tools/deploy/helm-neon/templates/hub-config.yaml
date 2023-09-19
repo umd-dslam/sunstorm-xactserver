@@ -9,27 +9,24 @@ metadata:
 data:
   prometheus.yaml: |
     global:
-      scrape_interval: 5s
+      scrape_interval: 2s
 
     scrape_configs:
       - job_name: pageserver
-        scrape_interval: 2s 
         static_configs:
           - targets:
           {{- range $r := .Values.ordered_namespaces }}
             - pageserver.{{ $r }}:9898
           {{- end }}
 
-      - job_name: compute
-        scrape_interval: 2s
-        static_configs:
-          - targets: 
-          {{- range $r := .Values.ordered_namespaces }}
-            - compute.{{ $r }}:9187
-          {{- end }}
+      # - job_name: compute
+      #   static_configs:
+      #     - targets: 
+      #     {{- range $r := .Values.ordered_namespaces }}
+      #       - compute.{{ $r }}:9187
+      #     {{- end }}
 
       - job_name: xactserver
-        scrape_interval: 2s
         static_configs:
           - targets:
           {{- range $r := .Values.ordered_namespaces }}

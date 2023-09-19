@@ -114,20 +114,15 @@ spec:
               containerPort: 9090
           volumeMounts:
             - name: hub-data
-              mountPath: /data
+              mountPath: /data  
             - name: hub-config
               mountPath: /config
         - name: grafana
-          image: grafana/grafana:8.2.2
-          env:
-            - name: GF_PATHS_DATA
-              value: /data/grafana
+          image: ctring/grafana:slogora
+          imagePullPolicy: Always
           ports:
             - name: grafana
-              containerPort: 3000            
-          volumeMounts:
-            - name: hub-data
-              mountPath: /data
+              containerPort: 3000
       volumes:
         - name: hub-config
           configMap:

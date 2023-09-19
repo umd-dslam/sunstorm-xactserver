@@ -43,9 +43,9 @@ data:
         <numregions>{{ $numRegions }}</numregions>
         <region>{{ .Values.namespace_id }}</region>
         <!-- Percentage of multi-region transactions -->
-        <mrpct>{{ .Values.benchmark_params.hot.mr }}</mrpct>
+        <mrpct>{{ .Values.hot.mr }}</mrpct>
         <!-- Number of hot keys per partition -->
-        <hot>{{ .Values.benchmark_params.hot.hot }}</hot>
+        <hot>{{ .Values.hot.hot }}</hot>
 
         <!-- The workload -->
         <terminals>{{ .Values.terminals }}</terminals>

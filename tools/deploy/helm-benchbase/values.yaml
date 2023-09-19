@@ -18,12 +18,11 @@ rate: 10000
 benchmark: hot
 
 # Benchmark specific parameters
-benchmark_params:
-  hot:
-    # Number of hot keys per partition
-    hot: 0
-    # Percentage of multi-region transactions
-    mr: 0
+hot:
+  # Number of hot keys per partition
+  hot: 0
+  # Percentage of multi-region transactions
+  mr: 0
 
 #---------------------------------------------------------------------------
 #       The following values are modified by the benchmark.py tool
