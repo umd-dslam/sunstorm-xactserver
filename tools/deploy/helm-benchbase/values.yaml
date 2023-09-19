@@ -6,7 +6,7 @@ operation: create
 tag: null
 
 # Scale factor of the dataset. Its definition depends on the benchmark
-scalefactor: 30
+scalefactor: 3000
 # Number of concurrent clients
 terminals: 16
 # Duration of the benchmark in seconds
