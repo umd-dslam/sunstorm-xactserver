@@ -47,10 +47,10 @@ spec:
           args:
             - --listen-pg=0.0.0.0:10000
             - --connect-pg=postgresql://cloud_admin@compute:55433/postgres
-            - --max_conn_pool_size_pg=100
+            - --max-conn-pool-size-pg=100
             - --node-id={{ .Values.namespace_id }}
             - --nodes={{ include "xactserverNodes" . }}
-            - --max_conn_pool_size_peer=50
+            - --max-conn-pool-size-peer=100
             - --listen-peer=0.0.0.0:23000
             - --listen-http=0.0.0.0:8080
           ports:
