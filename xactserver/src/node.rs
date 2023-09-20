@@ -72,10 +72,14 @@ pub mod client {
     }
 
     impl Nodes {
-        pub async fn connect(urls: &[Url]) -> anyhow::Result<Self> {
+        pub async fn create_conn_pools(urls: &[Url], max_size: u32) -> anyhow::Result<Self> {
             let nbufferred = urls.len();
             let conn_pools = stream::iter(urls)
-                .map(|url| bb8::Pool::builder().build(ConnectionManager(url.to_string())))
+                .map(|url| {
+                    bb8::Pool::builder()
+                        .max_size(max_size)
+                        .build(ConnectionManager(url.to_string()))
+                })
                 .buffered(nbufferred)
                 .try_collect()
                 .await?;

@@ -29,11 +29,12 @@ pub struct Manager {
 
     /// Connection for sending messages to postgres
     pg_url: Url,
-    pg_max_conn_pool_size: u32,
+    max_conn_pool_size_pg: u32,
     pg_conn_pool: OnceCell<PgConnectionPool>,
 
     /// Connections for sending messages to other xactserver nodes
-    peer_addrs: Vec<Url>,
+    node_addrs: Vec<Url>,
+    max_conn_pool_size_peer: u32,
     peers: OnceCell<Arc<client::Nodes>>,
 
     /// State of all transactions
@@ -45,8 +46,9 @@ impl Manager {
     pub fn new(
         node_id: NodeId,
         pg_url: Url,
-        pg_max_conn_pool_size: u32,
-        peer_addrs: Vec<Url>,
+        max_conn_pool_size_pg: u32,
+        node_addrs: Vec<Url>,
+        max_conn_pool_size_peer: u32,
         local_rx: mpsc::Receiver<XsMessage>,
         remote_rx: mpsc::Receiver<XsMessage>,
     ) -> Self {
@@ -54,23 +56,27 @@ impl Manager {
             node_id,
             local_rx,
             remote_rx,
-            peer_addrs,
             pg_url,
-            pg_max_conn_pool_size,
+            max_conn_pool_size_pg,
             pg_conn_pool: OnceCell::new(),
+            node_addrs,
+            max_conn_pool_size_peer,
+            peers: OnceCell::new(),
             xact_state_managers: HashMap::new(),
             xact_id_counter: 0,
-            peers: OnceCell::new(),
         }
     }
 
     pub async fn run(mut self, cancel: CancellationToken) -> anyhow::Result<()> {
         let _drop_guard = cancel.clone().drop_guard();
 
-        let peers = Arc::new(client::Nodes::connect(&self.peer_addrs).await?);
+        let peers = Arc::new(
+            client::Nodes::create_conn_pools(&self.node_addrs, self.max_conn_pool_size_peer)
+                .await?,
+        );
         self.peers.set(peers).unwrap();
 
-        let pg_conn_pool = create_pg_conn_pool(&self.pg_url, self.pg_max_conn_pool_size).await?;
+        let pg_conn_pool = create_pg_conn_pool(&self.pg_url, self.max_conn_pool_size_pg).await?;
         self.pg_conn_pool.set(pg_conn_pool).unwrap();
 
         loop {

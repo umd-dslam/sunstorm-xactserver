@@ -33,12 +33,12 @@ pub type PgConnectionPool = Pool<PostgresConnectionManager<NoTls>>;
 
 pub async fn create_pg_conn_pool(
     url: &url::Url,
-    max_pool_size: u32,
+    max_size: u32,
 ) -> anyhow::Result<PgConnectionPool> {
     let pg_mgr = PostgresConnectionManager::new_from_stringlike(url.to_string(), NoTls)?;
 
     Ok(Pool::builder()
-        .max_size(max_pool_size)
+        .max_size(max_size)
         .error_sink(Box::new(PgErrorSink))
         .build(pg_mgr)
         .await?)

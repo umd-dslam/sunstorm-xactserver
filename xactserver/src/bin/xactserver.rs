@@ -38,13 +38,13 @@ struct Cli {
         default_value = "128",
         help = "Maximum size of the postgres connection pool"
     )]
-    max_pg_conn_pool_size: u32,
+    max_conn_pool_size_pg: u32,
 
     #[arg(
         long,
         value_parser,
         default_value = "http://localhost:23000",
-        help = "Comma-separated list of addresses of other xact servers in other regions"
+        help = "Comma-separated list of addresses of all xact servers"
     )]
     nodes: String,
 
@@ -55,6 +55,14 @@ struct Cli {
         help = "Address to listen for connections from other xact servers"
     )]
     listen_peer: SocketAddr,
+
+    #[arg(
+        long,
+        short,
+        default_value = "64",
+        help = "Maximum size of the connection pool per peer"
+    )]
+    max_conn_pool_size_peer: u32,
 
     #[arg(
         long,
@@ -93,7 +101,7 @@ async fn main() -> anyhow::Result<()> {
         ));
     }
 
-    let nodes = parse_node_addresses(cli.nodes);
+    let node_addrs = parse_node_addresses(cli.nodes);
     let cancel = CancellationToken::new();
 
     let (pg_watcher_handle, watcher_rx) = start_pg_watcher(cli.listen_pg, cancel.clone());
@@ -101,8 +109,9 @@ async fn main() -> anyhow::Result<()> {
     let manager_handle = start_manager(
         cli.node_id,
         connect_pg,
-        cli.max_pg_conn_pool_size,
-        nodes,
+        cli.max_conn_pool_size_pg,
+        node_addrs,
+        cli.max_conn_pool_size_peer,
         watcher_rx,
         node_rx,
         cancel.clone(),
@@ -201,11 +210,13 @@ fn start_peer_listener(listen_peer: SocketAddr, cancel: CancellationToken) -> Ha
     (handle, node_rx)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn start_manager(
     node_id: NodeId,
     connect_pg: Url,
-    max_pg_conn_pool_size: u32,
-    nodes: Vec<Url>,
+    max_conn_pool_size_pg: u32,
+    node_addrs: Vec<Url>,
+    max_conn_pool_size_peer: u32,
     watcher_rx: mpsc::Receiver<XsMessage>,
     node_rx: mpsc::Receiver<XsMessage>,
     cancel: CancellationToken,
@@ -213,8 +224,9 @@ fn start_manager(
     let manager = Manager::new(
         node_id,
         connect_pg,
-        max_pg_conn_pool_size,
-        nodes,
+        max_conn_pool_size_pg,
+        node_addrs,
+        max_conn_pool_size_peer,
         watcher_rx,
         node_rx,
     );
