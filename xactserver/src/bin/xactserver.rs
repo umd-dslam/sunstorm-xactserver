@@ -34,7 +34,6 @@ struct Cli {
 
     #[arg(
         long,
-        short,
         default_value = "128",
         help = "Maximum size of the postgres connection pool"
     )]
@@ -58,7 +57,6 @@ struct Cli {
 
     #[arg(
         long,
-        short,
         default_value = "64",
         help = "Maximum size of the connection pool per peer"
     )]

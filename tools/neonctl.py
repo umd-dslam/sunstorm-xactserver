@@ -50,7 +50,7 @@ class XactServer:
     def run(self, args: List[str], **kwargs):
         cwd = kwargs.get("cwd", os.getcwd())
         bin_name = self.bin if self.dry_run else os.path.basename(self.bin)
-        LOG.info(f"[{cwd}] {bin_name} {' '.join(args)}")
+        print(f"[{cwd}] {bin_name} {' '.join(args)}")
 
         if self.dry_run:
             return
