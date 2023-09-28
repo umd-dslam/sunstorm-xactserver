@@ -133,7 +133,7 @@ spec:
             claimName: hub-data
           {{ else }}
           emptyDir:
-            sizeLimit: 2Gi
+            sizeLimit: 4Gi
           {{ end }}
       affinity:
         nodeAffinity:

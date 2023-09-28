@@ -329,7 +329,11 @@ class StatusCommand(MonitorCommand):
                 data[region].update({ns: nodes})
 
         with ThreadPoolExecutor() as executor:
-            executor.map(get_namespaced_data, namespaces.keys(), namespaces.values())
+            list(
+                executor.map(
+                    get_namespaced_data, namespaces.keys(), namespaces.values()
+                )
+            )
 
         return data
 

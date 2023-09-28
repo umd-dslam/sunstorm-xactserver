@@ -172,29 +172,29 @@ if __name__ == "__main__":
 
     config = get_main_config(BASE_PATH)
     regions = config["regions"]
-
-    sets = args.set or []
-
+    global_region = config["global_region"]
     namespaces = get_namespaces(config)
     ordered_namespaces = [
         item[0] for item in sorted(namespaces.items(), key=lambda x: x[1]["id"])
     ]
+
+    sets = args.set or []
     for ns, ns_info in namespaces.items():
         for k, v in ns_info.items():
             sets.append(f"namespaces.{ns}.{k}={v}")
-
     sets.append(f"ordered_namespaces={{{','.join(ordered_namespaces)}}}")
 
     exit_event = threading.Event()
 
-    global_region = config["global_region"]
-
     if args.operation == "create" or args.operation == "sload":
         if not args.logs_only:
+            operation = args.operation
+            if operation == "sload":
+                operation = "load"
             run_benchmark(
                 "global",
                 global_region,
-                [f"operation={args.operation}", "parallel_load=false"] + sets,
+                [f"operation={operation}", "parallel_load=false"] + sets,
                 delete_only=False,
                 dry_run=args.dry_run,
             )
@@ -305,7 +305,7 @@ if __name__ == "__main__":
                     delete_only=True,
                     dry_run=args.dry_run,
                 )
-        
+
         exit_event.set()
     else:
         raise ValueError(f"Unknown operation: {args.operation}")

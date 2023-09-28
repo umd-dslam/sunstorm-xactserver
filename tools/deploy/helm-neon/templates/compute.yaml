@@ -79,7 +79,7 @@ spec:
             name: compute-config
         - name: data
           emptyDir:
-            sizeLimit: 10Gi
+            sizeLimit: 40Gi
       affinity:
         podAffinity:
           # Compute nodes must be co-located with the pageserver

@@ -108,6 +108,8 @@ class Kube:
         context_names = [c["name"] for c in contexts]
 
         context = None
+
+        # Look to see if the context is specified with the region
         with open(base_path / "main.yaml", "r") as yaml_file:
             regions_info = yaml.safe_load(yaml_file)
             if region in regions_info["regions"]:
@@ -119,12 +121,24 @@ class Kube:
                 ):
                     context = regions[region]["context"]
 
+            # Context is still not found see if this is a global region
+            # and global region context is specified
+            if context is None:
+                if (
+                    region == regions_info["global_region"]
+                    and "global_region_context" in regions_info
+                ):
+                    region = regions_info["global_region_context"]
+
+        # Context is still not found, choose the one with the region
+        # name in it
         if context is None:
             for ctx in context_names:
                 if region in ctx:
                     context = ctx
                     break
 
+        # Cannot find the context, give up
         if context is None:
             raise Exception(f"Could not find context for region: {region}")
 

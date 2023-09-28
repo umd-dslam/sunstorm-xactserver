@@ -200,15 +200,17 @@ def create_namespaces(config, dry_run: bool):
                     )
 
     with ThreadPoolExecutor(max_workers=len(namespaces)) as executor:
-        executor.map(
-            clean_up_neon_one_namespace,
-            namespaces.keys(),
-            namespaces.values(),
-            repeat(dry_run),
+        list(
+            executor.map(
+                clean_up_neon_one_namespace,
+                namespaces.keys(),
+                namespaces.values(),
+                repeat(dry_run),
+            )
         )
 
     with ThreadPoolExecutor(max_workers=len(namespaces)) as executor:
-        executor.map(clean_up_namespace, namespaces.keys(), namespaces.values())
+        list(executor.map(clean_up_namespace, namespaces.keys(), namespaces.values()))
 
     def create_namespace(namespace, namespace_info):
         region = namespace_info["region"]
@@ -245,7 +247,7 @@ def create_namespaces(config, dry_run: bool):
                         break
 
     with ThreadPoolExecutor(max_workers=len(namespaces)) as executor:
-        executor.map(create_namespace, namespaces.keys(), namespaces.values())
+        list(executor.map(create_namespace, namespaces.keys(), namespaces.values()))
 
 
 def deploy_neon(config, cleanup_only: bool, dry_run: bool):
@@ -287,18 +289,20 @@ def deploy_neon(config, cleanup_only: bool, dry_run: bool):
         )
 
     with ThreadPoolExecutor(max_workers=len(namespaces)) as executor:
-        executor.map(
-            clean_up_neon_one_namespace,
-            namespaces.keys(),
-            namespaces.values(),
-            repeat(dry_run),
+        list(
+            executor.map(
+                clean_up_neon_one_namespace,
+                namespaces.keys(),
+                namespaces.values(),
+                repeat(dry_run),
+            )
         )
 
     if cleanup_only:
         return
 
     with ThreadPoolExecutor(max_workers=len(namespaces)) as executor:
-        executor.map(deploy_neon_one_namespace, namespaces.keys())
+        list(executor.map(deploy_neon_one_namespace, namespaces.keys()))
 
 
 def clean_up_neon_one_namespace(namespace, namespace_info, dry_run):

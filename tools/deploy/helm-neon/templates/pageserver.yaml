@@ -68,7 +68,7 @@ spec:
       volumes:
         - name: data
           emptyDir:
-            sizeLimit: 10Gi
+            sizeLimit: 40Gi
       affinity:
         nodeAffinity:
           {{- if ne .Release.Namespace "global" }}

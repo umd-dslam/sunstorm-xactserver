@@ -1,7 +1,10 @@
 {{ if eq .Values.benchmark "hot" -}}
 {{ $numRows := mul .Values.scalefactor 1000 -}}
 {{ $numRegions := sub (len .Values.ordered_namespaces) 1 -}}
-{{ $numRowsPerRegion := int (ceil (divf $numRows $numRegions)) -}}
+{{ $numRowsPerRegion := 0 }}
+{{ if not (empty $numRegions) }}
+{{ $numRowsPerRegion = int (ceil (divf $numRows $numRegions)) -}}
+{{ end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -41,11 +44,12 @@ data:
 
         <!-- Number of regions, excluding the global region -->
         <numregions>{{ $numRegions }}</numregions>
+        <!-- Current region -->
         <region>{{ .Values.namespace_id }}</region>
-        <!-- Percentage of multi-region transactions -->
-        <mrpct>{{ .Values.hot.mr }}</mrpct>
         <!-- Number of hot keys per partition -->
         <hot>{{ .Values.hot.hot }}</hot>
+        <!-- Number of keys per transaction -->
+        <keyspertxn>{{ .Values.hot.keyspertxn }}</keyspertxn>
 
         <!-- The workload -->
         <terminals>{{ .Values.terminals }}</terminals>
@@ -53,17 +57,23 @@ data:
             <work>
                 <time>{{ .Values.time }}</time>
                 <rate>{{ .Values.rate }}</rate>
-                <weights>100,0</weights>
+                <weights>{{ .Values.hot.weights }}</weights>
             </work>
         </works>
 
         <!-- HOT Procedures declaration -->
         <transactiontypes>
             <transactiontype>
-                <name>ReadModifyWrite</name>
+                <name>ReadModifyWrite1</name>
             </transactiontype>
             <transactiontype>
-                <name>RMWLocalRORemote</name>
+                <name>ReadModifyWrite2</name>
+            </transactiontype>
+            <transactiontype>
+                <name>ReadModifyWrite3</name>
+            </transactiontype>
+            <transactiontype>
+                <name>ReadModifyWrite4</name>
             </transactiontype>
         </transactiontypes>
     </parameters>
@@ -85,14 +95,15 @@ data:
         field10  text
     ) PARTITION BY RANGE (ycsb_key);
 
+    {{- if not (empty $numRegions) }}
     {{- range $i := until (int (sub $numRegions 1)) }}
     {{- $from := mul $i $numRowsPerRegion }}
     {{- $to := min (add $from $numRowsPerRegion) $numRows }}
     CREATE TABLE usertable_{{ add1 $i }} PARTITION OF usertable FOR VALUES FROM ({{ $from }}) TO ({{ $to }});
     {{- end }}
-
     {{- $from := (mul (sub (int $numRegions) 1) $numRowsPerRegion) }}
     CREATE TABLE usertable_{{ $numRegions }} PARTITION OF usertable FOR VALUES FROM ({{ $from }}) TO ({{ $numRows }});
+    {{- end }}
 
     {{- range $i := until (int $numRegions) }}
     UPDATE pg_class SET relregion = {{ add1 $i }} WHERE relname = 'usertable_{{ add1 $i }}';
