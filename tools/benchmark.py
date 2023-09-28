@@ -177,6 +177,7 @@ if __name__ == "__main__":
     ordered_namespaces = [
         item[0] for item in sorted(namespaces.items(), key=lambda x: x[1]["id"])
     ]
+    max_workers = len(regions) + 1
 
     sets = args.set or []
     for ns, ns_info in namespaces.items():
@@ -213,7 +214,7 @@ if __name__ == "__main__":
 
     elif args.operation == "load":
         if not args.logs_only:
-            with ThreadPoolExecutor(max_workers=len(regions)) as executor:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 for region in regions:
                     namespace_id = ordered_namespaces.index(region)
                     executor.submit(
@@ -231,7 +232,7 @@ if __name__ == "__main__":
                     )
 
         if not args.dry_run:
-            with ThreadPoolExecutor(max_workers=len(regions)) as executor:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 named_logs = executor.map(
                     lambda region: Kube.NamedLogs(
                         namespace=region,
@@ -246,7 +247,7 @@ if __name__ == "__main__":
     elif args.operation == "execute":
         if not args.logs_only:
             timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
-            with ThreadPoolExecutor(max_workers=len(regions)) as executor:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 for region in regions:
                     namespace_id = ordered_namespaces.index(region)
                     executor.submit(
@@ -264,7 +265,7 @@ if __name__ == "__main__":
                     )
 
         if not args.dry_run:
-            with ThreadPoolExecutor(max_workers=len(regions)) as executor:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 named_logs = executor.map(
                     lambda region: Kube.NamedLogs(
                         namespace=region,
@@ -287,7 +288,7 @@ if __name__ == "__main__":
             dry_run=args.dry_run,
         )
 
-        with ThreadPoolExecutor(max_workers=len(regions)) as executor:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             for region in regions:
                 executor.submit(
                     run_benchmark,
