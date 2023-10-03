@@ -191,11 +191,13 @@ if __name__ == "__main__":
         if not args.logs_only:
             operation = args.operation
             if operation == "sload":
+                # By not setting the namespace_id field, the load job will be run at
+                # the global region and will load the data sequentially.
                 operation = "load"
             run_benchmark(
                 "global",
                 global_region,
-                [f"operation={operation}", "parallel_load=false"] + sets,
+                [f"operation={operation}"] + sets,
                 delete_only=False,
                 dry_run=args.dry_run,
             )
@@ -223,7 +225,6 @@ if __name__ == "__main__":
                         region,
                         [
                             "operation=load",
-                            "parallel_load=true",
                             f"namespace_id={namespace_id}",
                         ]
                         + sets,

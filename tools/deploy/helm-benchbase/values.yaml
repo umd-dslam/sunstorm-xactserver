@@ -6,7 +6,7 @@ operation: create
 tag: null
 
 # Scale factor of the dataset. Its definition depends on the benchmark
-scalefactor: 3000
+scalefactor: 1000
 # Number of concurrent clients
 terminals: 32
 # Duration of the benchmark in seconds
@@ -22,7 +22,7 @@ hot:
   # Number of hot keys per partition
   hot: 0
   # Weights of different types of transactions
-  weights: 100,0,0,0
+  weights: 100,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
   # Number of keys per transaction
   keyspertxn: 6
 
@@ -43,5 +43,3 @@ ordered_namespaces:
 namespace_id: 0
 
 timestamp: "0000-00-00_00-00-00"
-
-parallel_load: false
