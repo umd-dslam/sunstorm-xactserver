@@ -56,12 +56,12 @@ class XactServer:
             return
 
         with open(os.path.join(cwd, "xactserver.pid"), "w") as f:
+            log = open(os.path.join(cwd, "xactserver.log"), "w")
             process = subprocess.Popen(
                 [self.bin] + args,
                 env=self.env,
-                start_new_session=True,
                 stderr=subprocess.STDOUT,
-                stdout=subprocess.DEVNULL,
+                stdout=log,
                 **kwargs,
             )
             f.write(str(process.pid))
@@ -96,6 +96,11 @@ class NeonCommand(Command):
     def add_arguments(self, parser):
         parser.add_argument("data_dir", type=str, help="The directory to neon data")
         parser.add_argument("--dry-run", action="store_true", help="Dry run")
+        parser.add_argument(
+            "--no-xactserver",
+            action="store_true",
+            help="Print the command to start xactserver but don't actually start it",
+        )
 
     def get_neon(self, args):
         if self.neon_bin is None:
@@ -130,6 +135,7 @@ class NeonCommand(Command):
                 neon_bin_path,
                 {
                     "POSTGRES_DISTRIB_DIR": pg_dir,
+                    "RUST_LOG": os.environ.get("RUST_LOG", "info"),
                 },
                 args.dry_run,
             )
@@ -165,7 +171,11 @@ class NeonCommand(Command):
             LOG.info("Using xactserver binary at: %s", xactserver_bin_path)
 
             self.xactserver_bin = XactServer(
-                xactserver_bin_path, {}, args.dry_run or args.no_xactserver
+                xactserver_bin_path,
+                {
+                    "RUST_LOG": os.environ.get("RUST_LOG", "info"),
+                },
+                args.dry_run or args.no_xactserver,
             )
 
         return self.xactserver_bin
@@ -197,7 +207,7 @@ class NeonCommand(Command):
 
         if args.no_xactserver:
             LOG.warning(
-                "Xactservers are not started. Run the following commands in separate terminals to start the xactservers"
+                "XactServers need to be started manually. Run the following commands in separate terminals"
             )
         else:
             LOG.info("Starting xactserver in all regions")
@@ -372,11 +382,6 @@ if __name__ == "__main__":
     parser.add_argument("--pg-dir", type=str, help="The directory to pg binary")
     parser.add_argument(
         "--xactserver-dir", type=str, help="The directory to xactserver binary"
-    )
-    parser.add_argument(
-        "--no-xactserver",
-        action="store_true",
-        help="Print the command to start xactserver but don't actually start it",
     )
     initialize_and_run_commands(
         parser,
