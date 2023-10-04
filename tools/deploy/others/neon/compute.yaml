@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: compute
+  namespace: global
+  labels:
+    app: compute
+    component: compute
+    part-of: neon
+spec:
+  ports:
+    - name: postgres
+      targetPort: postgres
+      port: 55433
+    - name: http
+      targetPort: http
+      port: 3080
+  selector:
+    app: compute
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: compute
+  namespace: global
+  labels:
+    app: compute
+    component: compute
+    part-of: neon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: compute
+  template:
+    metadata:
+      labels:
+        app: compute
+        component: compute
+        part-of: neon
+    spec:
+      initContainers:
+        - name: init
+          image: jonlabelle/network-tools
+          command:
+            - /config/compute.sh
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: data
+              mountPath: /data    
+      containers:
+        - name: compute
+          image: neondatabase/compute-node-v14:3556
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              echo "host all all all trust" >> /data/compute/pg_hba.conf
+              echo "Start compute node"
+              /usr/local/bin/compute_ctl --pgdata /data/compute \
+                  -C "postgresql://cloud_admin@localhost:55433/postgres"  \
+                  -b /usr/local/bin/postgres                              \
+                  -S /data/spec.json
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          ports:
+            - name: postgres
+              containerPort: 55433
+            - name: http
+              containerPort: 3080
+      restartPolicy: Always
+      volumes:
+        - name: config
+          configMap:
+            name: compute-config
+            defaultMode: 0777
+        - name: data
+          emptyDir:
+            sizeLimit: 10Gi
+   

@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: safekeeper
+  namespace: global
+  labels:
+    app: safekeeper
+    component: storage
+    part-of: neon
+spec:
+  ports:
+    - name: postgres
+      targetPort: postgres
+      port: 5454
+    - name: http
+      targetPort: http
+      port: 7676
+  selector:
+    app: safekeeper
+  # In general, service IPs and pod IPs come from different CIDR ranges.
+  # In AWS, the pods are assigned IPs direclty from the VPC subnet whereas
+  # the service IPs are assigned from a virtual range, which is not easily
+  # accessible from a different region. The VPC subnets, however, can be easily
+  # routed between regions. Therefore, we use a headless service (setting 
+  # clusterIP to None) to expose the pod IPs directly instead of using the service IP.
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: safekeeper
+  namespace: global
+  labels:
+    app: safekeeper
+    component: storage
+    part-of: neon
+spec:
+  serviceName: "safekeeper"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: safekeeper
+  template:
+    metadata:
+      labels:
+        app: safekeeper
+        component: storage
+        part-of: neon
+    spec:
+      containers:
+        - name: safekeeper
+          image: neondatabase/neon:3556
+          command:
+            - /bin/sh
+            - -ecx
+          args:           
+            - /usr/local/bin/safekeeper 
+              --id=1
+              --datadir=/data
+              --advertise-pg=safekeeper:5454
+              --listen-pg=0.0.0.0:5454
+              --listen-http=0.0.0.0:7676
+              --broker-endpoint=http://storage-broker:50051
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          ports:
+            - name: postgres
+              containerPort: 5454
+            - name: http
+              containerPort: 7676
+      volumes:
+        - name: data
+          emptyDir:
+            sizeLimit: 10Gi
+      restartPolicy: Always

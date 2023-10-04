@@ -92,8 +92,9 @@ def get_main_config(base_path):
 
 def get_namespaces(config):
     namespaces = {"global": {"region": config["global_region"], "id": 0}}
-    for region, region_info in config["regions"].items():
-        namespaces[region] = {"region": region, "id": region_info["id"]}
+    if "regions" in config and config["regions"]:
+        for region, region_info in config["regions"].items():
+            namespaces[region] = {"region": region, "id": region_info["id"]}
     return namespaces
 
 
@@ -112,23 +113,13 @@ class Kube:
         # Look to see if the context is specified with the region
         with open(base_path / "main.yaml", "r") as yaml_file:
             regions_info = yaml.safe_load(yaml_file)
-            if region in regions_info["regions"]:
-                regions = regions_info["regions"]
-                if (
-                    region in regions
-                    and regions[region]
-                    and "context" in regions[region]
-                ):
-                    context = regions[region]["context"]
+            regions = regions_info.get("regions", {}) or {}
+            context = (regions.get(region, {}) or {}).get("context", None)
 
-            # Context is still not found see if this is a global region
+            # Context is still not found. See if this is a global region
             # and global region context is specified
-            if context is None:
-                if (
-                    region == regions_info["global_region"]
-                    and "global_region_context" in regions_info
-                ):
-                    region = regions_info["global_region_context"]
+            if context is None and region == regions_info["global_region"]:
+                context = regions_info.get("global_region_context", None)
 
         # Context is still not found, choose the one with the region
         # name in it

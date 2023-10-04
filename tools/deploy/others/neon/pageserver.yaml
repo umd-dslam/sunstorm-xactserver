@@ -1,0 +1,58 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pageserver
+  namespace: global
+  labels:
+    app: pageserver
+    component: storage
+    part-of: neon
+spec:
+  ports:
+    - name: postgres
+      targetPort: postgres
+      port: 6400
+    - name: http
+      targetPort: http
+      port: 9898
+  selector:
+    app: pageserver
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pageserver
+  namespace: global
+  labels:
+    app: pageserver
+    component: storage
+    part-of: neon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pageserver
+  template:
+    metadata:
+      labels:
+        app: pageserver
+        component: storage
+        part-of: neon
+    spec:
+      containers:
+        - name: pageserver
+          image: neondatabase/neon:3556
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              /usr/local/bin/pageserver -D /data/.neon/                                     \
+                                        -c "broker_endpoint='http://storage-broker:50051'"  \
+                                        -c "listen_pg_addr='0.0.0.0:6400'"                  \
+                                        -c "listen_http_addr='0.0.0.0:9898'"                       
+          ports:
+            - name: postgres
+              containerPort: 6400
+            - name: http
+              containerPort: 9898

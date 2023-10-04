@@ -137,6 +137,197 @@ def get_job_logs(namespace, region, job):
     raise Exception(f'Could not get logs for job "{job}" in namespace "{namespace}"')
 
 
+class Operation:
+    @classmethod
+    def run(cls, args, exit_event):
+        cls.config = get_main_config(BASE_PATH)
+        cls.namespaces = list(get_namespaces(cls.config).items())
+        cls.namespaces.sort(key=lambda x: x[1]["id"])
+
+        cls.settings = args.set or []
+        ordered_namespaces = ",".join([ns for ns, _ in cls.namespaces])
+        cls.settings.append(f"ordered_namespaces={{{ordered_namespaces}}}")
+        for ns, ns_info in cls.namespaces:
+            for k, v in ns_info.items():
+                cls.settings.append(f"namespaces.{ns}.{k}={v}")
+
+        cls.dry_run = args.dry_run
+        cls.exit_event = exit_event
+
+        if not args.logs_only:
+            cls.do()
+
+        if not args.dry_run:
+            cls.log()
+
+    @classmethod
+    def do(cls):
+        raise NotImplementedError()
+
+    @classmethod
+    def log(cls):
+        raise NotImplementedError()
+
+
+class Create(Operation):
+    @classmethod
+    def do(cls):
+        run_benchmark(
+            "global",
+            cls.config["global_region"],
+            cls.settings + ["operation=create"],
+            delete_only=False,
+            dry_run=cls.dry_run,
+        )
+
+    @classmethod
+    def log(cls):
+        logs = get_job_logs("global", cls.config["global_region"], "create-load")
+        Kube.print_logs(
+            Kube.NamedLogs(
+                namespace="global",
+                name="create",
+                stream=logs,
+            ),
+            follow=True,
+            exit_event=cls.exit_event,
+        )
+
+
+class Load(Operation):
+    @classmethod
+    def do(cls):
+        max_workers = len(cls.namespaces)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for id, (namespace, ns_info) in enumerate(cls.namespaces):
+                executor.submit(
+                    run_benchmark,
+                    namespace,
+                    ns_info["region"],
+                    cls.settings
+                    + [
+                        "operation=load",
+                        "loadall=false",
+                        f"namespace_id={id}",
+                    ],
+                    delete_only=False,
+                    dry_run=cls.dry_run,
+                )
+
+    @classmethod
+    def log(cls):
+        max_workers = len(cls.namespaces)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            named_logs = executor.map(
+                lambda item: Kube.NamedLogs(
+                    namespace=item[0],
+                    name="load",
+                    stream=get_job_logs(item[0], item[1]["region"], "create-load"),
+                ),
+                cls.namespaces,
+            )
+
+        Kube.print_logs(named_logs, follow=True, exit_event=cls.exit_event)
+
+
+class SLoad(Operation):
+    @classmethod
+    def do(cls):
+        run_benchmark(
+            "global",
+            cls.config["global_region"],
+            cls.settings + ["operation=load", "loadall=true"],
+            delete_only=False,
+            dry_run=cls.dry_run,
+        )
+
+    @classmethod
+    def log(cls):
+        logs = get_job_logs("global", cls.config["global_region"], "create-load")
+        Kube.print_logs(
+            Kube.NamedLogs(
+                namespace="global",
+                name="sload",
+                stream=logs,
+            ),
+            follow=True,
+            exit_event=cls.exit_event,
+        )
+
+
+class Execute(Operation):
+    @classmethod
+    def do(cls):
+        timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+        max_workers = len(cls.namespaces)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for id, (namespace, ns_info) in enumerate(cls.namespaces):
+                executor.submit(
+                    run_benchmark,
+                    namespace,
+                    ns_info["region"],
+                    cls.settings
+                    + [
+                        "operation=execute",
+                        f"timestamp={timestamp}",
+                        f"namespace_id={id}",
+                    ],
+                    delete_only=False,
+                    dry_run=cls.dry_run,
+                )
+
+    @classmethod
+    def log(cls):
+        max_workers = len(cls.namespaces)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            named_logs = executor.map(
+                lambda item: Kube.NamedLogs(
+                    namespace=item[0],
+                    name="execute",
+                    stream=get_job_logs(item[0], item[1]["region"], "execute"),
+                ),
+                cls.namespaces,
+            )
+
+        Kube.print_logs(named_logs, follow=True, exit_event=cls.exit_event)
+
+
+class Delete(Operation):
+    @classmethod
+    def do(cls):
+        run_benchmark(
+            "global",
+            cls.config["global_region"],
+            cls.settings + ["operation=create"],
+            delete_only=True,
+            dry_run=cls.dry_run,
+        )
+
+        max_workers = len(cls.namespaces)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for namespace, ns_info in cls.namespaces:
+                executor.submit(
+                    run_benchmark,
+                    namespace,
+                    ns_info["region"],
+                    cls.settings + ["operation=load"],
+                    delete_only=True,
+                    dry_run=cls.dry_run,
+                )
+                executor.submit(
+                    run_benchmark,
+                    namespace,
+                    ns_info["region"],
+                    cls.settings + ["operation=execute"],
+                    delete_only=True,
+                    dry_run=cls.dry_run,
+                )
+
+    @classmethod
+    def log(cls):
+        pass
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -169,145 +360,18 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-
-    config = get_main_config(BASE_PATH)
-    regions = config["regions"]
-    global_region = config["global_region"]
-    namespaces = get_namespaces(config)
-    ordered_namespaces = [
-        item[0] for item in sorted(namespaces.items(), key=lambda x: x[1]["id"])
-    ]
-    max_workers = len(regions) + 1
-
-    sets = args.set or []
-    for ns, ns_info in namespaces.items():
-        for k, v in ns_info.items():
-            sets.append(f"namespaces.{ns}.{k}={v}")
-    sets.append(f"ordered_namespaces={{{','.join(ordered_namespaces)}}}")
-
     exit_event = threading.Event()
 
-    if args.operation == "create" or args.operation == "sload":
-        if not args.logs_only:
-            operation = args.operation
-            if operation == "sload":
-                # By not setting the namespace_id field, the load job will be run at
-                # the global region and will load the data sequentially.
-                operation = "load"
-            run_benchmark(
-                "global",
-                global_region,
-                [f"operation={operation}"] + sets,
-                delete_only=False,
-                dry_run=args.dry_run,
-            )
-
-        if not args.dry_run:
-            logs = get_job_logs("global", global_region, "create-load")
-            Kube.print_logs(
-                Kube.NamedLogs(
-                    namespace="global",
-                    name=args.operation,
-                    stream=logs,
-                ),
-                follow=True,
-                exit_event=exit_event,
-            )
-
+    if args.operation == "create":
+        Create.run(args, exit_event)
+    elif args.operation == "sload":
+        SLoad.run(args, exit_event)
     elif args.operation == "load":
-        if not args.logs_only:
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                for region in regions:
-                    namespace_id = ordered_namespaces.index(region)
-                    executor.submit(
-                        run_benchmark,
-                        region,
-                        region,
-                        [
-                            "operation=load",
-                            f"namespace_id={namespace_id}",
-                        ]
-                        + sets,
-                        delete_only=False,
-                        dry_run=args.dry_run,
-                    )
-
-        if not args.dry_run:
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                named_logs = executor.map(
-                    lambda region: Kube.NamedLogs(
-                        namespace=region,
-                        name="load",
-                        stream=get_job_logs(region, region, "create-load"),
-                    ),
-                    regions,
-                )
-
-            Kube.print_logs(named_logs, follow=True, exit_event=exit_event)
-
+        Load.run(args, exit_event)
     elif args.operation == "execute":
-        if not args.logs_only:
-            timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                for region in regions:
-                    namespace_id = ordered_namespaces.index(region)
-                    executor.submit(
-                        run_benchmark,
-                        region,
-                        region,
-                        [
-                            "operation=execute",
-                            f"timestamp={timestamp}",
-                            f"namespace_id={namespace_id}",
-                        ]
-                        + sets,
-                        delete_only=False,
-                        dry_run=args.dry_run,
-                    )
-
-        if not args.dry_run:
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                named_logs = executor.map(
-                    lambda region: Kube.NamedLogs(
-                        namespace=region,
-                        name="execute",
-                        stream=get_job_logs(region, region, "execute"),
-                    ),
-                    regions,
-                )
-
-            Kube.print_logs(named_logs, follow=True, exit_event=exit_event)
+        Execute.run(args, exit_event)
     elif args.operation == "delete":
-        if args.logs_only:
-            raise ValueError("Cannot print logs for delete operation")
-
-        run_benchmark(
-            "global",
-            global_region,
-            [f"operation=create"],
-            delete_only=True,
-            dry_run=args.dry_run,
-        )
-
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            for region in regions:
-                executor.submit(
-                    run_benchmark,
-                    region,
-                    region,
-                    ["operation=load"],
-                    delete_only=True,
-                    dry_run=args.dry_run,
-                )
-                executor.submit(
-                    run_benchmark,
-                    region,
-                    region,
-                    ["operation=execute"],
-                    delete_only=True,
-                    dry_run=args.dry_run,
-                )
-
+        Delete.run(args, exit_event)
         exit_event.set()
     else:
         raise ValueError(f"Unknown operation: {args.operation}")

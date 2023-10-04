@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: compute
+  namespace: global
+  labels:
+    app: compute
+spec:
+  ports:
+    - name: postgres
+      targetPort: postgres
+      port: 55433
+  selector:
+    app: compute
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: compute
+  namespace: global
+  labels:
+    app: compute
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: compute
+  template:
+    metadata:
+      labels:
+        app: compute
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:14.9-bullseye
+          env:
+            - name: POSTGRES_USER
+              value: "cloud_admin"
+            - name: POSTGRES_PASSWORD
+              value: "cloud_admin"
+            - name: PGDATA
+              value: /data
+            - name: POSTGRES_HOST_AUTH_METHOD
+              value: trust
+          args:
+            - -c
+            - wal_log_hints=on
+            - -c
+            - log_connections=on
+            - -c
+            - shared_buffers=8GB
+            - -c
+            - max_connections=1000
+            - -c
+            - listen_addresses=0.0.0.0
+            - -c
+            - track_counts=off
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          ports:
+            - name: postgres
+              containerPort: 5432
+      restartPolicy: Always
+      volumes:
+        - name: data
+          emptyDir:
+            sizeLimit: 20Gi

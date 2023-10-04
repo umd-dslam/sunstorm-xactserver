@@ -17,7 +17,7 @@ data:
         <driver>org.postgresql.Driver</driver>
         <url>jdbc:postgresql://compute:55433/postgres?sslmode=disable&amp;ApplicationName=ycsb&amp;reWriteBatchedInserts=true</url>
         <username>cloud_admin</username>
-        <password></password>
+        <password>{{ default "" .Values.password }}</password>
         <isolation>TRANSACTION_SERIALIZABLE</isolation>
         <batchsize>128</batchsize>
 
@@ -29,6 +29,8 @@ data:
         <!-- Optional: Override the field size for each column in USERTABLE -->
         <fieldSize>10</fieldSize>
 
+        <!-- Load data in all partitions -->
+        <loadall>{{ .Values.loadall }}</loadall>
         <!-- Current region -->
         <region>{{ .Values.namespace_id }}</region>
         <!-- Number of hot keys per partition -->
@@ -166,7 +168,11 @@ data:
     </parameters>
 
   ddl.sql: |
+    {{- $numRegions := sub (len .Values.ordered_namespaces) 1 }}
+
+    {{- if .Values.remotexact }}
     CREATE EXTENSION IF NOT EXISTS remotexact;
+    {{- end }}
     DROP TABLE IF EXISTS usertable;
     CREATE TABLE usertable (
         ycsb_key int,
@@ -182,9 +188,12 @@ data:
         field10  text,
         geo_partition int,
         PRIMARY KEY (geo_partition, ycsb_key)
-    ) PARTITION BY LIST (geo_partition);
+    )
+    {{ if gt $numRegions 0 }}
+    PARTITION BY LIST (geo_partition)
+    {{ end }}
+    ;
 
-    {{- $numRegions := sub (len .Values.ordered_namespaces) 1 }}
     {{- range $i := until (int $numRegions) }}
     CREATE TABLE usertable_{{ add1 $i }} PARTITION OF usertable FOR VALUES IN ({{ add1 $i }});
     UPDATE pg_class SET relregion = {{ add1 $i }} WHERE relname = 'usertable_{{ add1 $i }}';

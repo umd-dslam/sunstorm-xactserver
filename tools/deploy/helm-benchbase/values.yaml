@@ -32,14 +32,19 @@ hot:
 namespaces:
   global:
     region: us-east-1
+    id: 0
   us-east-1:
     region: us-east-1
+    id: 1
 
 # An ordered list of the namespaces. 
 ordered_namespaces:
   - global
   - us-east-1
 
+remotexact: true
 namespace_id: 0
+loadall: false
+password: 
 
 timestamp: "0000-00-00_00-00-00"
