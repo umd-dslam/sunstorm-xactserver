@@ -19,7 +19,6 @@ spec:
             - |
               # Generate the base data for the cluster
               python3 /tools/neonctl.py   \
-                --no-xactserver           \
                 --neon-dir /usr/local/bin \
                 --pg-dir /usr/local       \
                 create .                  \
