@@ -328,7 +328,7 @@ class Delete(Operation):
         pass
 
 
-if __name__ == "__main__":
+def main(args):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "operation",
@@ -359,7 +359,8 @@ if __name__ == "__main__":
         help="Only print the logs of the benchmark.",
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(args)
+
     exit_event = threading.Event()
 
     if args.operation == "create":
@@ -377,6 +378,12 @@ if __name__ == "__main__":
         raise ValueError(f"Unknown operation: {args.operation}")
 
     if not args.dry_run:
-        # Wait for Ctrl-C
-        signal.signal(signal.SIGINT, lambda *args: exit_event.set())
         exit_event.wait()
+
+    return args
+
+
+if __name__ == "__main__":
+    import sys
+
+    args = main(sys.argv[1:])

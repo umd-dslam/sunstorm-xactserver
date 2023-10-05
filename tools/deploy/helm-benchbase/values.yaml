@@ -24,7 +24,7 @@ hot:
   # Weights of different types of transactions
   weights: 100,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
   # Number of keys per transaction
-  keyspertxn: 6
+  keyspertxn: 12
 
 #---------------------------------------------------------------------------
 #       The following values are modified by the benchmark.py tool
