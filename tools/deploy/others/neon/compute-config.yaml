@@ -112,7 +112,7 @@ data:
                 },
                 {
                     "name": "max_connections",
-                    "value": "1000",
+                    "value": "100",
                     "vartype": "integer"
                 },
                 {
@@ -199,6 +199,16 @@ data:
                     "name": "track_io_timing",
                     "value": "off",
                     "vartype": "bool"
+                },
+                {
+                    "name": "max_pred_locks_per_transaction",
+                    "value": "256",
+                    "vartype": "integer"
+                },
+                {
+                    "name": "temp_buffers",
+                    "value": "4096",
+                    "vartype": "integer"
                 }
             ]
         },

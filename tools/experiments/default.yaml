@@ -1,4 +1,3 @@
-reload_every: 100
 benchmark: hot
 scalefactor: 10
 time: 10

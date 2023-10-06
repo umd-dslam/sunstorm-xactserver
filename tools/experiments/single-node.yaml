@@ -1,10 +1,10 @@
-reload_every: 6
+reload_every: 7
 benchmark: hot
 scalefactor: 1000
 time: 15
-rate: 10000
+rate: 50000
 parameters:
-  terminals: [1, 8, 16, 32, 48, 64]
+  terminals: [32, 48, 64, 80, 1, 8, 16]
   hot.keyspertxn: 12
   hot.hot: 0
   hot.weights:

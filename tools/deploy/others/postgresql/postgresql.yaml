@@ -50,11 +50,15 @@ spec:
             - -c
             - shared_buffers=8GB
             - -c
-            - max_connections=1000
+            - max_connections=100
             - -c
             - listen_addresses=0.0.0.0
             - -c
             - track_counts=off
+            - -c
+            - temp_buffers=4096
+            - -c
+            - max_pred_locks_per_transaction=256
           volumeMounts:
             - name: data
               mountPath: /data

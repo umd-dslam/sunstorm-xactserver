@@ -87,7 +87,29 @@ def run_subprocess(cmd, logger_and_info_log, dry_run, **kwargs):
 
 def get_main_config(base_path):
     with open(base_path / "main.yaml", "r") as yaml_file:
-        return yaml.safe_load(yaml_file)
+        main_config = yaml.safe_load(yaml_file)
+
+    contexts, _ = kubernetes.config.list_kube_config_contexts()
+    context_names = [c["name"] for c in contexts]
+
+    def find_context(region):
+        for ctx in context_names:
+            if region in ctx:
+                return ctx
+        return None
+    
+    if main_config.get("regions") is None:
+        main_config["regions"] = {}
+
+    for region, region_info in main_config["regions"].items():
+        if region_info.get("context") is None:
+            region_info["context"] = find_context(region)
+
+    if main_config.get("global_region_context") is None:
+        main_config["global_region_context"] = find_context(
+            main_config["global_region"]
+        )
+    return main_config
 
 
 def get_namespaces(config):
@@ -105,31 +127,17 @@ import kubernetes.config
 class Kube:
     @staticmethod
     def get_context(base_path, region: str) -> str:
-        contexts, _ = kubernetes.config.list_kube_config_contexts()
-        context_names = [c["name"] for c in contexts]
-
         context = None
 
-        # Look to see if the context is specified with the region
-        with open(base_path / "main.yaml", "r") as yaml_file:
-            regions_info = yaml.safe_load(yaml_file)
-            regions = regions_info.get("regions", {}) or {}
-            context = (regions.get(region, {}) or {}).get("context", None)
+        main_config = get_main_config(base_path)
+        if region == main_config["global_region"]:
+            context = main_config.get("global_region_context", None)
 
-            # Context is still not found. See if this is a global region
-            # and global region context is specified
-            if context is None and region == regions_info["global_region"]:
-                context = regions_info.get("global_region_context", None)
-
-        # Context is still not found, choose the one with the region
-        # name in it
         if context is None:
-            for ctx in context_names:
-                if region in ctx:
-                    context = ctx
-                    break
+            context = (
+                main_config.get("regions", {}).get(region, {}).get("context", None)
+            )
 
-        # Cannot find the context, give up
         if context is None:
             raise Exception(f"Could not find context for region: {region}")
 

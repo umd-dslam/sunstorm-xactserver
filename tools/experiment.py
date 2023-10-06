@@ -27,6 +27,8 @@ from pathlib import Path
 from rich.logging import RichHandler
 from rich.prompt import Confirm
 
+from utils import get_main_config
+
 BASE_PATH = Path(__file__).absolute().parent
 EXPERIMENTS_PATH = BASE_PATH / "experiments"
 PROGRESS_PATH = BASE_PATH / "progress"
@@ -153,10 +155,9 @@ class Progress:
     PENDING = "pending"
     STATUSES = [DONE, ERROR, PENDING]
 
-    def __init__(self, path: Path, dry_run):
+    def __init__(self, path: Path):
         self.path = path
         self.progress = []
-        self.dry_run = dry_run
 
     def load(self) -> bool:
         if self.path.exists():
@@ -165,8 +166,6 @@ class Progress:
         return False
 
     def save(self):
-        if self.dry_run:
-            return
         self.path.parent.mkdir(exist_ok=True)
         pd.DataFrame(self.progress).to_csv(self.path, index=False)
 
@@ -193,29 +192,47 @@ def header(fmt, *args):
     LOG.info(f"[b yellow]{fmt}[/]", *args, extra={"markup": True})
 
 
+def create_set_arg(args):
+    set_arg = []
+    for s in args.set or []:
+        set_arg += ["-s", s]
+    return set_arg
+
+
 def main(args):
     exp, exp_path = load_experiment(args.experiment)
     if exp:
-        LOG.info(f'Using experiment file "{exp_path}"')
+        LOG.info("Using experiment file %s", exp_path)
     else:
-        LOG.error(f'No experiment file found for "{args.experiment}"')
+        LOG.error("No experiment file found for %s", args.experiment)
         return 1
 
     progress_file_name = f"{args.progress or args.experiment}.csv"
-    progress = Progress(PROGRESS_PATH / progress_file_name, args.dry_run)
+    progress = Progress(PROGRESS_PATH / progress_file_name)
     if args.cont and progress.load():
-        LOG.info(f'Continuing from "{progress.path}"')
+        LOG.info(
+            "[b yellow]Continuing[/] from %s", progress.path, extra={"markup": True}
+        )
     else:
-        LOG.info(f'Starting a new progress file "{progress.path}"')
+        LOG.info(
+            "[b green]Starting[/] a new progress file %s",
+            progress.path,
+            extra={"markup": True},
+        )
 
-    reload_every = exp["reload_every"]
-    LOG.info(f"Reload the database every {reload_every} benchmark executions")
+    reload_every = exp.get("reload_every") or 0
+    if reload_every > 0:
+        LOG.info("Reload the database every %d benchmark executions", reload_every)
+
+    main_config = get_main_config(BASE_PATH / "deploy")
+    LOG.info("Using main config %s", json.dumps(main_config, indent=4))
 
     if not args.y and not Confirm.ask("Start the benchmark?", default=True):
         return 0
 
-    reload_counter = 0
+    set_arg = create_set_arg(args)
     dry_run_arg = ["--dry-run"] if args.dry_run else []
+    reload_counter = 0
     for bm_args, metadata in benchmark_args(exp, args.prefix):
         record = progress.get_or_insert(metadata)
 
@@ -228,7 +245,7 @@ def main(args):
                 if reload_counter == 0:
                     header("Creating the database")
 
-                    benchmark.main(["create"] + bm_args + dry_run_arg)
+                    benchmark.main(["create"] + bm_args + set_arg + dry_run_arg)
                     header(
                         "Waiting %d seconds for the change to propagate", DELAY_SECONDS
                     )
@@ -236,7 +253,7 @@ def main(args):
                         time.sleep(DELAY_SECONDS)
 
                     header("Loading data")
-                    benchmark.main(["load"] + bm_args + dry_run_arg)
+                    benchmark.main(["load"] + bm_args + set_arg + dry_run_arg)
                     header(
                         "Waiting %d seconds for the change to propagate", DELAY_SECONDS
                     )
@@ -251,7 +268,9 @@ def main(args):
                     )
 
                 header("Running benchmark %s", json.dumps(metadata, indent=4))
-                benchmark.main(["execute"] + bm_args + dry_run_arg)
+
+                benchmark.main(["execute"] + bm_args + set_arg + dry_run_arg)
+
             except Exception as e:
                 record["status"] = Progress.ERROR
                 LOG.exception(e)
@@ -273,6 +292,12 @@ if __name__ == "__main__":
         nargs="?",
         default="default",
         help='Name of the experiment under the "experiments" directory',
+    )
+    parser.add_argument(
+        "--set",
+        "-s",
+        action="append",
+        help="Override the values in the config file. Each argument should be in the form of key=value.",
     )
     parser.add_argument("--prefix", default="", help="Prefix to add to the tags")
     parser.add_argument("--progress", help="Progress file name")
