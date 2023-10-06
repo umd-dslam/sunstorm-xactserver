@@ -3,13 +3,14 @@ import logging
 import threading
 
 import kubernetes.client
-import kubernetes.config
 import yaml
 
-from collections import namedtuple
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, TypedDict
+from typing import Callable, Iterable, TypedDict
 
+from kubernetes.client.configuration import Configuration as KubeConfiguration
+from kubernetes.config.kube_config import load_kube_config
 from rich.console import Console
 from rich.markup import escape
 
@@ -110,7 +111,7 @@ def get_main_config(base_path: Path) -> MainConfig:
     with open(base_path / "main.yaml", "r") as yaml_file:
         main_config: MainConfig = yaml.safe_load(yaml_file)
 
-    contexts, _ = kubernetes.config.list_kube_config_contexts()
+    contexts, _ = kubernetes.config.list_kube_config_contexts()  # type: ignore
     context_names: list[str] = [c["name"] for c in contexts]
 
     def find_context(region: str):
@@ -165,8 +166,8 @@ class Kube:
     @staticmethod
     def get_config(base_path: Path, region: str):
         context = Kube.get_context(base_path, region)
-        config = kubernetes.client.Configuration()
-        kubernetes.config.load_kube_config(
+        config = KubeConfiguration()
+        load_kube_config(
             context=context, client_configuration=config, persist_config=False
         )
 
@@ -174,12 +175,12 @@ class Kube:
 
     @staticmethod
     def get_pods(
-        kube_config: kubernetes.client.Configuration,
+        kube_config: KubeConfiguration,
         namespace: str,
         selector: dict[str, str],
         phases: list[str] | None = None,
     ):
-        with kubernetes.client.ApiClient(kube_config) as api_client:
+        with kubernetes.client.ApiClient(kube_config) as api_client:  # type: ignore
             corev1 = kubernetes.client.CoreV1Api(api_client)
             pods: list[str] = []
             pod_list = corev1.list_namespaced_pod(
@@ -187,23 +188,24 @@ class Kube:
                 label_selector=",".join([f"{k}={v}" for k, v in selector.items()]),
             )
             for pod in pod_list.items:
-                if not phases or pod.status.phase in phases:
-                    pods.append(pod.metadata.name)
+                if not phases or (pod.status and pod.status.phase in phases):
+                    if pod.metadata and pod.metadata.name:
+                        pods.append(pod.metadata.name)
 
             return pods
 
     @staticmethod
     def get_logs(
-        kube_config: kubernetes.client.Configuration,
+        kube_config: KubeConfiguration,
         namespace: str,
         pod: str,
         follow: bool,
         lines: int | None = None,
         container: str | None = None,
     ):
-        with kubernetes.client.ApiClient(kube_config) as api_client:
+        with kubernetes.client.ApiClient(kube_config) as api_client:  # type: ignore
             corev1 = kubernetes.client.CoreV1Api(api_client)
-            return corev1.read_namespaced_pod_log(
+            return corev1.read_namespaced_pod_log(  # type: ignore
                 name=pod,
                 namespace=namespace,
                 container=container,
@@ -212,19 +214,24 @@ class Kube:
                 _preload_content=False,
             )
 
-    NamedLogs = namedtuple("NamedLogs", ["namespace", "name", "stream"])
+    @dataclass
+    class NamedLogs:
+        namespace: str
+        name: str
+        stream: Iterable[bytes]
 
     @staticmethod
     def print_logs(
-        named_logs: NamedLogs | list[NamedLogs],
+        named_logs: NamedLogs | Iterable[NamedLogs],
         follow: bool,
         console: Console | None = None,
+        callback: Callable[[str], None] | None = None,
         exit_event: threading.Event | None = None,
     ):
-        if isinstance(named_logs, Iterator):
-            named_logs = list(named_logs)
-        elif isinstance(named_logs, Kube.NamedLogs):
+        if isinstance(named_logs, Kube.NamedLogs):
             named_logs = [named_logs]
+
+        named_logs = list(named_logs)
 
         if not console:
             console = Console()
@@ -232,10 +239,12 @@ class Kube:
         alive_threads = len(named_logs)
         lock = threading.Lock()
 
-        def print_log(logs, color):
+        def print_log(logs: Kube.NamedLogs, color: str):
             name = f"{logs.namespace}|{logs.name}"
             for line in logs.stream:
                 decoded = line.decode("utf-8").rstrip("\n")
+                if callback:
+                    callback(decoded)
                 console.print(
                     f"[bold]\[{name}][/bold] {escape(decoded)}",
                     style=color,

@@ -299,6 +299,9 @@ def main(args):
     if reload_every > 0:
         LOG.info("Reload the database every %d benchmark executions", reload_every)
 
+    if args.skip_create_load:
+        LOG.info("[yellow]Skip the database creating and loading steps[/]", extra={"markup": True})
+
     main_config = get_main_config(BASE_PATH / "deploy")
     LOG.info("Using main config %s", json.dumps(main_config, indent=4))
 
@@ -320,30 +323,31 @@ def main(args):
             LOG.warning("Skip already run benchmark: %s", metadata)
         else:
             try:
-                if reload_counter == 0:
-                    header("Creating the database")
+                if not args.skip_create_load:
+                    if reload_counter == 0:
+                        header("Creating the database")
 
-                    benchmark.main(["create"] + bm_args + set_arg + dry_run_arg)
-                    header(
-                        "Waiting %d seconds for the change to propagate", DELAY_SECONDS
-                    )
-                    if not args.dry_run:
-                        time.sleep(DELAY_SECONDS)
+                        benchmark.main(["create"] + bm_args + set_arg + dry_run_arg)
+                        header(
+                            "Waiting %d seconds for the change to propagate", DELAY_SECONDS
+                        )
+                        if not args.dry_run:
+                            time.sleep(DELAY_SECONDS)
 
-                    header("Loading data")
-                    benchmark.main(["load"] + bm_args + set_arg + dry_run_arg)
-                    header(
-                        "Waiting %d seconds for the change to propagate", DELAY_SECONDS
-                    )
-                    if not args.dry_run:
-                        time.sleep(DELAY_SECONDS)
+                        header("Loading data")
+                        benchmark.main(["load"] + bm_args + set_arg + dry_run_arg)
+                        header(
+                            "Waiting %d seconds for the change to propagate", DELAY_SECONDS
+                        )
+                        if not args.dry_run:
+                            time.sleep(DELAY_SECONDS)
 
-                    reload_counter = reload_every
-                else:
-                    header(
-                        "Reloading the database after %d more executions",
-                        reload_counter,
-                    )
+                        reload_counter = reload_every
+                    else:
+                        header(
+                            "Reloading the database after %d more executions",
+                            reload_counter,
+                        )
 
                 header("Running benchmark %s", json.dumps(metadata, indent=4))
 
@@ -391,6 +395,11 @@ if __name__ == "__main__":
         "-y",
         action="store_true",
         help="Skip the confirmation prompt",
+    )
+    parser.add_argument(
+        "--skip-create-load",
+        action="store_true",
+        help="Skip the create and load steps",
     )
     args = parser.parse_args()
 

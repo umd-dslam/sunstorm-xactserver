@@ -8,6 +8,7 @@ google-auth==2.22.0
 idna==3.4
 jmespath==1.0.1
 kubernetes==27.2.0
+kubernetes-stubs-elephant-fork==28.1.0
 markdown-it-py==3.0.0
 mdurl==0.1.2
 mypy==1.5.1

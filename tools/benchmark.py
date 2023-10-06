@@ -92,10 +92,15 @@ def run_benchmark(
 
 def get_job_logs(namespace: str, region: str, job: str):
     kube_config = Kube.get_config(BASE_PATH, region)
-    with kubernetes.client.ApiClient(kube_config) as api_client:
+    with kubernetes.client.ApiClient(kube_config) as api_client:  # type: ignore
         batchv1 = kubernetes.client.BatchV1Api(api_client)
 
         job_info = batchv1.read_namespaced_job(name=job, namespace=namespace)
+        assert (
+            job_info.spec
+            and job_info.spec.selector
+            and job_info.spec.selector.match_labels
+        )
         selector = job_info.spec.selector.match_labels
 
     pods: list[str] = []
@@ -109,7 +114,7 @@ def get_job_logs(namespace: str, region: str, job: str):
             )
             if len(pods) > 1:
                 raise Exception(f'More than one pod found for job "{job}"')
-        except kubernetes.client.rest.ApiException as e:
+        except kubernetes.client.rest.ApiException as e:  # type: ignore
             body = json.loads(e.body)
             LOG.warning(
                 f'Getting pods "{job}" in namespace "{namespace}": {body["message"]}.'
@@ -128,7 +133,7 @@ def get_job_logs(namespace: str, region: str, job: str):
                 pods[0],
                 follow=True,
             )
-        except kubernetes.client.rest.ApiException as e:
+        except kubernetes.client.rest.ApiException as e:  # type: ignore
             body = json.loads(e.body)
             LOG.warning(
                 f'Getting logs for "{job}" in namespace "{namespace}": {body["message"]}.'
@@ -144,10 +149,9 @@ class Operation:
     namespaces: list[tuple[str, dict[str, str | int]]]
     settings: list[str]
     dry_run: bool
-    exit_event: threading.Event
 
     @classmethod
-    def run(cls, args, exit_event: threading.Event):
+    def run(cls, args):
         cls.config = get_main_config(BASE_PATH)
         cls.namespaces = list(get_namespaces(cls.config).items())
         cls.namespaces.sort(key=lambda x: x[1]["id"])
@@ -160,7 +164,6 @@ class Operation:
                 cls.settings.append(f"namespaces.{ns}.{k}={v}")
 
         cls.dry_run = args.dry_run
-        cls.exit_event = exit_event
 
         if not args.logs_only:
             cls.do()
@@ -190,16 +193,17 @@ class Create(Operation):
 
     @classmethod
     def log(cls):
-        logs = get_job_logs("global", cls.config["global_region"], "create-load")
-        Kube.print_logs(
-            Kube.NamedLogs(
-                namespace="global",
-                name="create",
-                stream=logs,
-            ),
-            follow=True,
-            exit_event=cls.exit_event,
+        named_logs = Kube.NamedLogs(
+            namespace="global",
+            name="create",
+            stream=get_job_logs("global", cls.config["global_region"], "create-load"),
         )
+        exit_event = threading.Event()
+
+        Kube.print_logs(named_logs, follow=True, exit_event=exit_event)
+
+        if not cls.dry_run:
+            exit_event.wait()
 
 
 class Load(Operation):
@@ -225,6 +229,7 @@ class Load(Operation):
     @classmethod
     def log(cls):
         max_workers = len(cls.namespaces)
+        exit_event = threading.Event()
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             named_logs = executor.map(
                 lambda item: Kube.NamedLogs(
@@ -235,7 +240,10 @@ class Load(Operation):
                 cls.namespaces,
             )
 
-        Kube.print_logs(named_logs, follow=True, exit_event=cls.exit_event)
+        Kube.print_logs(named_logs, follow=True, exit_event=exit_event)
+
+        if not cls.dry_run:
+            exit_event.wait()
 
 
 class SLoad(Operation):
@@ -251,16 +259,21 @@ class SLoad(Operation):
 
     @classmethod
     def log(cls):
-        logs = get_job_logs("global", cls.config["global_region"], "create-load")
-        Kube.print_logs(
-            Kube.NamedLogs(
-                namespace="global",
-                name="sload",
-                stream=logs,
-            ),
-            follow=True,
-            exit_event=cls.exit_event,
+        named_logs = Kube.NamedLogs(
+            namespace="global",
+            name="sload",
+            stream=get_job_logs("global", cls.config["global_region"], "create-load"),
         )
+        exit_event = threading.Event()
+
+        Kube.print_logs(
+            named_logs,
+            follow=True,
+            exit_event=exit_event,
+        )
+
+        if not cls.dry_run:
+            exit_event.wait()
 
 
 class Execute(Operation):
@@ -287,6 +300,7 @@ class Execute(Operation):
     @classmethod
     def log(cls):
         max_workers = len(cls.namespaces)
+        exit_event = threading.Event()
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             named_logs = executor.map(
                 lambda item: Kube.NamedLogs(
@@ -297,7 +311,10 @@ class Execute(Operation):
                 cls.namespaces,
             )
 
-        Kube.print_logs(named_logs, follow=True, exit_event=cls.exit_event)
+        Kube.print_logs(named_logs, follow=True, exit_event=exit_event)
+
+        if not cls.dry_run:
+            exit_event.wait()
 
 
 class Delete(Operation):
@@ -369,24 +386,18 @@ def main(cmd_args: list[str]):
 
     args = parser.parse_args(cmd_args)
 
-    exit_event = threading.Event()
-
     if args.operation == "create":
-        Create.run(args, exit_event)
+        Create.run(args)
     elif args.operation == "sload":
-        SLoad.run(args, exit_event)
+        SLoad.run(args)
     elif args.operation == "load":
-        Load.run(args, exit_event)
+        Load.run(args)
     elif args.operation == "execute":
-        Execute.run(args, exit_event)
+        Execute.run(args)
     elif args.operation == "delete":
-        Delete.run(args, exit_event)
-        exit_event.set()
+        Delete.run(args)
     else:
         raise ValueError(f"Unknown operation: {args.operation}")
-
-    if not args.dry_run:
-        exit_event.wait()
 
     return 0
 
