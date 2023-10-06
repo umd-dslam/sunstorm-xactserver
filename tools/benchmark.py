@@ -1,5 +1,6 @@
 import argparse
 import json
+import re
 import time
 import threading
 
@@ -311,10 +312,38 @@ class Execute(Operation):
                 cls.namespaces,
             )
 
-        Kube.print_logs(named_logs, follow=True, exit_event=exit_event)
+        lock = threading.Lock()
+        matched_logs = []
+        throughput = 0
+        goodput = 0
+
+        pattern = re.compile(
+            r"Rate limited reqs/s: Results\(.+\) = (\d+\.\d+|\d+) requests/sec \(throughput\), "
+            r"(\d+\.\d+|\d+) requests/sec \(goodput\)"
+        )
+
+        def parse_and_add(name: str, log: str):
+            nonlocal throughput
+            nonlocal goodput
+            nonlocal lock
+
+            match = pattern.search(log)
+            if match:
+                with lock:
+                    matched_logs.append(f"[{name}] {log}")
+                    throughput += float(match.group(1))
+                    goodput += float(match.group(2))
+
+        Kube.print_logs(
+            named_logs, follow=True, callback=parse_and_add, exit_event=exit_event
+        )
 
         if not cls.dry_run:
             exit_event.wait()
+            LOG.info(
+                "Throughput: %.2f req/s. Goodput: %.2f req/s ", throughput, goodput
+            )
+            LOG.info("\n".join(sorted(matched_logs)))
 
 
 class Delete(Operation):

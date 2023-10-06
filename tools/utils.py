@@ -225,7 +225,7 @@ class Kube:
         named_logs: NamedLogs | Iterable[NamedLogs],
         follow: bool,
         console: Console | None = None,
-        callback: Callable[[str], None] | None = None,
+        callback: Callable[[str, str], None] | None = None,
         exit_event: threading.Event | None = None,
     ):
         if isinstance(named_logs, Kube.NamedLogs):
@@ -244,7 +244,7 @@ class Kube:
             for line in logs.stream:
                 decoded = line.decode("utf-8").rstrip("\n")
                 if callback:
-                    callback(decoded)
+                    callback(name, decoded)
                 console.print(
                     f"[bold]\[{name}][/bold] {escape(decoded)}",
                     style=color,
