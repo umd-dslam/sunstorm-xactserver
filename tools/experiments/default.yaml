@@ -1,26 +1,75 @@
+# This is an example of an experiment configuration file. It contains all available options.
+# See the Experiment class in experiment.py for the type definitions.
+
+# Name of the benchbase benchmark to run
 benchmark: hot
+# The scale factor to use for the benchmark. The meaning of this value is benchmark-specific.
 scalefactor: 10
+# The duration of each data point in seconds
 time: 10
+# The maximum transactions that can be sent per second
 rate: 10000
+# The number of data points between reloads of the database
+reload_every: 7
+# Each parameter is a list of values, which will be combined in all possible ways. A value
+# can either be a literal value or an object with a "name" and "value" field. The latter way
+# of specifying the value should be used if the value is too long because all values will be
+# used in the name of the result.
 parameters:
-  terminals: 3
+  terminals: null
   hot.keyspertxn: 4
-  hot.hot: 0
+  hot.hot: [0, 100]
   hot.weights:
     - name: A
       value: 100,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
     - name: B
       value: 0,0,0,0,0,0, 100,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
-    - name: C
-      value: 0,0,0,0,0,0, 0,0,0,0,0,0, 100,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
     - name: D
       value: 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 100,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
     - name: E
       value: 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 100,0,0,0,0,0, 0,0,0,0,0,0
     - name: F
       value: 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 100,0,0,0,0,0
+# The order in which the parameters will be varied. All keys in "parameters" must be listed here.
 order:
   - hot.weights
   - terminals
   - hot.keyspertxn
   - hot.hot
+# A list of rules to replace the values in a parameter combination. Every combination generated
+# from "parameters" will be passed through these rules. The rules are applied in the order they
+# are listed here. Each rule has two parts: a "match" and a "set". The "match" part specifies
+# the condition that must be met. The "set" part specifies the values that will be set.
+replace:
+  - match:
+      hot.weights:
+        name: A
+    set:
+      terminals: 1
+  - match:
+      hot.weights:
+        name: B
+      hot.hot: 0
+    set:
+      terminals: 2
+  - match:
+      hot.weights:
+        name: B
+      hot.hot: 100
+    set:
+      terminals: 3
+  - match:
+      hot.weights:
+        name: D
+    set:
+      terminals: 4
+  - match:
+      hot.weights:
+        name: E
+    set:
+      terminals: 5
+  - match:
+      hot.weights:
+        name: F
+    set:
+      terminals: 6

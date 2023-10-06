@@ -21,7 +21,6 @@ import yaml
 
 import benchmark
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict, TypeAlias
 
@@ -45,7 +44,16 @@ ParameterValue: TypeAlias = str | int | float | bool
 
 class NamedParameterValue(TypedDict):
     name: str
-    value: ParameterValue
+    value: ParameterValue | None
+
+
+class NameOnlyParameterValue(TypedDict):
+    name: str
+
+
+class Replace(TypedDict):
+    match: dict[str, ParameterValue | NamedParameterValue]
+    set: dict[str, ParameterValue]
 
 
 class Experiment(TypedDict):
@@ -56,11 +64,12 @@ class Experiment(TypedDict):
     rate: int
     parameters: dict[
         str,
-        list[NamedParameterValue | ParameterValue]
+        list[NamedParameterValue | ParameterValue | None]
         | NamedParameterValue
         | ParameterValue,
     ]
     order: list[str] | None
+    replace: list[Replace] | None
 
 
 def load_experiment(exp_name: str) -> tuple[Experiment, Path] | None:
@@ -72,6 +81,32 @@ def load_experiment(exp_name: str) -> tuple[Experiment, Path] | None:
 
     with open(exp_path) as f:
         return yaml.safe_load(f), exp_path
+
+
+def replace_values(
+    replacements: list[Replace], named_values: dict[str, NamedParameterValue]
+):
+    for replace in replacements:
+        is_matched = True
+        for param, value in replace["match"].items():
+            if param not in named_values:
+                raise ValueError(f"Unknown parameter \"{param}\" specified in replace.match")
+            if isinstance(value, dict):
+                if value["name"] != named_values[param]["name"]:
+                    is_matched = False
+                    break
+            elif value != named_values[param]["value"]:
+                is_matched = False
+                break
+
+        if is_matched:
+            for param, value in replace["set"].items():
+                if param not in named_values:
+                    raise ValueError(f"Unknown parameter \"{param}\" specified in replace.set")
+                named_values[param] = {
+                    "name": named_values[param]["name"],
+                    "value": value,
+                }
 
 
 def benchmark_args(exp: Experiment, prefix: str):
@@ -115,50 +150,42 @@ def benchmark_args(exp: Experiment, prefix: str):
             f"The parameter names in order {order} does not those in parameters {parameters.keys()}"
         )
 
-    @dataclass
-    class NamedValue:
-        param: str
-        name: str
-        value: ParameterValue
-
-    # List of named values for each param
-    named_param_values: list[list[NamedValue]] = []
-    # Set of params that are included in the tag
+    named_parameters: dict[str, list[NamedParameterValue]] = {}
     tag_params = set()
-    for param in order:
-        values = parameters[param]
+    for param, values in parameters.items():
         if not isinstance(values, list):
             values = [values]
 
-        # Give a name for every value of the param
-        named_values: list[NamedValue] = []
-        for item in values:
-            if isinstance(item, dict):
-                name = item["name"]
-                value = item["value"]
+        named_values: list[NamedParameterValue] = []
+        for value in values:
+            if isinstance(value, dict):
+                name = value["name"]
+                value = value["value"]
             else:
                 param_suffix = param.split(".")[-1]
-                name = f"{param_suffix}{item}"
-                value = item
-            named_values.append(NamedValue(param, name, value))
-        named_param_values.append(named_values)
+                name = f"{param_suffix}{value}"
+                value = value
+            named_values.append({"name": name, "value": value})
 
         # Only include in the tag the params with more than one values
         if len(values) > 1:
             tag_params.add(param)
+
+        named_parameters[param] = named_values
+
+    # Generate all combinations of the param values
+    combinations: list[dict[str, NamedParameterValue]] = [{}]
+    for param in order:
+        combinations = [
+            {**x, param: v} for x in combinations for v in named_parameters[param]
+        ]
 
     def sanitize(value: ParameterValue):
         if isinstance(value, str):
             return value.replace(",", "\\,")
         return value
 
-    # Generate all combinations of the param values. This could be done with
-    # itertools.product, but it would lose the type information.
-    combinations: list[list[NamedValue]] = [[]]
-    for pool in named_param_values:
-        combinations = [x + [v] for x in combinations for v in pool]
-
-    # Generate the arguments and metadata for each combination
+    # Generate the arguments and metadata from each combination
     for combination in combinations:
         workload_args: list[str] = []
         workload_metadata: dict[str, ParameterValue] = {}
@@ -167,15 +194,21 @@ def benchmark_args(exp: Experiment, prefix: str):
         if prefix:
             tag_parts.append(prefix)
 
+        # Apply the replacements
+        replace_values(exp.get("replace") or [], combination)
+
         # Build the workload arguments, metadata, and tag
-        for named_value in combination:
+        for param, named_value in combination.items():
+            if named_value["value"] is None:
+                raise ValueError(f"Combination {combination} has a None value for \"{param}\"")
+
             workload_args += [
                 "-s",
-                f"{named_value.param}={sanitize(named_value.value)}",
+                f"{param}={sanitize(named_value["value"])}",
             ]
-            workload_metadata[named_value.param] = named_value.value
-            if named_value.param in tag_params:
-                tag_parts.append(named_value.name)
+            workload_metadata[param] = named_value["value"]
+            if param in tag_params:
+                tag_parts.append(named_value["name"])
 
         tag = "-".join(tag_parts)
         workload_args += ["-s", f"tag={tag}"]
@@ -238,6 +271,9 @@ def create_set_arg(args) -> list[str]:
 
 
 def main(args):
+    ##########################################################
+    #   Print the general information about the experiment   #
+    ##########################################################
     exp_and_path = load_experiment(args.experiment)
     if not exp_and_path:
         LOG.error("No experiment file found for %s", args.experiment)
@@ -269,6 +305,9 @@ def main(args):
     if not args.y and not Confirm.ask("Start the benchmark?", default=True):
         return 0
 
+    #########################
+    #   Run the benchmarks  #
+    #########################
     set_arg = create_set_arg(args)
     dry_run_arg = ["--dry-run"] if args.dry_run else []
     reload_counter = 0
