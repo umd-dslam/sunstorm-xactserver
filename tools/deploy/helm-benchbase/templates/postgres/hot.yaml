@@ -26,7 +26,7 @@ data:
         <!-- Scalefactor in YCSB is *1000 the number of rows in the USERTABLE-->
         <scalefactor>{{ .Values.scalefactor }}</scalefactor>
         
-        <!-- Optional: Override the field size for each column in USERTABLE -->
+        <!-- Override the field size for each column in USERTABLE -->
         <fieldSize>10</fieldSize>
 
         <!-- Load data in all partitions -->

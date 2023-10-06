@@ -17,6 +17,7 @@ from kubernetes.client.rest import ApiException
 from rich.console import Console
 from utils import (
     Kube,
+    MainConfig,
     get_logger,
     get_main_config,
     get_namespaces,
@@ -27,7 +28,7 @@ LOG = get_logger(__name__)
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
 
 
-def context_flag(region, flag_name="--context"):
+def context_flag(region: str, flag_name="--context") -> list[str]:
     try:
         context = Kube.get_context(BASE_PATH, region)
         return [flag_name, context]
@@ -50,7 +51,7 @@ def try_with_timeout(fn, timeout: int):
                 )
 
 
-def set_up_load_balancer_for_coredns(config, dry_run: bool) -> str:
+def set_up_load_balancer_for_coredns(config: MainConfig, dry_run: bool):
     regions = config["regions"]
     if len(regions) == 1:
         LOG.info(
@@ -76,7 +77,7 @@ def set_up_load_balancer_for_coredns(config, dry_run: bool) -> str:
         LOG.info(f"Load balancer for CoreDNS in region {region} created.")
 
 
-def install_dns_configmap(config, dry_run: bool):
+def install_dns_configmap(config: MainConfig, dry_run: bool):
     global_region = config["global_region"]
     regions = set(config["regions"]) | {config["global_region"]}
     if len(regions) == 1:
@@ -87,7 +88,7 @@ def install_dns_configmap(config, dry_run: bool):
 
     TIMEOUT = 300
 
-    region_lb_ip_addresses = {"addresses": {}}
+    region_lb_ip_addresses: dict = {"addresses": {}}
 
     for region in regions:
         LOG.info(f"Fetching CoreDNS load balancer ip addresses for region: {region}")
@@ -250,14 +251,14 @@ def create_namespaces(config, dry_run: bool):
         list(executor.map(create_namespace, namespaces.keys(), namespaces.values()))
 
 
-def deploy_neon(config, cleanup_only: bool, dry_run: bool):
+def deploy_neon(config: MainConfig, cleanup_only: bool, dry_run: bool):
     namespaces = get_namespaces(config)
     ordered_namespaces = [
         item[0] for item in sorted(namespaces.items(), key=lambda x: x[1]["id"])
     ]
 
-    def deploy_neon_one_namespace(namespace):
-        region = namespaces[namespace]["region"]
+    def deploy_neon_one_namespace(namespace: str):
+        region = str(namespaces[namespace]["region"])
 
         sets = []
         for ns, ns_info in namespaces.items():
@@ -305,7 +306,7 @@ def deploy_neon(config, cleanup_only: bool, dry_run: bool):
         list(executor.map(deploy_neon_one_namespace, namespaces.keys()))
 
 
-def clean_up_neon_one_namespace(namespace, namespace_info, dry_run):
+def clean_up_neon_one_namespace(namespace: str, namespace_info, dry_run):
     region = namespace_info["region"]
     run_subprocess(
         [

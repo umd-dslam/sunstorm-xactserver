@@ -13,7 +13,6 @@ import os
 import signal
 import shutil
 import subprocess
-from typing import List, Dict
 
 from utils import get_logger, Command, initialize_and_run_commands
 from neonclone import clone_neon
@@ -22,12 +21,12 @@ LOG = get_logger(__name__)
 
 
 class Neon:
-    def __init__(self, bin: str, env: Dict[str, str], dry_run: bool):
+    def __init__(self, bin: str, env: dict[str, str], dry_run: bool):
         self.bin = bin
         self.env = env
         self.dry_run = dry_run
 
-    def run(self, args: List[str], check=True, **kwargs):
+    def run(self, args: list[str], check=True, **kwargs):
         cwd = kwargs.get("cwd", os.getcwd())
         LOG.info(f"[{cwd}] {os.path.basename(self.bin)} {' '.join(args)}")
 
@@ -42,12 +41,12 @@ class Neon:
 
 
 class XactServer:
-    def __init__(self, bin: str, env: Dict[str, str], dry_run: bool):
+    def __init__(self, bin: str, env: dict[str, str], dry_run: bool):
         self.bin = bin
         self.env = env
         self.dry_run = dry_run
 
-    def run(self, args: List[str], **kwargs):
+    def run(self, args: list[str], **kwargs):
         cwd = kwargs.get("cwd", os.getcwd())
         bin_name = self.bin if self.dry_run else os.path.basename(self.bin)
         print(f"[{cwd}] {bin_name} {' '.join(args)}")

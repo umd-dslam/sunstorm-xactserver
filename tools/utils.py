@@ -1,7 +1,18 @@
-from typing import Iterator
+import itertools
+import logging
+import threading
+
+import kubernetes.client
+import kubernetes.config
 import yaml
 
 from collections import namedtuple
+from pathlib import Path
+from typing import Iterator, TypedDict
+
+from rich.console import Console
+from rich.markup import escape
+
 
 # List of 20 distinct colors
 # https://sashat.me/2017/01/11/list-of-20-simple-distinct-colors/
@@ -32,7 +43,6 @@ COLORS = [
 
 
 def get_logger(name: str):
-    import logging
     import os
     from rich.logging import RichHandler
 
@@ -75,7 +85,12 @@ def initialize_and_run_commands(parser, commands, args=None):
     parsed_args.run(parsed_args)
 
 
-def run_subprocess(cmd, logger_and_info_log, dry_run, **kwargs):
+def run_subprocess(
+    cmd: list[str],
+    logger_and_info_log: tuple[logging.Logger, str],
+    dry_run: bool,
+    **kwargs,
+):
     import subprocess
 
     logger, info_log = logger_and_info_log
@@ -85,19 +100,25 @@ def run_subprocess(cmd, logger_and_info_log, dry_run, **kwargs):
         subprocess.run(cmd, **kwargs)
 
 
-def get_main_config(base_path):
+class MainConfig(TypedDict):
+    global_region: str
+    global_region_context: str
+    regions: dict[str, dict[str, str | int]]
+
+
+def get_main_config(base_path: Path) -> MainConfig:
     with open(base_path / "main.yaml", "r") as yaml_file:
-        main_config = yaml.safe_load(yaml_file)
+        main_config: MainConfig = yaml.safe_load(yaml_file)
 
     contexts, _ = kubernetes.config.list_kube_config_contexts()
-    context_names = [c["name"] for c in contexts]
+    context_names: list[str] = [c["name"] for c in contexts]
 
-    def find_context(region):
+    def find_context(region: str):
         for ctx in context_names:
             if region in ctx:
                 return ctx
         return None
-    
+
     if main_config.get("regions") is None:
         main_config["regions"] = {}
 
@@ -112,21 +133,19 @@ def get_main_config(base_path):
     return main_config
 
 
-def get_namespaces(config):
-    namespaces = {"global": {"region": config["global_region"], "id": 0}}
-    if "regions" in config and config["regions"]:
-        for region, region_info in config["regions"].items():
-            namespaces[region] = {"region": region, "id": region_info["id"]}
+def get_namespaces(config: MainConfig):
+    namespaces: dict[str, dict[str, str | int]] = {
+        "global": {"region": config["global_region"], "id": 0}
+    }
+    regions = config.get("regions") or {}
+    for region, region_info in regions.items():
+        namespaces[region] = {"region": region, "id": region_info["id"]}
     return namespaces
-
-
-import kubernetes.client
-import kubernetes.config
 
 
 class Kube:
     @staticmethod
-    def get_context(base_path, region: str) -> str:
+    def get_context(base_path: Path, region: str) -> str:
         context = None
 
         main_config = get_main_config(base_path)
@@ -134,7 +153,7 @@ class Kube:
             context = main_config.get("global_region_context", None)
 
         if context is None:
-            context = (
+            context = str(
                 main_config.get("regions", {}).get(region, {}).get("context", None)
             )
 
@@ -144,7 +163,7 @@ class Kube:
         return context
 
     @staticmethod
-    def get_config(base_path, region: str):
+    def get_config(base_path: Path, region: str):
         context = Kube.get_context(base_path, region)
         config = kubernetes.client.Configuration()
         kubernetes.config.load_kube_config(
@@ -154,10 +173,15 @@ class Kube:
         return config
 
     @staticmethod
-    def get_pods(kube_config, namespace, selector, phases=None):
+    def get_pods(
+        kube_config: kubernetes.client.Configuration,
+        namespace: str,
+        selector: dict[str, str],
+        phases: list[str] | None = None,
+    ):
         with kubernetes.client.ApiClient(kube_config) as api_client:
             corev1 = kubernetes.client.CoreV1Api(api_client)
-            pods = []
+            pods: list[str] = []
             pod_list = corev1.list_namespaced_pod(
                 namespace=namespace,
                 label_selector=",".join([f"{k}={v}" for k, v in selector.items()]),
@@ -169,7 +193,14 @@ class Kube:
             return pods
 
     @staticmethod
-    def get_logs(kube_config, namespace, pod, follow, lines=None, container=None):
+    def get_logs(
+        kube_config: kubernetes.client.Configuration,
+        namespace: str,
+        pod: str,
+        follow: bool,
+        lines: int | None = None,
+        container: str | None = None,
+    ):
         with kubernetes.client.ApiClient(kube_config) as api_client:
             corev1 = kubernetes.client.CoreV1Api(api_client)
             return corev1.read_namespaced_pod_log(
@@ -184,13 +215,12 @@ class Kube:
     NamedLogs = namedtuple("NamedLogs", ["namespace", "name", "stream"])
 
     @staticmethod
-    def print_logs(named_logs: NamedLogs, follow, console=None, exit_event=None):
-        import itertools
-        import threading
-
-        from rich.console import Console
-        from rich.markup import escape
-
+    def print_logs(
+        named_logs: NamedLogs | list[NamedLogs],
+        follow: bool,
+        console: Console | None = None,
+        exit_event: threading.Event | None = None,
+    ):
         if isinstance(named_logs, Iterator):
             named_logs = list(named_logs)
         elif isinstance(named_logs, Kube.NamedLogs):
@@ -219,7 +249,7 @@ class Kube:
                     exit_event.set()
 
         colors = itertools.cycle(COLORS)
-        threads = []
+        threads: list[threading.Thread] = []
         for logs in named_logs:
             color = next(colors)
             t = threading.Thread(target=print_log, args=(logs, color), daemon=True)

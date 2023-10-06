@@ -7,7 +7,6 @@ import yaml
 from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import List
 from rich.console import Console
 from utils import get_main_config, Kube, COLORS
 
@@ -19,13 +18,14 @@ CONSOLE = Console()
 RegionInfo = namedtuple("RegionInfo", ["name", "color", "is_global"])
 
 
-def run_subprocess_and_print_log(cmd: List[str], info: RegionInfo, dry_run: bool):
+def run_subprocess_and_print_log(cmd: list[str], info: RegionInfo, dry_run: bool):
     CONSOLE.log(f"Running: {' '.join(cmd)}")
 
     if dry_run:
         return
 
     with subprocess.Popen(cmd, stdout=subprocess.PIPE) as proc:
+        assert proc.stdout is not None
         for line in proc.stdout:
             decoded = line.decode("utf-8").rstrip("\n")
             CONSOLE.print(
@@ -120,9 +120,8 @@ if __name__ == "__main__":
         raise ValueError(f"Unknown action: {args.action}")
 
     config = get_main_config(BASE_PATH)
-    regions = config["regions"]
     global_region = config["global_region"]
-    regions = set(regions)
+    regions = set(config["regions"])
     regions.add(global_region)
 
     colors = itertools.cycle(COLORS)

@@ -2,7 +2,6 @@ import argparse
 import json
 import time
 import threading
-import signal
 
 import kubernetes.client
 
@@ -10,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from utils import (
     Kube,
+    MainConfig,
     get_main_config,
     get_logger,
     get_namespaces,
@@ -21,7 +21,9 @@ LOG = get_logger(__name__)
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
 
 
-def run_benchmark(namespace, region, sets, delete_only, dry_run):
+def run_benchmark(
+    namespace: str, region: str, sets: list[str], delete_only: bool, dry_run: bool
+):
     with TemporaryFile() as helm_output:
         helm_cmd = [
             "helm",
@@ -88,7 +90,7 @@ def run_benchmark(namespace, region, sets, delete_only, dry_run):
         )
 
 
-def get_job_logs(namespace, region, job):
+def get_job_logs(namespace: str, region: str, job: str):
     kube_config = Kube.get_config(BASE_PATH, region)
     with kubernetes.client.ApiClient(kube_config) as api_client:
         batchv1 = kubernetes.client.BatchV1Api(api_client)
@@ -96,7 +98,7 @@ def get_job_logs(namespace, region, job):
         job_info = batchv1.read_namespaced_job(name=job, namespace=namespace)
         selector = job_info.spec.selector.match_labels
 
-    pods = []
+    pods: list[str] = []
     while len(pods) == 0:
         try:
             pods = Kube.get_pods(
@@ -138,8 +140,14 @@ def get_job_logs(namespace, region, job):
 
 
 class Operation:
+    config: MainConfig
+    namespaces: list[tuple[str, dict[str, str | int]]]
+    settings: list[str]
+    dry_run: bool
+    exit_event: threading.Event
+
     @classmethod
-    def run(cls, args, exit_event):
+    def run(cls, args, exit_event: threading.Event):
         cls.config = get_main_config(BASE_PATH)
         cls.namespaces = list(get_namespaces(cls.config).items())
         cls.namespaces.sort(key=lambda x: x[1]["id"])
@@ -328,7 +336,7 @@ class Delete(Operation):
         pass
 
 
-def main(args):
+def main(cmd_args: list[str]):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "operation",
@@ -359,7 +367,7 @@ def main(args):
         help="Only print the logs of the benchmark.",
     )
 
-    args = parser.parse_args(args)
+    args = parser.parse_args(cmd_args)
 
     exit_event = threading.Event()
 
@@ -380,10 +388,10 @@ def main(args):
     if not args.dry_run:
         exit_event.wait()
 
-    return args
+    return 0
 
 
 if __name__ == "__main__":
     import sys
 
-    args = main(sys.argv[1:])
+    exit(main(sys.argv[1:]))

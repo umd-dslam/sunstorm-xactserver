@@ -12,7 +12,6 @@ last saved point in case when the experiment is interrupted. On resuming, the
 successful cases will be skipped.
 """
 import argparse
-import itertools
 import json
 import logging
 import time
@@ -22,8 +21,10 @@ import yaml
 
 import benchmark
 
-from collections import namedtuple
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict, TypeAlias
+
 from rich.logging import RichHandler
 from rich.prompt import Confirm
 
@@ -39,7 +40,30 @@ LOG.addHandler(RichHandler())
 LOG.setLevel(logging.INFO)
 
 
-def load_experiment(exp_name: str):
+ParameterValue: TypeAlias = str | int | float | bool
+
+
+class NamedParameterValue(TypedDict):
+    name: str
+    value: ParameterValue
+
+
+class Experiment(TypedDict):
+    reload_every: int
+    benchmark: str
+    scalefactor: int
+    time: int
+    rate: int
+    parameters: dict[
+        str,
+        list[NamedParameterValue | ParameterValue]
+        | NamedParameterValue
+        | ParameterValue,
+    ]
+    order: list[str] | None
+
+
+def load_experiment(exp_name: str) -> tuple[Experiment, Path] | None:
     exp_path = EXPERIMENTS_PATH / f"{exp_name}.yaml"
     if not exp_path.exists():
         exp_path = EXPERIMENTS_PATH / f"{exp_name}.yml"
@@ -50,7 +74,7 @@ def load_experiment(exp_name: str):
         return yaml.safe_load(f), exp_path
 
 
-def benchmark_args(exp, prefix):
+def benchmark_args(exp: Experiment, prefix: str):
     """Generates the benchmark arguments for the given experiment
 
     Args:
@@ -75,7 +99,7 @@ def benchmark_args(exp, prefix):
         f"rate={rate}",
     ]
 
-    base_metadata = {
+    base_metadata: dict[str, ParameterValue] = {
         "benchmark": benchmark,
         "scalefactor": scalefactor,
         "time": time,
@@ -91,9 +115,14 @@ def benchmark_args(exp, prefix):
             f"The parameter names in order {order} does not those in parameters {parameters.keys()}"
         )
 
-    NamedValue = namedtuple("NamedValue", ["param", "name", "value"])
+    @dataclass
+    class NamedValue:
+        param: str
+        name: str
+        value: ParameterValue
+
     # List of named values for each param
-    named_param_values = []
+    named_param_values: list[list[NamedValue]] = []
     # Set of params that are included in the tag
     tag_params = set()
     for param in order:
@@ -101,8 +130,8 @@ def benchmark_args(exp, prefix):
         if not isinstance(values, list):
             values = [values]
 
-        # List of named value for the current param
-        named_values = []
+        # Give a name for every value of the param
+        named_values: list[NamedValue] = []
         for item in values:
             if isinstance(item, dict):
                 name = item["name"]
@@ -118,16 +147,22 @@ def benchmark_args(exp, prefix):
         if len(values) > 1:
             tag_params.add(param)
 
-    def sanitize(value):
+    def sanitize(value: ParameterValue):
         if isinstance(value, str):
             return value.replace(",", "\\,")
         return value
 
-    # Generate all combinations of the param values
-    for combination in itertools.product(*named_param_values):
-        workload_args = []
-        workload_metadata = {}
-        tag_parts = []
+    # Generate all combinations of the param values. This could be done with
+    # itertools.product, but it would lose the type information.
+    combinations: list[list[NamedValue]] = [[]]
+    for pool in named_param_values:
+        combinations = [x + [v] for x in combinations for v in pool]
+
+    # Generate the arguments and metadata for each combination
+    for combination in combinations:
+        workload_args: list[str] = []
+        workload_metadata: dict[str, ParameterValue] = {}
+        tag_parts: list[str] = []
 
         if prefix:
             tag_parts.append(prefix)
@@ -155,6 +190,8 @@ class Progress:
     PENDING = "pending"
     STATUSES = [DONE, ERROR, PENDING]
 
+    progress: list[dict]
+
     def __init__(self, path: Path):
         self.path = path
         self.progress = []
@@ -169,7 +206,7 @@ class Progress:
         self.path.parent.mkdir(exist_ok=True)
         pd.DataFrame(self.progress).to_csv(self.path, index=False)
 
-    def get_or_insert(self, metadata) -> dict:
+    def get_or_insert(self, metadata: dict[str, ParameterValue]):
         """Returns the status for the given metadata
 
         If the corresponding record does not exist, a new record for the
@@ -185,14 +222,15 @@ class Progress:
         record["status"] = self.PENDING
         self.progress.append(record)
         self.save()
+
         return record
 
 
-def header(fmt, *args):
+def header(fmt: str, *args):
     LOG.info(f"[b yellow]{fmt}[/]", *args, extra={"markup": True})
 
 
-def create_set_arg(args):
+def create_set_arg(args) -> list[str]:
     set_arg = []
     for s in args.set or []:
         set_arg += ["-s", s]
@@ -200,12 +238,13 @@ def create_set_arg(args):
 
 
 def main(args):
-    exp, exp_path = load_experiment(args.experiment)
-    if exp:
-        LOG.info("Using experiment file %s", exp_path)
-    else:
+    exp_and_path = load_experiment(args.experiment)
+    if not exp_and_path:
         LOG.error("No experiment file found for %s", args.experiment)
         return 1
+
+    exp, exp_path = exp_and_path
+    LOG.info("Using experiment file %s", exp_path)
 
     progress_file_name = f"{args.progress or args.experiment}.csv"
     progress = Progress(PROGRESS_PATH / progress_file_name)

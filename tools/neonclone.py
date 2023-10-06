@@ -6,7 +6,6 @@ import toml
 
 from functools import partial
 from pathlib import Path
-from typing import List, Optional
 
 from utils import get_logger
 
@@ -17,7 +16,7 @@ class CloneError(Exception):
     pass
 
 
-def update_inplace(prefix: str, d: dict, fn_or_val, path: List[str]):
+def update_inplace(prefix: str, d: dict, fn_or_val, path: list[str]):
     """Update a field in a nested dict in place
 
     Attributes:
@@ -59,7 +58,7 @@ def deep_copy_neon(src: Path, dst: Path):
     LOG.info(f"Cloned '.neon' to '{dst}/'")
 
 
-def edit_configs(ordinal: int, hostname: Optional[str], dst_neon: Path):
+def edit_configs(ordinal: int, hostname: str | None, dst_neon: Path):
     def change_addr(hostname_and_port: str) -> str:
         """Bumps the port by `ordinal` and replaces hostname"""
         nonlocal ordinal, hostname
@@ -148,7 +147,7 @@ def edit_safekeeper_ids(ordinal: int, dst_neon: Path):
         toml.dump(config, f)
 
 
-def clone_neon(src: str, dst: str, offset: int, hostname: Optional[str] = None):
+def clone_neon(src: str, dst: str, offset: int, hostname: str | None = None):
     # Clone the .neon directory
     dst_path = Path(dst)
     deep_copy_neon(Path(src), dst_path)
