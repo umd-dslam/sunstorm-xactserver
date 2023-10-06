@@ -251,8 +251,13 @@ class Progress:
         for res in self.progress:
             if metadata.items() <= res.items():
                 return res
-        record = metadata.copy()
-        record["status"] = self.PENDING
+
+        record: dict[str, ParameterValue] = { 
+            "status": self.PENDING,
+            "reloaded": False
+        }
+        record.update(metadata)
+
         self.progress.append(record)
         self.save()
 
@@ -342,6 +347,8 @@ def main(args):
                         if not args.dry_run:
                             time.sleep(DELAY_SECONDS)
 
+                        record["reloaded"] = True
+
                         reload_counter = reload_every
                     else:
                         header(
@@ -351,7 +358,8 @@ def main(args):
 
                 header("Running benchmark %s", json.dumps(metadata, indent=4))
 
-                benchmark.main(["execute"] + bm_args + set_arg + dry_run_arg)
+                result = benchmark.main(["execute"] + bm_args + set_arg + dry_run_arg)
+                record.update(result)
 
             except Exception as e:
                 record["status"] = Progress.ERROR

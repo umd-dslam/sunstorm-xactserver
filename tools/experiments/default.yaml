@@ -10,7 +10,7 @@ time: 10
 # The maximum transactions that can be sent per second
 rate: 10000
 # The number of data points between reloads of the database
-reload_every: 7
+reload_every: 15
 # Each parameter is a list of values, which will be combined in all possible ways. A value
 # can either be a literal value or an object with a "name" and "value" field. The latter way
 # of specifying the value should be used if the value is too long because all values will be

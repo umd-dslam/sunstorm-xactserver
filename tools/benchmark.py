@@ -8,6 +8,9 @@ import kubernetes.client
 
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from tempfile import TemporaryFile
+from typing import TypedDict
+
 from utils import (
     Kube,
     MainConfig,
@@ -16,7 +19,6 @@ from utils import (
     get_namespaces,
     run_subprocess,
 )
-from tempfile import TemporaryFile
 
 LOG = get_logger(__name__)
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
@@ -145,6 +147,11 @@ def get_job_logs(namespace: str, region: str, job: str):
     raise Exception(f'Could not get logs for job "{job}" in namespace "{namespace}"')
 
 
+class BenchmarkResult(TypedDict):
+    throughput: float
+    goodput: float
+
+
 class Operation:
     config: MainConfig
     namespaces: list[tuple[str, dict[str, str | int]]]
@@ -152,7 +159,7 @@ class Operation:
     dry_run: bool
 
     @classmethod
-    def run(cls, args):
+    def run(cls, args) -> BenchmarkResult | None:
         cls.config = get_main_config(BASE_PATH)
         cls.namespaces = list(get_namespaces(cls.config).items())
         cls.namespaces.sort(key=lambda x: x[1]["id"])
@@ -170,14 +177,16 @@ class Operation:
             cls.do()
 
         if not args.dry_run:
-            cls.log()
+            return cls.log()
+
+        return None
 
     @classmethod
     def do(cls):
         raise NotImplementedError()
 
     @classmethod
-    def log(cls):
+    def log(cls) -> BenchmarkResult | None:
         raise NotImplementedError()
 
 
@@ -193,18 +202,18 @@ class Create(Operation):
         )
 
     @classmethod
-    def log(cls):
+    def log(cls) -> BenchmarkResult | None:
         named_logs = Kube.NamedLogs(
             namespace="global",
             name="create",
             stream=get_job_logs("global", cls.config["global_region"], "create-load"),
         )
+
         exit_event = threading.Event()
-
         Kube.print_logs(named_logs, follow=True, exit_event=exit_event)
+        exit_event.wait()
 
-        if not cls.dry_run:
-            exit_event.wait()
+        return None
 
 
 class Load(Operation):
@@ -228,9 +237,8 @@ class Load(Operation):
                 )
 
     @classmethod
-    def log(cls):
+    def log(cls) -> BenchmarkResult | None:
         max_workers = len(cls.namespaces)
-        exit_event = threading.Event()
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             named_logs = executor.map(
                 lambda item: Kube.NamedLogs(
@@ -241,10 +249,11 @@ class Load(Operation):
                 cls.namespaces,
             )
 
+        exit_event = threading.Event()
         Kube.print_logs(named_logs, follow=True, exit_event=exit_event)
+        exit_event.wait()
 
-        if not cls.dry_run:
-            exit_event.wait()
+        return None
 
 
 class SLoad(Operation):
@@ -259,22 +268,22 @@ class SLoad(Operation):
         )
 
     @classmethod
-    def log(cls):
+    def log(cls) -> BenchmarkResult | None:
         named_logs = Kube.NamedLogs(
             namespace="global",
             name="sload",
             stream=get_job_logs("global", cls.config["global_region"], "create-load"),
         )
-        exit_event = threading.Event()
 
+        exit_event = threading.Event()
         Kube.print_logs(
             named_logs,
             follow=True,
             exit_event=exit_event,
         )
+        exit_event.wait()
 
-        if not cls.dry_run:
-            exit_event.wait()
+        return None
 
 
 class Execute(Operation):
@@ -299,7 +308,7 @@ class Execute(Operation):
                 )
 
     @classmethod
-    def log(cls):
+    def log(cls) -> BenchmarkResult | None:
         max_workers = len(cls.namespaces)
         exit_event = threading.Event()
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -314,8 +323,8 @@ class Execute(Operation):
 
         lock = threading.Lock()
         matched_logs = []
-        throughput = 0
-        goodput = 0
+        throughput = 0.0
+        goodput = 0.0
 
         pattern = re.compile(
             r"Rate limited reqs/s: Results\(.+\) = (\d+\.\d+|\d+) requests/sec \(throughput\), "
@@ -338,12 +347,11 @@ class Execute(Operation):
             named_logs, follow=True, callback=parse_and_add, exit_event=exit_event
         )
 
-        if not cls.dry_run:
-            exit_event.wait()
-            LOG.info(
-                "Throughput: %.2f req/s. Goodput: %.2f req/s ", throughput, goodput
-            )
-            LOG.info("\n".join(sorted(matched_logs)))
+        exit_event.wait()
+        LOG.info("Throughput: %.2f req/s. Goodput: %.2f req/s ", throughput, goodput)
+        LOG.info("\n".join(sorted(matched_logs)))
+
+        return {"throughput": throughput, "goodput": goodput}
 
 
 class Delete(Operation):
@@ -378,11 +386,11 @@ class Delete(Operation):
                 )
 
     @classmethod
-    def log(cls):
-        pass
+    def log(cls) -> BenchmarkResult | None:
+        return None
 
 
-def main(cmd_args: list[str]):
+def main(cmd_args: list[str]) -> BenchmarkResult:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "operation",
@@ -415,23 +423,24 @@ def main(cmd_args: list[str]):
 
     args = parser.parse_args(cmd_args)
 
+    result = None
     if args.operation == "create":
-        Create.run(args)
+        result = Create.run(args)
     elif args.operation == "sload":
-        SLoad.run(args)
+        result = SLoad.run(args)
     elif args.operation == "load":
-        Load.run(args)
+        result = Load.run(args)
     elif args.operation == "execute":
-        Execute.run(args)
+        result = Execute.run(args)
     elif args.operation == "delete":
-        Delete.run(args)
+        result = Delete.run(args)
     else:
         raise ValueError(f"Unknown operation: {args.operation}")
 
-    return 0
+    return result or {"throughput": 0, "goodput": 0}
 
 
 if __name__ == "__main__":
     import sys
 
-    exit(main(sys.argv[1:]))
+    main(sys.argv[1:])
