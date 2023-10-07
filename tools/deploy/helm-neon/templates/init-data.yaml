@@ -18,7 +18,7 @@ spec:
           args:
             - |
               # Generate the base data for the cluster
-              python3 /tools/neonctl.py   \
+              python3.12 /tools/neonctl.py   \
                 --neon-dir /usr/local/bin \
                 --pg-dir /usr/local       \
                 create .                  \
