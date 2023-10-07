@@ -17,10 +17,12 @@ import logging
 import time
 
 import pandas as pd
+import minio
 import yaml
 
 import benchmark
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TypedDict, TypeAlias
 
@@ -262,6 +264,49 @@ class Progress:
         self.save()
 
         return record
+    
+
+class ResultCollector:
+    thread_pool: ThreadPoolExecutor | None
+
+    def __init__(self, path: Path, minio_address: str, dry_run: bool):
+        self.path = path
+        self.thread_pool = None
+        self.dry_run = dry_run
+        self.minio = minio.Minio(
+            minio_address,
+            access_key="minioadmin",
+            secret_key="minioadmin",
+            secure=False,
+        )
+
+    def check_connection(self):
+        try:
+            self.minio.list_buckets()
+        except Exception as e:
+            LOG.exception("Failed to connect to MinIO", exc_info=e)
+            return False
+
+        return True
+
+    def submit(self, tag: str):
+        if not self.dry_run:
+            if not self.thread_pool:
+                self.thread_pool = ThreadPoolExecutor()
+            self.thread_pool.submit(self._collect, tag)
+
+    def _collect(self, tag: str):
+        LOG.info("Collecting the result files for \"%s\"", tag)
+        try:
+            objects = self.minio.list_objects("results", prefix=tag, recursive=True)
+            for obj in objects:
+                obj_path = self.path / obj.object_name
+                obj_path.parent.mkdir(parents=True, exist_ok=True)
+                self.minio.fget_object("results", obj.object_name, obj_path)
+
+            LOG.info("Saved result files in %s", self.path / tag)
+        except Exception as e:
+            LOG.exception(e)
 
 
 def header(fmt: str, *args):
@@ -310,12 +355,22 @@ def main(args):
     main_config = get_main_config(BASE_PATH / "deploy")
     LOG.info("Using main config %s", json.dumps(main_config, indent=4))
 
+    collector = None
+    if args.output:
+        collector = ResultCollector(Path(args.output), args.minio, args.dry_run)
+        LOG.info("Results will be collected to \"%s\"", collector.path)
+
     if not args.y and not Confirm.ask("Start the benchmark?", default=True):
         return 0
 
     #########################
     #   Run the benchmarks  #
     #########################
+    if collector:
+        LOG.info("Checking the connection to MinIO")
+        if not collector.check_connection():
+            return 1
+
     set_arg = create_set_arg(args)
     dry_run_arg = ["--dry-run"] if args.dry_run else []
     reload_counter = 0
@@ -361,6 +416,9 @@ def main(args):
                 result = benchmark.main(["execute"] + bm_args + set_arg + dry_run_arg)
                 record.update(result)
 
+                if collector:
+                    collector.submit(metadata["tag"])
+
             except Exception as e:
                 record["status"] = Progress.ERROR
                 LOG.exception(e)
@@ -405,9 +463,19 @@ if __name__ == "__main__":
         help="Skip the confirmation prompt",
     )
     parser.add_argument(
+        "--output",
+        "-o",
+        help="Path to store the results. If not specified, the results will not be collected",
+    )
+    parser.add_argument(
         "--skip-create-load",
         action="store_true",
         help="Skip the create and load steps",
+    )
+    parser.add_argument(
+        "--minio",
+        default="localhost:9000",
+        help="The address of the MinIO server",
     )
     args = parser.parse_args()
 
