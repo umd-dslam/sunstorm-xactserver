@@ -17,8 +17,8 @@ managedNodeGroups:
   - name: servers
     subnets:
       - us-east-1a
-    # spot: true
-    instanceType: c5.4xlarge
+    spot: false
+    instanceType: r5.4xlarge
     desiredCapacity: 1
     securityGroups:
       attachIDs:
@@ -29,8 +29,7 @@ managedNodeGroups:
   - name: hub
     subnets:
       - us-east-1b
-    # spot: true
-    instanceType: c5.4xlarge
+    instanceType: c5.2xlarge
     desiredCapacity: 1
     securityGroups:
       attachIDs:
@@ -41,8 +40,8 @@ managedNodeGroups:
   # - name: safekeepers
   #   subnets:
   #     - us-east-1a
-  #   spot: true
-  #   instanceType: c5.2xlarge
+  #   spot: false
+  #   instanceType: c5.xlarge
   #   desiredCapacity: 1
   #   securityGroups:
   #     attachIDs:
@@ -53,8 +52,8 @@ managedNodeGroups:
   - name: clients
     subnets:
       - us-east-1a
-    # spot: true
-    instanceType: c5.2xlarge
+    spot: false
+    instanceType: c5.xlarge
     desiredCapacity: 1
     securityGroups:
       attachIDs:
@@ -63,17 +62,17 @@ managedNodeGroups:
       role: client
       region: us-east-1
 
-iam:
-  withOIDC: true
-  serviceAccounts:
-    - metadata:
-        name: ebs-csi-controller-sa
-        namespace: kube-system
-      roleName: AmazonEKS_EBS_CSI_DriverRole
-      roleOnly: true
-      wellKnownPolicies:
-        ebsCSIController: true
+# iam:
+#   withOIDC: true
+#   serviceAccounts:
+#     - metadata:
+#         name: ebs-csi-controller-sa
+#         namespace: kube-system
+#       roleName: AmazonEKS_EBS_CSI_DriverRole
+#       roleOnly: true
+#       wellKnownPolicies:
+#         ebsCSIController: true
 
-addons:
-  - name: aws-ebs-csi-driver
-    serviceAccountRoleARN: arn:aws:iam::970400548469:role/AmazonEKS_EBS_CSI_DriverRole
+# addons:
+#   - name: aws-ebs-csi-driver
+#     serviceAccountRoleARN: arn:aws:iam::970400548469:role/AmazonEKS_EBS_CSI_DriverRole

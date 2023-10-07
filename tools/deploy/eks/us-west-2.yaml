@@ -18,8 +18,8 @@ managedNodeGroups:
   - name: servers
     subnets:
       - us-west-2a
-    instanceType: c5.4xlarge
-    # spot: true
+    instanceType: r5.4xlarge
+    spot: false
     desiredCapacity: 1
     securityGroups:
       attachIDs:
@@ -30,7 +30,8 @@ managedNodeGroups:
   # - name: safekeepers
   #   subnets:
   #     - us-west-2a
-  #   instanceType: c5.2xlarge
+  #   spot: false
+  #   instanceType: c5.xlarge
   #   spot: true
   #   desiredCapacity: 1
   #   securityGroups:
@@ -42,8 +43,8 @@ managedNodeGroups:
   - name: clients
     subnets:
       - us-west-2a
-    instanceType: c5.2xlarge
-    # spot: true
+    instanceType: c5.xlarge
+    spot: false
     desiredCapacity: 1
     securityGroups:
       attachIDs:

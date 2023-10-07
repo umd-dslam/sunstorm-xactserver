@@ -97,26 +97,31 @@ spec:
                     operator: In
                     values:
                       - safekeeper
-        podAntiAffinity:
-          # We prefer that safekeeper pods are not scheduled on the same node.
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 1
-              podAffinityTerm:
-                labelSelector:
-                  matchExpressions:
-                    - key: app
-                      operator: In
-                      values:
-                        - safekeeper
-                      {{- if ne .Release.Namespace "global" }}
-                        - pageserver
-                        - xactserver  
-                        - compute
-                      {{- end }}
-                topologyKey: "kubernetes.io/hostname"
-        {{- if eq .Release.Namespace "global" }}
+            - weight: 90
+              preference:
+                matchExpressions:
+                  - key: role
+                    operator: In
+                    values:
+                      - server
+        # podAntiAffinity:
+        #   # We prefer that safekeeper pods are not scheduled on the same node.
+        #   preferredDuringSchedulingIgnoredDuringExecution:
+        #     - weight: 1
+        #       podAffinityTerm:
+        #         labelSelector:
+        #           matchExpressions:
+        #             - key: app
+        #               operator: In
+        #               values:
+        #                 - safekeeper
+        #               {{- if ne .Release.Namespace "global" }}
+        #                 - pageserver
+        #                 - xactserver  
+        #                 - compute
+        #               {{- end }}
+        #         topologyKey: "kubernetes.io/hostname"
         podAffinity:
-          # Colocate safekeeper with the pageserver if this is a global region
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchExpressions:
@@ -125,4 +130,3 @@ spec:
                     values:
                       - pageserver
               topologyKey: "kubernetes.io/hostname"
-        {{- end }}
