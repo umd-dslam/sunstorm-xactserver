@@ -50,7 +50,7 @@ spec:
               value: {{ include "safekeeperNodes" . }}
           command:
             - /bin/sh
-            - -c
+            - -ecx
           args:
             - |
               {{- .Files.Get "compute.sh" | indent 14 }}

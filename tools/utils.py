@@ -246,7 +246,7 @@ class Kube:
                 if callback:
                     callback(name, decoded)
                 console.print(
-                    f"[bold]\[{name}][/bold] {escape(decoded)}",
+                    f"[bold]\\[{name}][/bold] {escape(decoded)}",
                     style=color,
                     highlight=False,
                 )

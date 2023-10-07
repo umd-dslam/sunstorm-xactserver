@@ -14,7 +14,7 @@ spec:
           image: ghcr.io/umd-dslam/benchbase:latest
           command:
             - /bin/sh
-            - -c
+            - -ecx
           args:
             - /benchbase/entrypoint.sh --bench {{ .Values.benchmark }} --config /config/config.xml --{{ .Values.operation }}=true
           volumeMounts:

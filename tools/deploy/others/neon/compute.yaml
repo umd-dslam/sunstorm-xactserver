@@ -54,7 +54,7 @@ spec:
           image: neondatabase/compute-node-v14:3556
           command:
             - /bin/sh
-            - -c
+            - -ecx
           args:
             - |
               echo "host all all all trust" >> /data/compute/pg_hba.conf

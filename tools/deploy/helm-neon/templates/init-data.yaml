@@ -14,7 +14,7 @@ spec:
           image: ctring/neonctl:latest
           command:
             - /bin/sh
-            - -c
+            - -ecx
           args:
             - |
               # Generate the base data for the cluster

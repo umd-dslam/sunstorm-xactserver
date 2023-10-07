@@ -44,7 +44,7 @@ spec:
           image: neondatabase/neon:3556
           command:
             - /bin/sh
-            - -c
+            - -ecx
           args:
             - |
               /usr/local/bin/pageserver -D /data/.neon/                                     \

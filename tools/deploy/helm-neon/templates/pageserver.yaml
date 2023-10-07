@@ -42,7 +42,7 @@ spec:
           image: ctring/neon:latest
           command:
             - /bin/sh
-            - -c
+            - -ecx
           args:
             - |
               until (/usr/bin/mc alias set minio http://hub.global:9000 minioadmin minioadmin) do
