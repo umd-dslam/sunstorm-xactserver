@@ -267,11 +267,9 @@ class Progress:
     
 
 class ResultCollector:
-    thread_pool: ThreadPoolExecutor | None
 
     def __init__(self, path: Path, minio_address: str, dry_run: bool):
         self.path = path
-        self.thread_pool = None
         self.dry_run = dry_run
         self.minio = minio.Minio(
             minio_address,
@@ -279,6 +277,7 @@ class ResultCollector:
             secret_key="minioadmin",
             secure=False,
         )
+        self.thread_pool = ThreadPoolExecutor()
 
     def check_connection(self):
         try:
@@ -291,18 +290,24 @@ class ResultCollector:
 
     def submit(self, tag: str):
         if not self.dry_run:
-            if not self.thread_pool:
-                self.thread_pool = ThreadPoolExecutor()
             self.thread_pool.submit(self._collect, tag)
 
     def _collect(self, tag: str):
         LOG.info("Collecting the result files for \"%s\"", tag)
         try:
-            objects = self.minio.list_objects("results", prefix=tag, recursive=True)
-            for obj in objects:
-                obj_path = self.path / obj.object_name
-                obj_path.parent.mkdir(parents=True, exist_ok=True)
-                self.minio.fget_object("results", obj.object_name, obj_path)
+            regions = [
+                obj.object_name for obj in
+                self.minio.list_objects("results", prefix=f"{tag}/")
+            ]
+
+            def collect_region(region):
+                objects = self.minio.list_objects("results", prefix=region, recursive=True)
+                for obj in objects:
+                    obj_path = self.path / obj.object_name
+                    obj_path.parent.mkdir(parents=True, exist_ok=True)
+                    self.minio.fget_object("results", obj.object_name, obj_path)
+            
+            list(self.thread_pool.map(collect_region, regions))
 
             LOG.info("Saved result files in %s", self.path / tag)
         except Exception as e:
