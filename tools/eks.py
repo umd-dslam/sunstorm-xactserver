@@ -8,6 +8,7 @@ from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from rich.console import Console
+from rich.prompt import Confirm
 from utils import get_main_config, Kube, COLORS
 
 
@@ -115,6 +116,8 @@ if __name__ == "__main__":
     if args.action == "create":
         action_fn = create_eks_cluster
     elif args.action == "delete":
+        if not Confirm.ask(f"Do you want to delete the EKS clusters?", default=False):
+            exit(0)
         action_fn = delete_eks_cluster
     else:
         raise ValueError(f"Unknown action: {args.action}")
