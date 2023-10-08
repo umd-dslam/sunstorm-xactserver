@@ -15,6 +15,7 @@ import argparse
 import json
 import logging
 import time
+import threading
 
 import pandas as pd
 import minio
@@ -278,6 +279,9 @@ class ResultCollector:
             secure=False,
         )
         self.thread_pool = ThreadPoolExecutor()
+        self.in_progress_count = 0
+        self.in_progress_cv = threading.Condition()
+
 
     def check_connection(self):
         try:
@@ -292,9 +296,20 @@ class ResultCollector:
         if not self.dry_run:
             self.thread_pool.submit(self._collect, tag)
 
+        
+    def join(self):
+        with self.in_progress_cv:
+            while self.in_progress_count > 0:
+                self.in_progress_cv.wait()
+
+        self.thread_pool.shutdown()
+
     def _collect(self, tag: str):
         LOG.info("Collecting the result files for \"%s\"", tag)
         try:
+            with self.in_progress_cv:
+                self.in_progress_count += 1
+
             regions = [
                 obj.object_name for obj in
                 self.minio.list_objects("results", prefix=f"{tag}/")
@@ -310,6 +325,10 @@ class ResultCollector:
             list(self.thread_pool.map(collect_region, regions))
 
             LOG.info("Saved result files in %s", self.path / tag)
+
+            with self.in_progress_cv:
+                self.in_progress_count -= 1
+                self.in_progress_cv.notify_all()
         except Exception as e:
             LOG.exception(e)
 
@@ -339,7 +358,7 @@ def main(args):
 
     progress_file_name = f"{args.progress or args.experiment}.csv"
     progress = Progress(PROGRESS_PATH / progress_file_name)
-    if args.cont and progress.load():
+    if progress.load() and not args.new:
         LOG.info(
             "[b yellow]Continuing[/] from %s", progress.path, extra={"markup": True}
         )
@@ -435,6 +454,9 @@ def main(args):
             progress.save()
             LOG.info(f"Progress written to {progress.path}")
 
+    if collector:
+        collector.join()
+
     return 0
 
 
@@ -456,11 +478,10 @@ if __name__ == "__main__":
     parser.add_argument("--progress", help="Progress file name")
     parser.add_argument("--dry-run", action="store_true", help="Dry run")
     parser.add_argument(
-        "--continue",
-        "-c",
-        dest="cont",
+        "--new",
+        "-n",
         action="store_true",
-        help="If set, continue from the last saved ouput file if exists",
+        help="If set, ignore the existing progress file and start a new one",
     )
     parser.add_argument(
         "-y",

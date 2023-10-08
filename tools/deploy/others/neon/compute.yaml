@@ -57,7 +57,6 @@ spec:
             - -ecx
           args:
             - |
-              echo "host all all all trust" >> /data/compute/pg_hba.conf
               echo "Start compute node"
               /usr/local/bin/compute_ctl --pgdata /data/compute \
                   -C "postgresql://cloud_admin@localhost:55433/postgres"  \

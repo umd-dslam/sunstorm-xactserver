@@ -180,7 +180,7 @@ data:
                 },
                 {
                     "name": "max_pred_locks_per_transaction",
-                    "value": "256",
+                    "value": "512",
                     "vartype": "integer"
                 }
             ]

@@ -58,7 +58,7 @@ spec:
             - -c
             - temp_buffers=4096
             - -c
-            - max_pred_locks_per_transaction=256
+            - max_pred_locks_per_transaction=512
           volumeMounts:
             - name: data
               mountPath: /data

@@ -29,7 +29,7 @@ def run_subprocess_and_print_log(cmd: list[str], info: RegionInfo, dry_run: bool
         for line in proc.stdout:
             decoded = line.decode("utf-8").rstrip("\n")
             CONSOLE.print(
-                f"[bold]\[{info.name}][/bold] {decoded}",
+                f"[bold]\\[{info.name}][/bold] {decoded}",
                 style=info.color,
                 highlight=False,
             )
