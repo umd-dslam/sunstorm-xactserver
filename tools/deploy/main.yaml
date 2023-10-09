@@ -10,6 +10,15 @@ regions:
   us-west-1:
     id: 3
     context: minikube
+  us-west-2:
+    id: 4
+    context: minikube
+  eu-west-1:
+    id: 5
+    context: minikube
+  eu-west-2:
+    id: 6
+    context: minikube
 
 # The region that contains the global resources. This region can
 # be one of the regions listed above, or a different region.
@@ -18,4 +27,4 @@ global_region: us-east-1
 
 # EBS volume ID to store global data like metrics, minio, etc.
 # No EBS volume will be used if this is not set. 
-# hub_ebs_volume_id: vol-045f146f990cbcaa4
+# hub_ebs_volume_id: vol-xxxxxxxxxxxxxxxxx

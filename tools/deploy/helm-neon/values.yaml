@@ -20,3 +20,18 @@ ordered_namespaces:
   - us-east-1
 
 namespace_id: 0
+
+compute:
+  shared_buffers: 8GB
+  temp_buffers: 128MB
+  max_connections: 100
+  max_prepared_transactions: 128
+  max_pred_locks_per_transaction: 256
+
+# r5.4xlarge (16 vCPUs, 128 GB RAM)
+# compute:
+#   shared_buffers: 64GB
+#   temp_buffers: 2GB
+#   max_connections: 500
+#   max_prepared_transactions: 256
+#   max_pred_locks_per_transaction: 1024

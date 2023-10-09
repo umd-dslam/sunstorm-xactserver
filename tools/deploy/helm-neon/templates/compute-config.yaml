@@ -55,12 +55,12 @@ data:
                 },
                 {
                     "name": "shared_buffers",
-                    "value": "8GB",
+                    "value": "{{ .Values.compute.shared_buffers }}",
                     "vartype": "string"
                 },
                 {
                     "name": "max_connections",
-                    "value": "100",
+                    "value": "{{ .Values.compute.max_connections }}",
                     "vartype": "integer"
                 },
                 {
@@ -145,7 +145,7 @@ data:
                 },
                 {
                     "name": "max_prepared_transactions",
-                    "value": "128",
+                    "value": "{{ .Values.compute.max_prepared_transactions }}",
                     "vartype": "integer"
                 },
                 {
@@ -165,7 +165,7 @@ data:
                 },
                 {
                     "name": "temp_buffers",
-                    "value": "4096",
+                    "value": "{{ .Values.compute.temp_buffers }}",
                     "vartype": "integer"
                 },
                 {
@@ -180,7 +180,7 @@ data:
                 },
                 {
                     "name": "max_pred_locks_per_transaction",
-                    "value": "512",
+                    "value": "{{ .Values.compute.max_pred_locks_per_transaction }}",
                     "vartype": "integer"
                 }
             ]
