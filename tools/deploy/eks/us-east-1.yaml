@@ -29,6 +29,7 @@ managedNodeGroups:
   - name: hub
     subnets:
       - us-east-1b
+    spot: false
     instanceType: c5.2xlarge
     desiredCapacity: 1
     securityGroups:
