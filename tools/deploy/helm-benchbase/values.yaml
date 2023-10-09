@@ -25,6 +25,8 @@ hot:
   weights: 100,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
   # Number of keys per transaction
   keyspertxn: 12
+  # The maximum number of keys to select in scanning queries
+  maxscancount: 50
 
 #---------------------------------------------------------------------------
 #       The following values are modified by the benchmark.py tool

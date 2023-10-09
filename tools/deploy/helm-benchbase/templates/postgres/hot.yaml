@@ -37,6 +37,8 @@ data:
         <hot>{{ .Values.hot.hot }}</hot>
         <!-- Number of keys per transaction -->
         <keyspertxn>{{ .Values.hot.keyspertxn }}</keyspertxn>
+        <!-- The maximum number of keys to select in scanning queries -->
+        <maxscancount>{{ .Values.hot.maxscancount }}</maxscancount>
 
         <!-- The workload -->
         <terminals>{{ .Values.terminals }}</terminals>

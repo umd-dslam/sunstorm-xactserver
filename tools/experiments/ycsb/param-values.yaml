@@ -1,5 +1,6 @@
 terminals: null
 hot.keyspertxn: 12
+hot.maxscancount: 50
 hot.hot: 0
 # The multi-region transactions are spread over the number of regions following the 80/20 rule.
 # Precisely, their weights are generated under the generalized zipfian distribution with a = 2.7.

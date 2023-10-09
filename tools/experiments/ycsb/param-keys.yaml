@@ -2,4 +2,5 @@
   always_used_in_tag: true
 - hot.weights
 - hot.keyspertxn
+- hot.maxscancount
 - terminals
