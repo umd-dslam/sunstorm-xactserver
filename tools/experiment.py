@@ -59,8 +59,10 @@ class NameOnlyParameterValue(TypedDict):
     name: str
 
 
+ReplaceCondition: TypeAlias = dict[str, ParameterValue | NamedParameterValue]
+
 class Replace(TypedDict):
-    match: list[dict[str, ParameterValue | NamedParameterValue]]
+    match: list[ReplaceCondition]
     set: dict[str, ParameterValue]
 
 
@@ -80,26 +82,17 @@ class Experiment(TypedDict):
     replace: list[Replace] | None
 
 
-def load_experiment(exp_name: str) -> tuple[Experiment, Path] | None:
-    exp_path = EXPERIMENTS_PATH / f"{exp_name}.yaml"
-    if not exp_path.exists():
-        exp_path = EXPERIMENTS_PATH / f"{exp_name}.yml"
-    if not exp_path.exists():
-        return None
-
-    with open(exp_path) as f:
-        return yaml.safe_load(f), exp_path
-
-
 def replace_values(
     replacements: list[Replace], named_values: dict[str, NamedParameterValue]
 ):
     for replace in replacements:
-        if not isinstance(replace["match"], list):
-            raise ValueError("replace.match must be a list of OR-ed conditions")
+        conditions: list[ReplaceCondition] = replace.get("match") or []
+        if not isinstance(conditions, list):
+            raise ValueError("replace.match must be empty or a list of OR-ed conditions")
 
-        match_or = False
-        for and_clause in replace["match"]:
+        # If there are no conditions, the replacement will be applied to all
+        match_or = len(conditions) == 0
+        for and_clause in conditions:
             match_and = True
             for param, value in and_clause.items():
                 if param not in named_values:
@@ -348,6 +341,33 @@ class ResultCollector:
                 self.in_progress_cv.notify_all()
         except Exception as e:
             LOG.exception(e)
+
+
+def load_experiment(exp_name: str) -> tuple[Experiment, Path] | None:
+    """Loads the experiment file"""
+
+    class Loader(yaml.SafeLoader):
+        """A YAML loader that supports !include directive"""
+        def __init__(self, stream):
+            self._root = Path(stream.name).parent
+            super().__init__(stream)
+
+        def include(self, node):
+            filename = self.construct_scalar(node)
+            path = self._root / filename
+            with open(path, "r") as f:
+                return yaml.load(f, Loader)
+
+    Loader.add_constructor("!include", Loader.include)
+
+    exp_path = EXPERIMENTS_PATH / f"{exp_name}.yaml"
+    if not exp_path.exists():
+        exp_path = EXPERIMENTS_PATH / f"{exp_name}.yml"
+    if not exp_path.exists():
+        return None
+
+    with open(exp_path) as f:
+        return yaml.load(f, Loader), exp_path
 
 
 def header(fmt: str, *args):

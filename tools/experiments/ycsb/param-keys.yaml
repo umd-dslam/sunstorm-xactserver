@@ -1,0 +1,5 @@
+- name: hot.hot
+  always_used_in_tag: true
+- hot.weights
+- hot.keyspertxn
+- terminals
