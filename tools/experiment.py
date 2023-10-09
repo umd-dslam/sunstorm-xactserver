@@ -23,6 +23,7 @@ import yaml
 
 import benchmark
 
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TypedDict, TypeAlias
@@ -44,6 +45,10 @@ LOG.setLevel(logging.INFO)
 
 ParameterValue: TypeAlias = str | int | float | bool
 
+class ParameterKey(TypedDict):
+    name: str
+    always_used_in_tag: bool
+
 
 class NamedParameterValue(TypedDict):
     name: str
@@ -55,7 +60,7 @@ class NameOnlyParameterValue(TypedDict):
 
 
 class Replace(TypedDict):
-    match: dict[str, ParameterValue | NamedParameterValue]
+    match: list[dict[str, ParameterValue | NamedParameterValue]]
     set: dict[str, ParameterValue]
 
 
@@ -65,13 +70,13 @@ class Experiment(TypedDict):
     scalefactor: int
     time: int
     rate: int
-    parameters: dict[
+    param_keys: list[str | ParameterKey]
+    param_values: dict[
         str,
         list[NamedParameterValue | ParameterValue | None]
         | NamedParameterValue
         | ParameterValue,
     ]
-    order: list[str] | None
     replace: list[Replace] | None
 
 
@@ -90,22 +95,28 @@ def replace_values(
     replacements: list[Replace], named_values: dict[str, NamedParameterValue]
 ):
     for replace in replacements:
-        is_matched = True
-        for param, value in replace["match"].items():
-            if param not in named_values:
-                raise ValueError(f"Unknown parameter \"{param}\" specified in replace.match")
-            if isinstance(value, dict):
-                if value["name"] != named_values[param]["name"]:
-                    is_matched = False
-                    break
-            elif value != named_values[param]["value"]:
-                is_matched = False
-                break
+        if not isinstance(replace["match"], list):
+            raise ValueError("replace.match must be a list of OR-ed conditions")
 
-        if is_matched:
+        match_or = False
+        for and_clause in replace["match"]:
+            match_and = True
+            for param, value in and_clause.items():
+                if param not in named_values:
+                    raise ValueError(f'Unknown parameter "{param}" specified in replace.match')
+                if isinstance(value, dict):
+                    if value["name"] != named_values[param]["name"]:
+                        match_and = False
+                        break
+                elif value != named_values[param]["value"]:
+                    match_and = False
+                    break
+            match_or = match_or or match_and
+
+        if match_or:
             for param, value in replace["set"].items():
                 if param not in named_values:
-                    raise ValueError(f"Unknown parameter \"{param}\" specified in replace.set")
+                    raise ValueError(f'Unknown parameter "{param}" specified in replace.set')
                 named_values[param] = {
                     "name": named_values[param]["name"],
                     "value": value,
@@ -144,18 +155,23 @@ def benchmark_args(exp: Experiment, prefix: str):
         "rate": rate,
     }
 
-    parameters = exp["parameters"]
+    param_keys = OrderedDict()
+    for param_key in exp["param_keys"]:
+        if isinstance(param_key, str):
+            param_keys[param_key] = {"always_used_in_tag": False}
+        else:
+            param_keys[param_key["name"]] = {"always_used_in_tag": param_key["always_used_in_tag"]}
 
-    # Get the order of iteration of the parameters
-    order = exp.get("order", None) or sorted(parameters.keys())
-    if set(order) != set(parameters.keys()):
+    param_values = exp["param_values"]
+
+    if param_keys.keys() != param_values.keys():
         raise ValueError(
-            f"The parameter names in order {order} does not those in parameters {parameters.keys()}"
+            f'The parameters in param_values do not match those in param_keys'
         )
 
     named_parameters: dict[str, list[NamedParameterValue]] = {}
     tag_params = set()
-    for param, values in parameters.items():
+    for param, values in param_values.items():
         if not isinstance(values, list):
             values = [values]
 
@@ -170,15 +186,16 @@ def benchmark_args(exp: Experiment, prefix: str):
                 value = value
             named_values.append({"name": name, "value": value})
 
-        # Only include in the tag the params with more than one values
-        if len(values) > 1:
+        # Only include in the tag the params with more than one values or the
+        # params that are specified to always be used in the tag
+        if len(values) > 1 or param_keys[param]["always_used_in_tag"]:
             tag_params.add(param)
 
         named_parameters[param] = named_values
 
     # Generate all combinations of the param values
     combinations: list[dict[str, NamedParameterValue]] = [{}]
-    for param in order:
+    for param in param_keys.keys():
         combinations = [
             {**x, param: v} for x in combinations for v in named_parameters[param]
         ]
@@ -203,7 +220,7 @@ def benchmark_args(exp: Experiment, prefix: str):
         # Build the workload arguments, metadata, and tag
         for param, named_value in combination.items():
             if named_value["value"] is None:
-                raise ValueError(f"Combination {combination} has a None value for \"{param}\"")
+                raise ValueError(f'Combination {combination} has a None value for "{param}"')
 
             workload_args += [
                 "-s",
@@ -305,7 +322,7 @@ class ResultCollector:
         self.thread_pool.shutdown()
 
     def _collect(self, tag: str):
-        LOG.info("Collecting the result files for \"%s\"", tag)
+        LOG.info('Collecting the result files for "%s"', tag)
         try:
             with self.in_progress_cv:
                 self.in_progress_count += 1
@@ -358,7 +375,7 @@ def main(args):
 
     progress_file_name = f"{args.progress or args.experiment}.csv"
     progress = Progress(PROGRESS_PATH / progress_file_name)
-    if progress.load() and not args.new:
+    if not args.new and progress.load():
         LOG.info(
             "[b yellow]Continuing[/] from %s", progress.path, extra={"markup": True}
         )
@@ -382,7 +399,7 @@ def main(args):
     collector = None
     if args.output:
         collector = ResultCollector(Path(args.output), args.minio, args.dry_run)
-        LOG.info("Results will be collected to \"%s\"", collector.path)
+        LOG.info('Results will be collected to "%s"', collector.path)
 
     if not args.y and not Confirm.ask("Start the benchmark?", default=True):
         return 0

@@ -3,7 +3,12 @@ benchmark: hot
 scalefactor: 1000
 time: 15
 rate: 50000
-parameters:
+param_keys:
+  - hot.weights
+  - terminals
+  - hot.keyspertxn
+  - hot.hot
+param_values:
   terminals: [1, 8, 16, 24, 32, 48, 64, 80]
   hot.keyspertxn: 12
   hot.hot: 0
@@ -18,8 +23,3 @@ parameters:
       value: 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 100,0,0,0,0,0, 0,0,0,0,0,0
     - name: F
       value: 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 100,0,0,0,0,0
-order:
-  - hot.weights
-  - terminals
-  - hot.keyspertxn
-  - hot.hot
