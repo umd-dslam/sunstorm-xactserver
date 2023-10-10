@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from itertools import repeat
 from pathlib import Path
 
-from kubernetes.client.rest import ApiException
+from kubernetes.client.rest import ApiException # type: ignore
 from rich.console import Console
 from utils import (
     Kube,
@@ -65,7 +65,7 @@ def set_up_load_balancer_for_coredns(config: MainConfig, dry_run: bool):
                 "kubectl",
                 "apply",
                 "-f",
-                (BASE_PATH / "eks" / "dns-lb-eks.yaml").as_posix(),
+                (BASE_PATH / "dns-lb.yaml").as_posix(),
             ]
             + context_flag(region),
             (LOG, f"Creating load balancer for CoreDNS in region {region}."),

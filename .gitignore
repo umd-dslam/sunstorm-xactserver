@@ -10,5 +10,5 @@ venv/
 
 *.log
 
-tools/progress/
+tools/workspace/
 results/

@@ -12,44 +12,75 @@ from rich.prompt import Confirm
 from utils import get_main_config, Kube, COLORS
 
 
-BASE_PATH = Path(__file__).parent.resolve() / "deploy"
+BASE_PATH = Path(__file__).parent.resolve()
+WORKSPACE_PATH = BASE_PATH / "workspace"
 
 CONSOLE = Console()
 
 RegionInfo = namedtuple("RegionInfo", ["name", "color", "is_global"])
 
 
-def run_subprocess_and_print_log(cmd: list[str], info: RegionInfo, dry_run: bool):
+def run_subprocess(
+    cmd: list[str], info: RegionInfo, print_log: bool = True, dry_run: bool = False
+):
     CONSOLE.log(f"Running: {' '.join(cmd)}")
 
     if dry_run:
-        return
+        return []
 
+    stdout = []
     with subprocess.Popen(cmd, stdout=subprocess.PIPE) as proc:
         assert proc.stdout is not None
         for line in proc.stdout:
             decoded = line.decode("utf-8").rstrip("\n")
-            CONSOLE.print(
-                f"[bold]\\[{info.name}][/bold] {decoded}",
-                style=info.color,
-                highlight=False,
-            )
+            if print_log:
+                CONSOLE.print(
+                    f"[bold]\\[{info.name}][/bold] {decoded}",
+                    style=info.color,
+                    highlight=False,
+                )
+            stdout.append(decoded)
+
+    return stdout
+
+
+def generate_eks_configs(regions: list[RegionInfo]):
+    WORKSPACE_PATH.mkdir(parents=True, exist_ok=True)
+
+    global_region = next(region for region in regions if region.is_global)
+    for region in regions:
+        stdout = run_subprocess(
+            [
+                "helm",
+                "template",
+                (BASE_PATH / "deploy" / "helm-eks").as_posix(),
+                "--set",
+                f"region={region.name}",
+                "--set",
+                f"global_region={global_region.name}",
+            ],
+            region,
+            print_log=False,
+        )
+        with open(WORKSPACE_PATH / f"eks-{region.name}.yaml", "w") as yaml_file:
+            yaml_file.write("\n".join(stdout))
 
 
 def create_eks_cluster(info: RegionInfo, dry_run: bool):
-    eks_config_file = BASE_PATH / f"eks/{info.name}.yaml"
+    eks_config_file = WORKSPACE_PATH / f"eks-{info.name}.yaml"
+    dry_run_arg = ["--dry-run"] if dry_run else []
 
     # Create the cluster
-    run_subprocess_and_print_log(
+    run_subprocess(
         [
             "eksctl",
             "create",
             "cluster",
             "--config-file",
             eks_config_file.as_posix(),
-        ],
+        ]
+        + dry_run_arg,
         info,
-        dry_run,
     )
 
     if not dry_run:
@@ -60,14 +91,14 @@ def create_eks_cluster(info: RegionInfo, dry_run: bool):
 
 
 def delete_eks_cluster(info: RegionInfo, dry_run: bool):
-    eks_config_file = BASE_PATH / f"eks/{info.name}.yaml"
+    eks_config_file = WORKSPACE_PATH / f"eks-{info.name}.yaml"
 
     if info.is_global:
         # The cluster deletion will be stuck if the EBS CSI driver
         # is not deleted first.
         with open(eks_config_file, "r") as yaml_file:
             eks_config = yaml.safe_load(yaml_file)
-        run_subprocess_and_print_log(
+        run_subprocess(
             [
                 "eksctl",
                 "delete",
@@ -80,11 +111,11 @@ def delete_eks_cluster(info: RegionInfo, dry_run: bool):
                 info.name,
             ],
             info,
-            dry_run,
+            dry_run=dry_run,
         )
 
     # Delete the cluster
-    run_subprocess_and_print_log(
+    run_subprocess(
         [
             "eksctl",
             "delete",
@@ -94,7 +125,7 @@ def delete_eks_cluster(info: RegionInfo, dry_run: bool):
             eks_config_file.as_posix(),
         ],
         info,
-        dry_run,
+        dry_run=dry_run,
     )
 
     CONSOLE.log(f"EKS cluster in {info.name} is deleted.")
@@ -104,7 +135,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "action",
-        choices=["create", "delete"],
+        choices=["create", "delete", "generate"],
     )
     parser.add_argument(
         "--dry-run",
@@ -113,32 +144,37 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    generate_only = False
+
     if args.action == "create":
         action_fn = create_eks_cluster
     elif args.action == "delete":
         if not Confirm.ask(f"Do you want to delete the EKS clusters?", default=False):
             exit(0)
         action_fn = delete_eks_cluster
+    elif args.action == "generate":
+        generate_only = True
     else:
         raise ValueError(f"Unknown action: {args.action}")
 
-    config = get_main_config(BASE_PATH)
+    config = get_main_config(BASE_PATH / "deploy")
+
     global_region = config["global_region"]
     regions = set(config["regions"])
     regions.add(global_region)
 
     colors = itertools.cycle(COLORS)
+    infos = [
+        RegionInfo(region, next(colors), region == global_region) for region in regions
+    ]
+
+    generate_eks_configs(infos)
+
+    if generate_only:
+        exit(0)
 
     with ThreadPoolExecutor() as executor:
-        infos = [
-            RegionInfo(region, next(colors), region == global_region)
-            for region in regions
-        ]
-        tasks = [executor.submit(action_fn, info, args.dry_run) for info in infos]
-        with CONSOLE.status("[bold green]Waiting..."):
-            while any(task.running() for task in tasks):
-                time.sleep(1)
+        results = executor.map(lambda info: action_fn(info, args.dry_run), infos)
 
-        # Consume the exceptions if any
-        for task in tasks:
-            task.result()
+        with CONSOLE.status("[bold green]Waiting..."):
+            list(results)

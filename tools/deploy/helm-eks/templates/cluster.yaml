@@ -1,0 +1,80 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: neon
+  region: {{ .Values.region }}
+
+vpc:
+  subnets:
+    public:
+      {{ range $key, $value := get .Values.subnets .Values.region -}}
+      {{ $key }}: { id: {{ $value }} }
+      {{ end }}
+nodeGroups:
+  - name: servers
+    subnets:
+      - {{ get .Values.subnets .Values.region | values | first }}
+    {{- if .Values.spot.server }}
+    instancesDistribution:
+      maxPrice: 0.50
+      instanceTypes: 
+        - {{ get .Values.instance_types "server" }}
+      onDemandBaseCapacity: 0
+      onDemandPercentageAboveBaseCapacity: 0
+      spotAllocationStrategy: "capacity-optimized"
+    {{- else }}
+    instanceType: {{ get .Values.instance_types "server" }}
+    {{- end }}
+    desiredCapacity: 1
+    securityGroups:
+      attachIDs:
+        - {{ get .Values.security_groups .Values.region }}
+    labels:
+      role: server
+      region: {{ .Values.region }}
+
+managedNodeGroups:
+  - name: clients
+    subnets:
+      - {{ get .Values.subnets .Values.region | values | first }}
+    instanceType: {{ get .Values.instance_types "client" }}
+    spot: {{ .Values.spot.client }}
+    desiredCapacity: 1
+    securityGroups:
+      attachIDs:
+        - {{ get .Values.security_groups .Values.region }}
+    labels:
+      role: client
+      region: {{ .Values.region }}
+  {{ if eq .Values.region .Values.global_region }}
+  - name: hub
+    subnets:
+      - {{ get .Values.subnets .Values.region | values | last }}
+    instanceType: {{ get .Values.instance_types "hub" }}
+    spot: {{ .Values.spot.hub }}
+    desiredCapacity: 1
+    securityGroups:
+      attachIDs:
+        - {{ get .Values.security_groups .Values.region }}
+    labels:
+      hub: all
+      region: {{ .Values.region }}
+  {{- end }}
+
+{{ if and (.Values.aws_ebs_csi_driver) (eq .Values.region .Values.global_region) -}}
+iam:
+  withOIDC: true
+  serviceAccounts:
+    - metadata:
+        name: ebs-csi-controller-sa
+        namespace: kube-system
+      roleName: AmazonEKS_EBS_CSI_DriverRole
+      roleOnly: true
+      wellKnownPolicies:
+        ebsCSIController: true
+
+addons:
+  - name: aws-ebs-csi-driver
+    serviceAccountRoleARN: arn:aws:iam::970400548469:role/AmazonEKS_EBS_CSI_DriverRole
+{{ end }}

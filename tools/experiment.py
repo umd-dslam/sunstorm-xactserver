@@ -35,7 +35,7 @@ from utils import get_main_config
 
 BASE_PATH = Path(__file__).absolute().parent
 EXPERIMENTS_PATH = BASE_PATH / "experiments"
-PROGRESS_PATH = BASE_PATH / "progress"
+PROGRESS_PATH = BASE_PATH / "workspace"
 DELAY_SECONDS = 3
 
 LOG = logging.getLogger(__name__)

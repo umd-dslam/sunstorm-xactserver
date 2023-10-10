@@ -3,22 +3,22 @@
 regions:
   us-east-1:
     id: 1
-    context: minikube
+    # context: minikube
   us-east-2:
     id: 2
-    context: minikube
+    # context: minikube
   us-west-1:
     id: 3
-    context: minikube
+    # context: minikube
   us-west-2:
     id: 4
-    context: minikube
+    # context: minikube
   eu-west-1:
     id: 5
-    context: minikube
+    # context: minikube
   eu-west-2:
     id: 6
-    context: minikube
+    # context: minikube
 
 # The region that contains the global resources. This region can
 # be one of the regions listed above, or a different region.
