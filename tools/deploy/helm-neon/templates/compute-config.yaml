@@ -182,6 +182,11 @@ data:
                     "name": "max_pred_locks_per_transaction",
                     "value": "{{ .Values.compute.max_pred_locks_per_transaction }}",
                     "vartype": "integer"
+                },
+                {
+                    "name": "max_parallel_workers_per_gather",
+                    "value": "0",
+                    "vartype": "integer"
                 }
             ]
         },

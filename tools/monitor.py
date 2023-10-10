@@ -209,10 +209,15 @@ class StatusCommand(MonitorCommand):
         exit_event = threading.Event()
         signal.signal(signal.SIGINT, lambda *args: exit_event.set())
 
+        try:
+            initial_tables = StatusCommand._generate_tables(args)
+        except Exception as e:
+            initial_tables = str(e)
+
         layout = Layout()
         layout.split_column(
             Layout(f"Refreshing every {args.refresh} seconds", size=1),
-            Layout(StatusCommand._generate_tables(args), name="table"),
+            Layout(initial_tables, name="table"),
         )
 
         with Live(layout, screen=True):
@@ -221,6 +226,9 @@ class StatusCommand(MonitorCommand):
                     layout["table"].update(StatusCommand._generate_tables(args))
                 except InterruptedError:
                     break
+                except Exception as e:
+                    layout["table"].update(str(e))
+
                 if exit_event.wait(timeout=args.refresh):
                     break
 
@@ -310,12 +318,15 @@ class StatusCommand(MonitorCommand):
                     node = pod.spec.node_name
                     # Populate node capacity if not already populated
                     if node and "capacity" not in nodes[node]:
-                        node_obj = corev1.read_node(node)
-                        nodes[node]["capacity"] = node_obj.status.capacity
-                        for cond in node_obj.status.conditions or []:
-                            if cond.type == "Ready":
-                                nodes[node]["status"] = cond.status == "True"
-                                break
+                        try:
+                            node_obj = corev1.read_node(node)
+                            nodes[node]["capacity"] = node_obj.status.capacity
+                            for cond in node_obj.status.conditions or []:
+                                if cond.type == "Ready":
+                                    nodes[node]["status"] = cond.status == "True"
+                                    break
+                        except kubernetes.client.rest.ApiException:
+                            pass
 
                     # Add pod to node
                     nodes[node]["pods"].append(

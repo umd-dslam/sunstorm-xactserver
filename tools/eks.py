@@ -144,24 +144,28 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    config = get_main_config(BASE_PATH / "deploy")
+
+    global_region = config["global_region"]
+    regions = set(config["regions"])
+    regions.add(global_region)
+
     generate_only = False
 
     if args.action == "create":
         action_fn = create_eks_cluster
     elif args.action == "delete":
-        if not Confirm.ask(f"Do you want to delete the EKS clusters?", default=False):
+        region_names = ", ".join(regions)
+        if not Confirm.ask(
+            f"Do you want to delete the EKS clusters in regions: {region_names}?",
+            default=False,
+        ):
             exit(0)
         action_fn = delete_eks_cluster
     elif args.action == "generate":
         generate_only = True
     else:
         raise ValueError(f"Unknown action: {args.action}")
-
-    config = get_main_config(BASE_PATH / "deploy")
-
-    global_region = config["global_region"]
-    regions = set(config["regions"])
-    regions.add(global_region)
 
     colors = itertools.cycle(COLORS)
     infos = [
