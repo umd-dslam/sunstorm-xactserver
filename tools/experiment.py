@@ -12,12 +12,12 @@ last saved point in case when the experiment is interrupted. On resuming, the
 successful cases will be skipped.
 """
 import argparse
+import csv
 import json
 import logging
 import time
 import threading
 
-import pandas as pd
 import minio
 import yaml
 
@@ -116,11 +116,15 @@ def replace_values(
                 }
 
 
-def benchmark_args(exp: Experiment, prefix: str):
+def benchmark_args(exp: Experiment, prefix: str | None, suffix: str | None):
     """Generates the benchmark arguments for the given experiment
 
     Args:
         exp: The experiment parameters
+        prefix: The prefix to add to the tag.
+                This value is included in the metadata
+        suffix: The suffix to add to the tag.
+                This value is NOT included in the metadata
 
     Yields:
         A tuple of the benchmark arguments and the corresponding metadata
@@ -142,6 +146,7 @@ def benchmark_args(exp: Experiment, prefix: str):
     ]
 
     base_metadata: dict[str, ParameterValue] = {
+        "prefix": prefix or "",
         "benchmark": benchmark,
         "scalefactor": scalefactor,
         "time": time,
@@ -204,6 +209,7 @@ def benchmark_args(exp: Experiment, prefix: str):
         workload_metadata: dict[str, ParameterValue] = {}
         tag_parts: list[str] = []
 
+        # Add the prefix to the tag
         if prefix:
             tag_parts.append(prefix)
 
@@ -223,11 +229,14 @@ def benchmark_args(exp: Experiment, prefix: str):
             if param in tag_params:
                 tag_parts.append(named_value["name"])
 
+        # Add the suffix to the tag
+        if suffix:
+            tag_parts.append(suffix)
+
         tag = "-".join(tag_parts)
         workload_args += ["-s", f"tag={tag}"]
-        workload_metadata["tag"] = tag
 
-        yield base_args + workload_args, {**base_metadata, **workload_metadata}
+        yield base_args + workload_args, {**base_metadata, **workload_metadata}, tag
 
 
 class Progress:
@@ -242,15 +251,25 @@ class Progress:
         self.path = path
         self.progress = []
 
+    def __str__(self):
+        return str(self.progress)
+
     def load(self) -> bool:
         if self.path.exists():
-            self.progress = pd.read_csv(self.path).to_dict("records")
+            with open(self.path) as f:
+                self.progress = list(csv.DictReader(f))
             return True
         return False
 
     def save(self):
+        if len(self.progress) == 0:
+            return
+
         self.path.parent.mkdir(exist_ok=True)
-        pd.DataFrame(self.progress).to_csv(self.path, index=False)
+        with open(self.path, "w") as f:
+            writer = csv.DictWriter(f, fieldnames=self.progress[0].keys())
+            writer.writeheader()
+            writer.writerows(self.progress)
 
     def get_or_insert(self, metadata: dict[str, ParameterValue]):
         """Returns the status for the given metadata
@@ -261,15 +280,18 @@ class Progress:
         Args:
             metadata: The metadata of the benchmark
         """
+        # Convert all values to string
+        metadata = {k: str(v) for k, v in metadata.items()}
+
         for res in self.progress:
             if metadata.items() <= res.items():
                 return res
 
         record: dict[str, ParameterValue] = { 
             "status": self.PENDING,
-            "reloaded": False
+            "reloaded": False,
+            **metadata,
         }
-        record.update(metadata)
 
         self.progress.append(record)
         self.save()
@@ -427,6 +449,8 @@ def main(args):
     #########################
     #   Run the benchmarks  #
     #########################
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+
     if collector:
         LOG.info("Checking the connection to MinIO")
         if not collector.check_connection():
@@ -435,7 +459,7 @@ def main(args):
     set_arg = create_set_arg(args)
     dry_run_arg = ["--dry-run"] if args.dry_run else []
     reload_counter = 0
-    for bm_args, metadata in benchmark_args(exp, args.prefix):
+    for bm_args, metadata, tag in benchmark_args(exp, args.prefix, timestamp):
         record = progress.get_or_insert(metadata)
 
         if record["status"] not in Progress.STATUSES:
@@ -476,9 +500,10 @@ def main(args):
 
                 result = benchmark.main(["execute"] + bm_args + set_arg + dry_run_arg)
                 record.update(result)
+                record["tag"] = tag
 
                 if collector:
-                    collector.submit(metadata["tag"])
+                    collector.submit(tag)
 
             except Exception as e:
                 record["status"] = Progress.ERROR
