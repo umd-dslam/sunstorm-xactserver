@@ -17,7 +17,6 @@ nodeGroups:
       - {{ get .Values.subnets .Values.region | values | first }}
     {{- if .Values.spot.server }}
     instancesDistribution:
-      maxPrice: 0.50
       instanceTypes: 
         - {{ get .Values.instance_types "server" }}
       onDemandBaseCapacity: 0
