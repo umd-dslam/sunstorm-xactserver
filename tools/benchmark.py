@@ -157,6 +157,7 @@ class Operation:
     namespaces: list[tuple[str, dict[str, str | int]]]
     settings: list[str]
     dry_run: bool
+    logs_per_sec: int
 
     @classmethod
     def run(cls, args) -> BenchmarkResult | None:
@@ -172,6 +173,7 @@ class Operation:
                 cls.settings.append(f"namespaces.{ns}.{k}={v}")
 
         cls.dry_run = args.dry_run
+        cls.logs_per_sec = args.logs_per_sec
 
         if not args.logs_only:
             cls.do()
@@ -344,7 +346,11 @@ class Execute(Operation):
                     goodput += float(match.group(2))
 
         Kube.print_logs(
-            named_logs, follow=True, callback=parse_and_add, exit_event=exit_event
+            named_logs,
+            follow=True,
+            callback=parse_and_add,
+            logs_per_sec=cls.logs_per_sec,
+            exit_event=exit_event,
         )
 
         exit_event.wait()
@@ -419,6 +425,12 @@ def main(cmd_args: list[str]) -> BenchmarkResult:
         "-l",
         action="store_true",
         help="Only print the logs of the benchmark.",
+    )
+    parser.add_argument(
+        "--logs-per-sec",
+        default=0,
+        type=int,
+        help="The maximum number of log lines to print per second.",
     )
 
     args = parser.parse_args(cmd_args)

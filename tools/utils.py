@@ -226,6 +226,7 @@ class Kube:
         follow: bool,
         console: Console | None = None,
         callback: Callable[[str, str], None] | None = None,
+        logs_per_sec: int = 0,
         exit_event: threading.Event | None = None,
     ):
         if isinstance(named_logs, Kube.NamedLogs):
@@ -240,16 +241,26 @@ class Kube:
         lock = threading.Lock()
 
         def print_log(logs: Kube.NamedLogs, color: str):
+            from token_bucket import Limiter, MemoryStorage
+
+            TOKEN_BUCKET_SIZE = 100
+
+            limiter = None
+            if logs_per_sec > 0:
+                limiter = Limiter(logs_per_sec, TOKEN_BUCKET_SIZE, MemoryStorage())
+
             name = f"{logs.namespace}|{logs.name}"
             for line in logs.stream:
                 decoded = line.decode("utf-8").rstrip("\n")
                 if callback:
                     callback(name, decoded)
-                console.print(
-                    f"[bold]\\[{name}][/bold] {escape(decoded)}",
-                    style=color,
-                    highlight=False,
-                )
+
+                if not limiter or limiter.consume("log"):
+                    console.print(
+                        f"[bold]\\[{name}][/bold] {escape(decoded)}",
+                        style=color,
+                        highlight=False,
+                    )
 
             nonlocal alive_threads
             with lock:

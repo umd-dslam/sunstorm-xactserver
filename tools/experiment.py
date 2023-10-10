@@ -45,6 +45,7 @@ LOG.setLevel(logging.INFO)
 
 ParameterValue: TypeAlias = str | int | float | bool
 
+
 class ParameterKey(TypedDict):
     name: str
     always_used_in_tag: bool
@@ -60,6 +61,7 @@ class NameOnlyParameterValue(TypedDict):
 
 
 ReplaceCondition: TypeAlias = dict[str, ParameterValue | NamedParameterValue]
+
 
 class Replace(TypedDict):
     match: list[ReplaceCondition]
@@ -88,7 +90,9 @@ def replace_values(
     for replace in replacements:
         conditions: list[ReplaceCondition] = replace.get("match") or []
         if not isinstance(conditions, list):
-            raise ValueError("replace.match must be empty or a list of OR-ed conditions")
+            raise ValueError(
+                "replace.match must be empty or a list of OR-ed conditions"
+            )
 
         # If there are no conditions, the replacement will be applied to all
         match_or = len(conditions) == 0
@@ -96,7 +100,9 @@ def replace_values(
             match_and = True
             for param, value in and_clause.items():
                 if param not in named_values:
-                    raise ValueError(f'Unknown parameter "{param}" specified in replace.match')
+                    raise ValueError(
+                        f'Unknown parameter "{param}" specified in replace.match'
+                    )
                 if isinstance(value, dict):
                     if value["name"] != named_values[param]["name"]:
                         match_and = False
@@ -109,7 +115,9 @@ def replace_values(
         if match_or:
             for param, value in replace["set"].items():
                 if param not in named_values:
-                    raise ValueError(f'Unknown parameter "{param}" specified in replace.set')
+                    raise ValueError(
+                        f'Unknown parameter "{param}" specified in replace.set'
+                    )
                 named_values[param] = {
                     "name": named_values[param]["name"],
                     "value": value,
@@ -158,13 +166,15 @@ def benchmark_args(exp: Experiment, prefix: str | None, suffix: str | None):
         if isinstance(param_key, str):
             param_keys[param_key] = {"always_used_in_tag": False}
         else:
-            param_keys[param_key["name"]] = {"always_used_in_tag": param_key["always_used_in_tag"]}
+            param_keys[param_key["name"]] = {
+                "always_used_in_tag": param_key["always_used_in_tag"]
+            }
 
     param_values = exp["param_values"]
 
     if param_keys.keys() != param_values.keys():
         raise ValueError(
-            f'The parameters in param_values do not match those in param_keys'
+            f"The parameters in param_values do not match those in param_keys"
         )
 
     named_parameters: dict[str, list[NamedParameterValue]] = {}
@@ -218,14 +228,17 @@ def benchmark_args(exp: Experiment, prefix: str | None, suffix: str | None):
 
         # Build the workload arguments, metadata, and tag
         for param, named_value in combination.items():
-            if named_value["value"] is None:
-                raise ValueError(f'Combination {combination} has a None value for "{param}"')
+            value = named_value["value"]
+            if value is None:
+                raise ValueError(
+                    f'Combination {combination} has a None value for "{param}"'
+                )
 
             workload_args += [
                 "-s",
-                f"{param}={sanitize(named_value["value"])}",
+                f"{param}={sanitize(value)}",
             ]
-            workload_metadata[param] = named_value["value"]
+            workload_metadata[param] = value
             if param in tag_params:
                 tag_parts.append(named_value["name"])
 
@@ -287,7 +300,7 @@ class Progress:
             if metadata.items() <= res.items():
                 return res
 
-        record: dict[str, ParameterValue] = { 
+        record: dict[str, ParameterValue] = {
             "status": self.PENDING,
             "reloaded": False,
             **metadata,
@@ -297,10 +310,9 @@ class Progress:
         self.save()
 
         return record
-    
+
 
 class ResultCollector:
-
     def __init__(self, path: Path, minio_address: str, dry_run: bool):
         self.path = path
         self.dry_run = dry_run
@@ -313,7 +325,6 @@ class ResultCollector:
         self.thread_pool = ThreadPoolExecutor()
         self.in_progress_count = 0
         self.in_progress_cv = threading.Condition()
-
 
     def check_connection(self):
         try:
@@ -328,7 +339,6 @@ class ResultCollector:
         if not self.dry_run:
             self.thread_pool.submit(self._collect, tag)
 
-        
     def join(self):
         with self.in_progress_cv:
             while self.in_progress_count > 0:
@@ -343,17 +353,19 @@ class ResultCollector:
                 self.in_progress_count += 1
 
             regions = [
-                obj.object_name for obj in
-                self.minio.list_objects("results", prefix=f"{tag}/")
+                obj.object_name
+                for obj in self.minio.list_objects("results", prefix=f"{tag}/")
             ]
 
             def collect_region(region):
-                objects = self.minio.list_objects("results", prefix=region, recursive=True)
+                objects = self.minio.list_objects(
+                    "results", prefix=region, recursive=True
+                )
                 for obj in objects:
                     obj_path = self.path / obj.object_name
                     obj_path.parent.mkdir(parents=True, exist_ok=True)
                     self.minio.fget_object("results", obj.object_name, obj_path)
-            
+
             list(self.thread_pool.map(collect_region, regions))
 
             LOG.info("Saved result files in %s", self.path / tag)
@@ -370,6 +382,7 @@ def load_experiment(exp_name: str) -> tuple[Experiment, Path] | None:
 
     class Loader(yaml.SafeLoader):
         """A YAML loader that supports !include directive"""
+
         def __init__(self, stream):
             self._root = Path(stream.name).parent
             super().__init__(stream)
@@ -433,7 +446,10 @@ def main(args):
         LOG.info("Reload the database every %d benchmark executions", reload_every)
 
     if args.skip_create_load:
-        LOG.info("[yellow]Skip the database creating and loading steps[/]", extra={"markup": True})
+        LOG.info(
+            "[yellow]Skip the database creating and loading steps[/]",
+            extra={"markup": True},
+        )
 
     main_config = get_main_config(BASE_PATH / "deploy")
     LOG.info("Using main config %s", json.dumps(main_config, indent=4))
@@ -474,7 +490,8 @@ def main(args):
 
                         benchmark.main(["create"] + bm_args + set_arg + dry_run_arg)
                         header(
-                            "Waiting %d seconds for the change to propagate", DELAY_SECONDS
+                            "Waiting %d seconds for the change to propagate",
+                            DELAY_SECONDS,
                         )
                         if not args.dry_run:
                             time.sleep(DELAY_SECONDS)
@@ -482,7 +499,8 @@ def main(args):
                         header("Loading data")
                         benchmark.main(["load"] + bm_args + set_arg + dry_run_arg)
                         header(
-                            "Waiting %d seconds for the change to propagate", DELAY_SECONDS
+                            "Waiting %d seconds for the change to propagate",
+                            DELAY_SECONDS,
                         )
                         if not args.dry_run:
                             time.sleep(DELAY_SECONDS)
@@ -498,7 +516,16 @@ def main(args):
 
                 header("Running benchmark %s", json.dumps(metadata, indent=4))
 
-                result = benchmark.main(["execute"] + bm_args + set_arg + dry_run_arg)
+                result = benchmark.main(
+                    [
+                        "execute",
+                        "--logs-per-sec",
+                        str(args.logs_per_sec),
+                    ]
+                    + bm_args
+                    + set_arg
+                    + dry_run_arg
+                )
                 record.update(result)
                 record["tag"] = tag
 
@@ -564,6 +591,12 @@ if __name__ == "__main__":
         "--minio",
         default="localhost:9000",
         help="The address of the MinIO server",
+    )
+    parser.add_argument(
+        "--logs-per-sec",
+        default=0,
+        type=int,
+        help="The number of logs to be collected per second",
     )
     args = parser.parse_args()
 
