@@ -1,3 +1,4 @@
+import argparse
 import itertools
 import logging
 import threading
@@ -7,7 +8,7 @@ import yaml
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable, TypedDict
+from typing import Callable, Iterable, TypedDict, Sequence
 
 from kubernetes.client.configuration import Configuration as KubeConfiguration
 from kubernetes.config.kube_config import load_kube_config
@@ -60,7 +61,9 @@ class Command:
     HELP = ""
     DESCRIPTION = ""
 
-    def create_subparser(self, subparsers):
+    def create_subparser(
+        self, subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]"
+    ):
         parser = subparsers.add_parser(
             self.NAME, description=self.DESCRIPTION, help=self.HELP
         )
@@ -68,14 +71,18 @@ class Command:
         self.add_arguments(parser)
         return parser
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: argparse.ArgumentParser):
         pass
 
-    def do_command(self, args):
+    def do_command(self, args: argparse.Namespace):
         pass
 
 
-def initialize_and_run_commands(parser, commands, args=None):
+def initialize_and_run_commands(
+    parser: argparse.ArgumentParser,
+    commands: list[type[Command]],
+    args: Sequence[str] | None = None,
+):
     subparsers = parser.add_subparsers(dest="command name")
     subparsers.required = True
 
@@ -101,10 +108,15 @@ def run_subprocess(
         subprocess.run(cmd, **kwargs)
 
 
+class RegionInfo(TypedDict):
+    id: int
+    context: str | None
+
+
 class MainConfig(TypedDict):
     global_region: str
-    global_region_context: str
-    regions: dict[str, dict[str, str | int]]
+    global_region_context: str | None
+    regions: dict[str, RegionInfo] | None
 
 
 def get_main_config(base_path: Path) -> MainConfig:
@@ -120,10 +132,9 @@ def get_main_config(base_path: Path) -> MainConfig:
                 return ctx
         return None
 
-    if main_config.get("regions") is None:
-        main_config["regions"] = {}
+    regions: dict[str, RegionInfo] = main_config.get("regions") or {}
 
-    for region, region_info in main_config["regions"].items():
+    for region, region_info in regions.items():
         if region_info.get("context") is None:
             region_info["context"] = find_context(region)
 
@@ -134,8 +145,13 @@ def get_main_config(base_path: Path) -> MainConfig:
     return main_config
 
 
+class NamespaceInfo(TypedDict):
+    region: str
+    id: int
+
+
 def get_namespaces(config: MainConfig):
-    namespaces: dict[str, dict[str, str | int]] = {
+    namespaces: dict[str, NamespaceInfo] = {
         "global": {"region": config["global_region"], "id": 0}
     }
     regions = config.get("regions") or {}
@@ -154,9 +170,8 @@ class Kube:
             context = main_config.get("global_region_context", None)
 
         if context is None:
-            context = str(
-                main_config.get("regions", {}).get(region, {}).get("context", None)
-            )
+            regions = main_config.get("regions") or {}
+            context = regions[region]["context"]
 
         if context is None:
             raise Exception(f"Could not find context for region: {region}")
@@ -211,7 +226,7 @@ class Kube:
                 container=container,
                 follow=follow,
                 tail_lines=lines,
-                _preload_content=False,
+                _preload_content=False,  # type: ignore
             )
 
     @dataclass

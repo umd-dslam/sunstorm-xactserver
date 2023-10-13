@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from itertools import repeat
 from pathlib import Path
 
-from kubernetes.client.rest import ApiException # type: ignore
+from kubernetes.client.rest import ApiException  # type: ignore
 from rich.console import Console
 from utils import (
     Kube,
@@ -52,7 +52,8 @@ def try_with_timeout(fn, timeout: int):
 
 
 def set_up_load_balancer_for_coredns(config: MainConfig, dry_run: bool):
-    regions = config["regions"]
+    regions = set(config["regions"] or []) | {config["global_region"]}
+
     if len(regions) == 1:
         LOG.info(
             "Only one region is specified. Skipping load balancer for CoreDNS.",
@@ -79,7 +80,8 @@ def set_up_load_balancer_for_coredns(config: MainConfig, dry_run: bool):
 
 def install_dns_configmap(config: MainConfig, dry_run: bool):
     global_region = config["global_region"]
-    regions = set(config["regions"]) | {config["global_region"]}
+    regions = set(config["regions"] or []) | {global_region}
+
     if len(regions) == 1:
         LOG.info(
             "Only one region is specified. Skipping DNS configmap installation.",
@@ -115,7 +117,7 @@ def install_dns_configmap(config: MainConfig, dry_run: bool):
             ip_addresses = []
             try:
                 answers = dns.resolver.resolve(lb_dns_name, "A")
-                ip_addresses = [rdata.address for rdata in answers]
+                ip_addresses = [rdata.address for rdata in answers]  # type: ignore
             except Exception:
                 return None
 
@@ -188,7 +190,7 @@ def create_namespaces(config, dry_run: bool):
         region = namespace_info["region"]
         config = Kube.get_config(BASE_PATH, region)
         LOG.info(f'Deleting namespace "{namespace}" in region "{region}"')
-        with kubernetes.client.ApiClient(config) as api_client:
+        with kubernetes.client.ApiClient(config) as api_client:  # type: ignore
             kube = kubernetes.client.CoreV1Api(api_client)
             try:
                 kube.delete_namespace(
@@ -217,7 +219,7 @@ def create_namespaces(config, dry_run: bool):
         region = namespace_info["region"]
         config = Kube.get_config(BASE_PATH, region)
         LOG.info(f'Creating namespace "{namespace}" in region "{region}"')
-        with kubernetes.client.ApiClient(config) as api_client:
+        with kubernetes.client.ApiClient(config) as api_client:  # type: ignore
             kube = kubernetes.client.CoreV1Api(api_client)
             while True:
                 try:
@@ -254,7 +256,8 @@ def create_namespaces(config, dry_run: bool):
 def deploy_neon(config: MainConfig, cleanup_only: bool, dry_run: bool):
     namespaces = get_namespaces(config)
     ordered_namespaces = [
-        item[0] for item in sorted(namespaces.items(), key=lambda x: x[1]["id"])
+        item[0]
+        for item in sorted(namespaces.items(), key=lambda x: int(x[1]["id"] or 0))
     ]
 
     def deploy_neon_one_namespace(namespace: str):

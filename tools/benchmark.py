@@ -14,6 +14,7 @@ from typing import TypedDict
 from utils import (
     Kube,
     MainConfig,
+    NamespaceInfo,
     get_main_config,
     get_logger,
     get_namespaces,
@@ -154,7 +155,7 @@ class BenchmarkResult(TypedDict):
 
 class Operation:
     config: MainConfig
-    namespaces: list[tuple[str, dict[str, str | int]]]
+    namespaces: list[tuple[str, NamespaceInfo]]
     settings: list[str]
     dry_run: bool
     logs_per_sec: int
@@ -227,7 +228,7 @@ class Load(Operation):
                 executor.submit(
                     run_benchmark,
                     namespace,
-                    ns_info["region"],
+                    str(ns_info["region"]),
                     cls.settings
                     + [
                         "operation=load",
@@ -298,7 +299,7 @@ class Execute(Operation):
                 executor.submit(
                     run_benchmark,
                     namespace,
-                    ns_info["region"],
+                    str(ns_info["region"]),
                     cls.settings
                     + [
                         "operation=execute",
@@ -377,7 +378,7 @@ class Delete(Operation):
                 executor.submit(
                     run_benchmark,
                     namespace,
-                    ns_info["region"],
+                    str(ns_info["region"]),
                     cls.settings + ["operation=load"],
                     delete_only=True,
                     dry_run=cls.dry_run,
@@ -385,7 +386,7 @@ class Delete(Operation):
                 executor.submit(
                     run_benchmark,
                     namespace,
-                    ns_info["region"],
+                    str(ns_info["region"]),
                     cls.settings + ["operation=execute"],
                     delete_only=True,
                     dry_run=cls.dry_run,

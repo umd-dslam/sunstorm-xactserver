@@ -258,7 +258,7 @@ class Progress:
     PENDING = "pending"
     STATUSES = [DONE, ERROR, PENDING]
 
-    progress: list[dict]
+    progress: list[dict[str, ParameterValue]]
 
     def __init__(self, path: Path):
         self.path = path
@@ -384,11 +384,11 @@ def load_experiment(exp_name: str) -> tuple[Experiment, Path] | None:
         """A YAML loader that supports !include directive"""
 
         def __init__(self, stream):
-            self._root = Path(stream.name).parent
+            self._root = Path(stream.name).parent  # type: ignore
             super().__init__(stream)
 
         def include(self, node):
-            filename = self.construct_scalar(node)
+            filename = str(self.construct_scalar(node))
             path = self._root / filename
             with open(path, "r") as f:
                 return yaml.load(f, Loader)
@@ -526,7 +526,7 @@ def main(args):
                     + set_arg
                     + dry_run_arg
                 )
-                record.update(result)
+                record.update(**result)
                 record["tag"] = tag
 
                 if collector:

@@ -1,6 +1,5 @@
 import argparse
 import itertools
-import time
 import subprocess
 import yaml
 
@@ -86,7 +85,7 @@ def create_eks_cluster(info: RegionInfo, dry_run: bool):
     if not dry_run:
         CONSOLE.log(
             f"EKS cluster in {info.name} is up. "
-            f"Context: {Kube.get_context(BASE_PATH, info.name)}."
+            f"Context: {Kube.get_context(BASE_PATH / "deploy", info.name)}."
         )
 
 
@@ -147,10 +146,10 @@ if __name__ == "__main__":
     config = get_main_config(BASE_PATH / "deploy")
 
     global_region = config["global_region"]
-    regions = set(config["regions"])
-    regions.add(global_region)
+    regions = set(config["regions"] or []) | {global_region}
 
     generate_only = False
+    action_fn = lambda info, dry_run: None
 
     if args.action == "create":
         action_fn = create_eks_cluster

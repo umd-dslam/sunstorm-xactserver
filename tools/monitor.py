@@ -2,11 +2,14 @@ import argparse
 import kubernetes.client
 import itertools
 import threading
+import traceback
 import signal
 
 from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
 from pathlib import Path
+from typing import TypedDict
+
 from rich.console import Group
 from rich.live import Live
 from rich.table import Table
@@ -20,13 +23,14 @@ from utils import (
     get_logger,
     initialize_and_run_commands,
     Kube,
+    NamespaceInfo,
 )
 
 LOG = get_logger(__name__)
 BASE_PATH = Path(__file__).parent.resolve() / "deploy"
 
 
-def get_chosen_namespaces(args):
+def get_chosen_namespaces(args: argparse.Namespace):
     config = get_main_config(BASE_PATH)
     namespaces = get_namespaces(config)
 
@@ -58,7 +62,7 @@ class LogsCommand(MonitorCommand):
     NAME = "logs"
     HELP = "Watch the logs from multiple regions."
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: argparse.ArgumentParser):
         super().add_arguments(parser)
         parser.add_argument(
             "--deployment",
@@ -137,17 +141,27 @@ class LogsCommand(MonitorCommand):
             exit_event.wait()
 
     @staticmethod
-    def _get_named_logs(args, namespace, region, deployment=None, pod=None):
+    def _get_named_logs(
+        args,
+        namespace: str,
+        region: str,
+        deployment: str | None = None,
+        pod: str | None = None,
+    ):
         kube_config = Kube.get_config(BASE_PATH, region)
 
         if deployment:
-            with kubernetes.client.ApiClient(kube_config) as api_client:
+            with kubernetes.client.ApiClient(kube_config) as api_client:  # type: ignore
                 appsv1 = kubernetes.client.AppsV1Api(api_client)
 
                 deployment_info = appsv1.read_namespaced_deployment(
                     name=deployment, namespace=namespace
                 )
-                selector = deployment_info.spec.selector.match_labels
+                selector = (
+                    deployment_info.spec.selector.match_labels
+                    if deployment_info.spec
+                    else None
+                ) or {}
 
             pods = Kube.get_pods(kube_config, namespace, selector)
         elif pod:
@@ -181,21 +195,27 @@ class LogsCommand(MonitorCommand):
 
             return Kube.NamedLogs(
                 namespace=namespace,
-                name=deployment,
+                name=deployment if deployment else pods[0],
                 stream=logs,
             )
-        except kubernetes.client.rest.ApiException as e:
+        except kubernetes.client.rest.ApiException as e:  # type: ignore
             LOG.error(
                 f'Pod "{pods[0]}" in namespace "{namespace}" (region "{region}"): {e}'
             )
             return None
 
 
+class Node(TypedDict):
+    capacity: dict[str, str]
+    status: bool
+    pods: list[dict[str, str]]
+
+
 class StatusCommand(MonitorCommand):
     NAME = "status"
     HELP = "Show the status across multiple regions."
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: argparse.ArgumentParser):
         super().add_arguments(parser)
         parser.add_argument(
             "--refresh",
@@ -226,16 +246,15 @@ class StatusCommand(MonitorCommand):
                     layout["table"].update(StatusCommand._generate_tables(args))
                 except InterruptedError:
                     break
-                except Exception as e:
-                    layout["table"].update(str(e))
+                except Exception:
+                    layout["table"].update(traceback.format_exc())
 
                 if exit_event.wait(timeout=args.refresh):
                     break
 
     @staticmethod
-    def _generate_tables(args):
+    def _generate_tables(args: argparse.Namespace):
         data = StatusCommand._get_data(args)
-
         colors = itertools.cycle(COLORS)
         node_to_color = {}
         tables = []
@@ -265,7 +284,7 @@ class StatusCommand(MonitorCommand):
                 namespace_cell = namespace
                 for node_name, node in nodes.items():
                     capacity_cell = ""
-                    if "capacity" in node:
+                    if node["capacity"]:
                         cpu = node["capacity"]["cpu"]
                         memory = node["capacity"]["memory"]
                         capacity_cell = f"cpu: {cpu}, mem: {memory}"
@@ -296,42 +315,53 @@ class StatusCommand(MonitorCommand):
         return Group(*tables)
 
     @staticmethod
-    def _get_data(args):
+    def _get_data(args: argparse.Namespace):
         namespaces = get_chosen_namespaces(args)
 
-        data = defaultdict(dict)
+        data: defaultdict[str, dict[str, defaultdict[str, Node]]] = defaultdict(dict)
         lock = threading.Lock()
 
-        def get_namespaced_data(ns, ns_info):
+        def get_namespaced_data(ns: str, ns_info: NamespaceInfo):
             region = ns_info["region"]
             kube_config = Kube.get_config(BASE_PATH, region)
 
-            nodes = defaultdict(lambda: {"pods": []})
+            nodes: defaultdict[str, Node] = defaultdict(
+                lambda: {"pods": [], "capacity": {}, "status": False}
+            )
 
-            with kubernetes.client.ApiClient(kube_config) as api_client:
+            with kubernetes.client.ApiClient(kube_config) as api_client:  # type: ignore
                 corev1 = kubernetes.client.CoreV1Api(api_client)
                 pods = corev1.list_namespaced_pod(
                     namespace=ns,
                 ).items
 
                 for pod in pods:
-                    node = pod.spec.node_name
+                    node = pod.spec.node_name if pod.spec else None
                     # Populate node capacity if not already populated
-                    if node and "capacity" not in nodes[node]:
+                    if node and not nodes[node]["capacity"]:
                         try:
                             node_obj = corev1.read_node(node)
-                            nodes[node]["capacity"] = node_obj.status.capacity
-                            for cond in node_obj.status.conditions or []:
+                            nodes[node]["capacity"] = (
+                                (node_obj.status.capacity or {})
+                                if node_obj.status
+                                else {}
+                            )
+                            conditions = (
+                                node_obj.status.conditions
+                                if node_obj and node_obj.status
+                                else []
+                            )
+                            for cond in conditions or []:
                                 if cond.type == "Ready":
                                     nodes[node]["status"] = cond.status == "True"
                                     break
-                        except kubernetes.client.rest.ApiException:
+                        except kubernetes.client.rest.ApiException:  # type: ignore
                             pass
 
                     # Add pod to node
-                    nodes[node]["pods"].append(
+                    nodes[node or "unknown"]["pods"].append(
                         {
-                            "name": pod.metadata.name,
+                            "name": (pod.metadata.name if pod.metadata else "") or "",
                             "status": StatusCommand._compute_status(pod),
                         }
                     )
