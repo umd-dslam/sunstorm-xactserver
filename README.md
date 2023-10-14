@@ -1,25 +1,12 @@
-# Slogora
+# SunStorm Transaction Server
 
-## Run locally
-
-Run `make` to build.
-
-Start transaction server:
-
+Install dependencies:
 ```
-$ target/debug/xactserver
+sudo apt install protobuf-compiler
 ```
 
-Initialize the database:
-
+Run the server:
 ```
-$ export PGDATA=$HOME/data/postgresql
-$ mkdir -p $PGDATA
-$ tmp_install/bin/initdb
+$ cargo run --bin xactserver
 ```
 
-Start PostgreSQL:
-
-```
-$ postgres -c shared_preload_libraries=remotexact
-```

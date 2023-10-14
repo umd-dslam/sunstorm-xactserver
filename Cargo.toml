@@ -2,3 +2,4 @@
 members = [
   "xactserver"
 ]
+resolver = "2"

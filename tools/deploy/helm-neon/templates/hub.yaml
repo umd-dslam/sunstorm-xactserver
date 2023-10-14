@@ -118,7 +118,7 @@ spec:
             - name: hub-config
               mountPath: /config
         - name: grafana
-          image: ctring/grafana:slogora
+          image: ctring/grafana:sunstorm
           imagePullPolicy: Always
           ports:
             - name: grafana
