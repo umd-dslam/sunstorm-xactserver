@@ -1,0 +1,30 @@
+#!/bin/bash
+
+set -e
+
+source common
+
+if [ "$#" -ne 1 ]; then
+  echo "Usage: $0 <num_regions>"
+  exit 1
+fi
+
+num_regions=$1
+
+echo "Initializing Neon cluster with $num_regions regions"
+
+# Generate the base data for the cluster
+mkdir -p init
+python3 $XACTSERVER_DIR/tools/neonctl.py  \
+  --neon-dir $NEON_DIR                    \
+  --xactserver-dir $XACTSERVER_DIR        \
+  create ./init                           \
+  --num-regions $num_regions
+
+# Wait until minio is ready then upload the data
+until (mc alias set minio http://localhost:9000 minioadmin minioadmin) do
+  echo 'Waiting to start minio...' && sleep 1
+done
+mc mb --ignore-existing minio/neon
+mc rm -r --force minio/neon/.neon
+mc cp -r ./init/r0/.neon minio/neon/

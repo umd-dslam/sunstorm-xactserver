@@ -1,0 +1,16 @@
+#!/bin/bash
+
+echo "Stopping storage broker"
+kill $(cat logs/storage_broker.pid)
+
+echo "Stopping pageserver"
+kill $(cat logs/pageserver.pid)
+
+echo "Stopping safekeeper"
+kill $(cat logs/safekeeper.pid)
+
+echo "Stopping xactserver"
+kill $(cat logs/xactserver.pid)
+
+echo "Stopping compute"
+kill $(cat logs/compute.pid)

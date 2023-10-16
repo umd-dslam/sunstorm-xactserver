@@ -113,20 +113,18 @@ impl From<VoteMessage> for Vote {
     }
 }
 
-pub fn init_tracing(default_log_level: LevelFilter) -> anyhow::Result<()> {
+pub fn init_tracing(default_log_level: LevelFilter, no_ansi: bool) -> anyhow::Result<()> {
     let env_filter = EnvFilter::builder()
         .with_default_directive(default_log_level.into())
         .from_env_lossy();
 
     let fmt_layer = tracing_subscriber::fmt::layer()
+        .with_ansi(!no_ansi)
         .with_target(false)
         .with_writer(std::io::stderr)
-        .with_test_writer();
+        .with_filter(env_filter);
 
-    tracing_subscriber::registry()
-        .with(env_filter)
-        .with(fmt_layer)
-        .try_init()?;
+    tracing_subscriber::registry().with(fmt_layer).try_init()?;
 
     Ok(())
 }

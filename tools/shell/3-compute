@@ -1,0 +1,46 @@
+#!/bin/bash
+
+source common
+
+set -eux
+
+spect_template=./spec-template.json
+spec=./spec.json
+
+echo "Waiting pageserver become ready."
+while ! nc -z localhost 6400; do
+    sleep 1;
+done
+echo "Page server is ready."
+
+tenant_id=$(curl -s http://localhost:9898/v1/tenant/ | jq -r '.[0].id')
+if [ $tenant_id = "null" ]; then
+    echo "ERROR: Tenant id is null"
+    exit 1
+fi
+
+timelines=$(curl -s http://localhost:9898/v1/tenant/${tenant_id}/timeline/)
+region_id_to_timeline_id=$(echo ${timelines} | jq '[.[] | {key: .region_id, value: .timeline_id}] | from_entries')
+
+timeline_id=$(echo ${region_id_to_timeline_id} | jq -r ".[\"${REGION_ID}\"]")
+if [ $timeline_id = "null" ]; then
+    echo "ERROR: Timeline id is null"
+    exit 1
+fi
+
+echo "Region id: ${REGION_ID}"
+echo "Tenant id: ${tenant_id}"
+echo "Timeline id: ${timeline_id}"
+
+echo "Overwrite variables in spec file"
+sed "s/TENANT_ID/${tenant_id}/" ${spect_template} > ${spec}
+sed -i "s/TIMELINE_ID/${timeline_id}/" ${spec}
+sed -i "s/SAFEKEEPERS_ADDR/${SAFEKEEPERS_ADDR}/" ${spec}
+sed -i "s/REGION/${REGION_ID}/" ${spec}
+
+cat ${spec}
+
+run compute "$NEON_DIR/target/release/compute_ctl --pgdata $DATA/compute    \
+    -C "postgresql://cloud_admin@localhost:55433/postgres"                  \
+    -b $NEON_DIR/pg_install/v14/bin/postgres                                \
+    -S ${spec}"

@@ -77,13 +77,16 @@ struct Cli {
         help = "Address to listen for http requests"
     )]
     listen_http: SocketAddr,
+
+    #[arg(long, help = "Disable ANSI color codes in logs")]
+    no_ansi: bool,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    init_tracing(LevelFilter::INFO)?;
-
     let cli = Cli::parse();
+
+    init_tracing(LevelFilter::INFO, cli.no_ansi)?;
 
     let connect_pg = Url::parse(&cli.connect_pg).unwrap_or_else(|err| {
         invalid_arg_error(&format!(
