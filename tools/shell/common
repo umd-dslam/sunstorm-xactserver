@@ -7,9 +7,9 @@ HUB_ADDR=localhost
 # The addresses of the nodes in the cluster
 ADDRESSES=("localhost")
 # The directory of the xactserver repo
-XACTSERVER_DIR=$HOME/src/sunstorm/xactserver
+XACTSERVER_DIR=$HOME/sunstorm/xactserver
 # The directory of the neon repo
-NEON_DIR=$HOME/src/sunstorm/neon
+NEON_DIR=$HOME/sunstorm/neon
 # The directory to store data
 DATA="./data"
 
