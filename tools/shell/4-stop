@@ -14,3 +14,4 @@ kill $(cat logs/xactserver.pid)
 
 echo "Stopping compute"
 kill $(cat logs/compute.pid)
+pkill postgres
