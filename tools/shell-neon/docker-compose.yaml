@@ -2,7 +2,7 @@ version: '3.8'
 
 configs:
   prometheus:
-    file: ./prometheus.yaml
+    file: ./prometheus.yml
 
 services:
   minio:
@@ -16,14 +16,12 @@ services:
   prometheus:
     restart: always
     image: prom/prometheus:latest
-    ports:
-      - 9090:9090
+    network_mode: host
     configs:
       - source: prometheus
-        target: /etc/prometheus/prometheus.yaml
+        target: /etc/prometheus/prometheus.yml
 
   grafana:
     restart: always
     image: ctring/grafana:sunstorm
-    ports:
-      - 3000:3000
+    network_mode: host
