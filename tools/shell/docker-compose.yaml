@@ -1,5 +1,9 @@
 version: '3.8'
 
+configs:
+  prometheus:
+    file: ./prometheus.yml
+
 services:
   minio:
     restart: always
@@ -8,3 +12,16 @@ services:
       - 9000:9000
       - 9001:9001
     command: server /data --address :9000 --console-address ":9001"
+
+  prometheus:
+    restart: always
+    image: prom/prometheus:latest
+    network_mode: host
+    configs:
+      - source: prometheus
+        target: /etc/prometheus/prometheus.yml
+
+  grafana:
+    restart: always
+    image: ctring/grafana:sunstorm
+    network_mode: host
