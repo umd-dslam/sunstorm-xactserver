@@ -13,6 +13,7 @@ from utils import get_main_config, Kube, COLORS
 
 BASE_PATH = Path(__file__).parent.resolve()
 WORKSPACE_PATH = BASE_PATH / "workspace"
+DEPLOY_PATH = BASE_PATH / "deploy"
 
 CONSOLE = Console()
 
@@ -85,7 +86,7 @@ def create_eks_cluster(info: RegionInfo, dry_run: bool):
     if not dry_run:
         CONSOLE.log(
             f"EKS cluster in {info.name} is up. "
-            f"Context: {Kube.get_context(BASE_PATH / "deploy", info.name)}."
+            f"Context: {Kube.get_context(DEPLOY_PATH, info.name)}."
         )
 
 
