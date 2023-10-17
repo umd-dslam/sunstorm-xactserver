@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Current region
-REGION_ID=1
+REGION_ID=0
 # Address of the hub--the server that contains minio and the storage broker
 HUB_ADDR=localhost
 # The addresses of the nodes in the cluster
-ADDRESSES=("localhost")
+ADDRESSES=(localhost)
 # The directory of the xactserver repo
 XACTSERVER_DIR=$HOME/sunstorm/xactserver
 # The directory of the neon repo

@@ -25,6 +25,6 @@ python3 $XACTSERVER_DIR/tools/neonctl.py  \
 until (mc alias set minio http://localhost:9000 minioadmin minioadmin) do
   echo 'Waiting to start minio...' && sleep 1
 done
-mc mb --ignore-existing minio/neon
-mc rm -r --force minio/neon/.neon
-mc cp -r ./init/r0/.neon minio/neon/
+mc mb --ignore-existing minio/sunstorm
+mc rm -r --force minio/sunstorm/.neon
+mc cp -r ./init/r0/.neon minio/sunstorm/

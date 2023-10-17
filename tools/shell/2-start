@@ -13,10 +13,10 @@ fi
 until (mc alias set minio http://$HUB_ADDR:9000 minioadmin minioadmin) do
     echo 'Waiting to start minio...' && sleep 1
 done
-data=./data
+
 mkdir -p $DATA
 rm -rf $DATA/.neon
-mc cp -r minio/neon/.neon $DATA/
+mc cp -r minio/sunstorm/.neon $DATA/
 
 run pageserver "$NEON_DIR/target/release/pageserver -D $DATA/.neon/ \
   -c broker_endpoint='http://$HUB_ADDR:50051'                       \
