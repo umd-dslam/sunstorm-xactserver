@@ -1,5 +1,9 @@
 version: '3.8'
 
+configs:
+  prometheus:
+    file: ./prometheus.yaml
+
 services:
   minio:
     restart: always
@@ -8,3 +12,18 @@ services:
       - 9000:9000
       - 9001:9001
     command: server /data --address :9000 --console-address ":9001"
+
+  prometheus:
+    restart: always
+    image: prom/prometheus:latest
+    ports:
+      - 9090:9090
+    configs:
+      - source: prometheus
+        target: /etc/prometheus/prometheus.yaml
+
+  grafana:
+    restart: always
+    image: ctring/grafana:sunstorm
+    ports:
+      - 3000:3000
