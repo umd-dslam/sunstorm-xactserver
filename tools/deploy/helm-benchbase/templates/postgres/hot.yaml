@@ -175,9 +175,11 @@ data:
     {{- if .Values.remotexact }}
     CREATE EXTENSION IF NOT EXISTS remotexact;
     {{- end }}
-    DROP TABLE IF EXISTS usertable;
-    CREATE TABLE usertable (
-        ycsb_key int,
+
+    {{- range $i := until (int $numRegions) }}
+    DROP TABLE IF EXISTS usertable_{{ add1 $i }};
+    CREATE TABLE usertable_{{ add1 $i }} (
+        ycsb_key int primary key,
         field1   text,
         field2   text,
         field3   text,
@@ -187,17 +189,8 @@ data:
         field7   text,
         field8   text,
         field9   text,
-        field10  text,
-        geo_partition int,
-        PRIMARY KEY (geo_partition, ycsb_key)
-    )
-    {{ if gt $numRegions 0 }}
-    PARTITION BY LIST (geo_partition)
-    {{ end }}
-    ;
-
-    {{- range $i := until (int $numRegions) }}
-    CREATE TABLE usertable_{{ add1 $i }} PARTITION OF usertable FOR VALUES IN ({{ add1 $i }});
+        field10  text
+    );
     UPDATE pg_class SET relregion = {{ add1 $i }} WHERE relname = 'usertable_{{ add1 $i }}';
     UPDATE pg_class SET relregion = {{ add1 $i }} WHERE relname = 'usertable_{{ add1 $i }}_pkey';
     {{- end }}

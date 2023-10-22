@@ -13,36 +13,11 @@ import os
 import signal
 import shutil
 import subprocess
-import tempfile
 
 from utils import get_logger, Command, initialize_and_run_commands
 from neonclone import clone_neon
 
 LOG = get_logger(__name__)
-
-DEFAULT_CONFIG = """
-[broker]
-listen_addr = '127.0.0.1:50051'
-
-[[pageservers]]
-id = 1
-listen_pg_addr = '127.0.0.1:64000'
-listen_http_addr = '127.0.0.1:9898'
-pg_auth_type = 'Trust'
-http_auth_type = 'Trust'
-
-[pageserver]
-id = 1
-listen_pg_addr = '127.0.0.1:64000'
-listen_http_addr = '127.0.0.1:9898'
-pg_auth_type = 'Trust'
-http_auth_type = 'Trust'
-
-[[safekeepers]]
-id = 1
-pg_port = 5454
-http_port = 7676        
-""".strip()
 
 class Neon:
     def __init__(self, bin: str, env: dict[str, str], dry_run: bool):
@@ -296,19 +271,14 @@ class CreateCommand(NeonCommand):
         global_region_dir = os.path.join(args.data_dir, region_names[0])
         if not args.dry_run:
             os.makedirs(global_region_dir, exist_ok=True)
-        with tempfile.NamedTemporaryFile("w", prefix="neon-", suffix=".toml", delete=False) as f:
-            f.write(DEFAULT_CONFIG)
-            f.flush()
-            neon.run(
-                [
-                    "init", 
-                    "--pg-version",
-                    args.pg_version,
-                    "--config",
-                    f.name,
-                ],
-                cwd=global_region_dir
-            )
+        neon.run(
+            [
+                "init", 
+                "--pg-version",
+                args.pg_version,
+            ],
+            cwd=global_region_dir
+        )
         neon.run(["start"], cwd=global_region_dir)
         neon.run(
             ["tenant", "create", "--set-default", "--pg-version", args.pg_version],
