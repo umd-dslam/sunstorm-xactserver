@@ -12,7 +12,7 @@ terminals: 4
 # Duration of the benchmark in seconds
 time: 10
 # Maximum throughput of the benchmark
-rate: 10000
+rate: 50000
 
 # The benchmark to run 
 benchmark: hot
@@ -22,7 +22,7 @@ hot:
   # Number of hot keys per partition
   hot: 0
   # Weights of different types of transactions
-  weights: 100,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
+  weights: 1,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
   # Number of keys per transaction
   keyspertxn: 12
   # The maximum number of keys to select in scanning queries

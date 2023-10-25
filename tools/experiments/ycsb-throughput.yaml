@@ -1,3 +1,4 @@
+# python3 tools/experiment.py --logs-per-sec 10 -o ~/data/sunstorm/ycsb/throughput ycsb-throughput
 reload_every: 5
 benchmark: hot
 scalefactor: 1000
@@ -14,54 +15,83 @@ replace:
       - hot.weights:
           name: D-mr0
       - hot.weights:
+          name: E-mr0
+      - hot.weights:
           name: F-mr0
     set:
       terminals: 64
   - match:
       - hot.weights:
-          name: E-mr0
+          name: A-mr5
+        hot.hot: 0
+      - hot.weights:
+          name: B-mr5
+        hot.hot: 0
+      - hot.weights:
+          name: D-mr5
+        hot.hot: 0
+      - hot.weights:
+          name: E-mr5
+        hot.hot: 0
+      - hot.weights:
+          name: F-mr5
+        hot.hot: 0
     set:
-      terminals: 24
+      terminals: 128
   - match:
       - hot.weights:
           name: A-mr5
+        hot.hot: 1000
+      - hot.weights:
+          name: B-mr5
+        hot.hot: 1000
+      - hot.weights:
+          name: D-mr5
+        hot.hot: 1000
+      - hot.weights:
+          name: E-mr5
+        hot.hot: 1000
+      - hot.weights:
+          name: F-mr5
+        hot.hot: 1000
+    set:
+      terminals: 64
+  - match:
       - hot.weights:
           name: A-mr10
       - hot.weights:
-          name: A-mr50
-      - hot.weights:
-          name: A-mr100
-      - hot.weights:
-          name: B-mr5
-      - hot.weights:
           name: B-mr10
-      - hot.weights:
-          name: B-mr50
-      - hot.weights:
-          name: B-mr100
-      - hot.weights:
-          name: D-mr5
       - hot.weights:
           name: D-mr10
       - hot.weights:
-          name: D-mr50
-      - hot.weights:
-          name: D-mr100
-      - hot.weights:
-          name: E-mr5
-      - hot.weights:
           name: E-mr10
+      - hot.weights:
+          name: F-mr10
+    set:
+      terminals: 128
+  - match:
+      - hot.weights:
+          name: A-mr50
+      - hot.weights:
+          name: B-mr50
+      - hot.weights:
+          name: D-mr50
       - hot.weights:
           name: E-mr50
       - hot.weights:
-          name: E-mr100
-      - hot.weights:
-          name: F-mr5
-      - hot.weights:
-          name: F-mr10
-      - hot.weights:
           name: F-mr50
+    set:
+      terminals: 256
+  - match:
+      - hot.weights:
+          name: A-mr100
+      - hot.weights:
+          name: B-mr100
+      - hot.weights:
+          name: D-mr100
+      - hot.weights:
+          name: E-mr100
       - hot.weights:
           name: F-mr100
     set:
-      terminals: 80
+      terminals: 384

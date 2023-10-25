@@ -10,15 +10,15 @@ regions:
   us-west-1:
     id: 3
     # context: minikube
-  us-west-2:
+  eu-west-1:
     id: 4
     # context: minikube
-  eu-west-1:
-    id: 5
-    # context: minikube
-  eu-west-2:
-    id: 6
-    # context: minikube
+  # us-west-2:
+  #   id: 5
+  #   # context: minikube
+  # eu-west-2:
+  #   id: 6
+  #   # context: minikube
 
 # The region that contains the global resources. This region can
 # be one of the regions listed above, or a different region.

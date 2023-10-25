@@ -4,7 +4,7 @@
 instance_types:
   server: r5.4xlarge
   client: c5.xlarge
-  hub: c5.2xlarge
+  hub: c5.xlarge
 
 spot:
   server: false
