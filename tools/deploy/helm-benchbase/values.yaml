@@ -10,7 +10,7 @@ scalefactor: 10
 # Number of concurrent clients
 terminals: 4
 # Duration of the benchmark in seconds
-time: 10
+time: 5
 # Maximum throughput of the benchmark
 rate: 50000
 
@@ -24,7 +24,7 @@ hot:
   # Weights of different types of transactions
   weights: 1,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
   # Number of keys per transaction
-  keyspertxn: 12
+  keyspertxn: 8
   # The maximum number of keys to select in scanning queries
   maxscancount: 50
 
