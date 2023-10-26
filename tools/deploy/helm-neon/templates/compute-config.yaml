@@ -154,6 +154,21 @@ data:
                     "vartype": "string"
                 },
                 {
+                    "name": "remotexact.validate_index",
+                    "value": "{{ .Values.compute.validate_index }}",
+                    "vartype": "bool"
+                },
+                {
+                    "name": "remotexact.validate_table",
+                    "value": "{{ .Values.compute.validate_table }}",
+                    "vartype": "bool"
+                },
+                {
+                    "name": "remotexact.validate_tuple",
+                    "value": "{{ .Values.compute.validate_tuple }}",
+                    "vartype": "bool"
+                },
+                {
                     "name": "multi_region",
                     "value": "on",
                     "vartype": "bool"
