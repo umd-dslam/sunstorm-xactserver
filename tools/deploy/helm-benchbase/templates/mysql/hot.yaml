@@ -1,4 +1,4 @@
-{{ if and (eq .Values.benchmark "hot") (eq .Values.dbtype "postgres") -}}
+{{ if and (eq .Values.benchmark "hot") (eq .Values.dbtype "mysql") -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -13,10 +13,10 @@ data:
     <parameters>
 
         <!-- Connection details -->
-        <type>POSTGRES</type>
-        <driver>org.postgresql.Driver</driver>
-        <url>jdbc:postgresql://compute:55433/postgres?sslmode=disable&amp;ApplicationName=ycsb&amp;reWriteBatchedInserts=true</url>
-        <username>cloud_admin</username>
+        <type>MYSQL</type>
+        <driver>com.mysql.cj.jdbc.Driver</driver>
+        <url>jdbc:mysql://localhost:3306/benchbase?rewriteBatchedStatements=true&amp;allowPublicKeyRetrieval=True&amp;sslMode=DISABLED</url>
+        <username>root</username>
         <password>{{ default "" .Values.password }}</password>
         <isolation>TRANSACTION_SERIALIZABLE</isolation>
         <batchsize>128</batchsize>
@@ -31,16 +31,12 @@ data:
 
         <!-- Load data in all partitions -->
         <loadall>{{ .Values.loadall }}</loadall>
-
         <!-- Current region -->
         <region>{{ .Values.namespace_id }}</region>
-
         <!-- Number of hot keys per partition -->
         <hot>{{ .Values.hot.hot }}</hot>
-
         <!-- Number of keys per transaction -->
         <keyspertxn>{{ .Values.hot.keyspertxn }}</keyspertxn>
-        
         <!-- The maximum number of keys to select in scanning queries -->
         <maxscancount>{{ .Values.hot.maxscancount }}</maxscancount>
 
@@ -177,10 +173,6 @@ data:
     {{- $numRegions := sub (len .Values.ordered_namespaces) 1 }}
     {{- $regionsRange := untilStep 1 (int (add1 (int $numRegions))) 1}}
 
-    {{- if .Values.remotexact }}
-    CREATE EXTENSION IF NOT EXISTS remotexact;
-    {{- end }}
-
     {{- range $i := $regionsRange }}
     DROP TABLE IF EXISTS usertable_{{ $i }};
     {{- end }}
@@ -201,7 +193,4 @@ data:
     );
     {{- end }}
 
-    {{- range $i := $regionsRange }}
-    UPDATE pg_class SET relregion = {{ $i }} WHERE relname IN ('usertable_{{ $i }}', 'usertable_{{ $i }}_pkey');
-    {{- end }}
 {{ end }}

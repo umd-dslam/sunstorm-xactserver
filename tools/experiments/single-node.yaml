@@ -1,3 +1,4 @@
+dbtype: postgres
 reload_every: 8
 benchmark: hot
 scalefactor: 1000

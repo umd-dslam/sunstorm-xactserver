@@ -69,6 +69,7 @@ class Replace(TypedDict):
 
 
 class Experiment(TypedDict):
+    dbtype: str
     reload_every: int
     benchmark: str
     scalefactor: int
@@ -137,12 +138,15 @@ def benchmark_args(exp: Experiment, prefix: str | None, suffix: str | None):
     Yields:
         A tuple of the benchmark arguments and the corresponding metadata
     """
+    dbtype = exp["dbtype"]
     benchmark = exp["benchmark"]
     scalefactor = exp["scalefactor"]
     time = exp["time"]
     rate = exp["rate"]
 
     base_args = [
+        "-s"
+        f"dbtype={dbtype}",
         "-s",
         f"benchmark={benchmark}",
         "-s",

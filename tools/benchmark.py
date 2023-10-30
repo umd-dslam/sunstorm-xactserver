@@ -35,9 +35,11 @@ def run_benchmark(
             (BASE_PATH / "helm-benchbase").as_posix(),
             "--namespace",
             namespace,
-        ]
+        ] 
         for s in sets:
             helm_cmd += ["--set", s]
+        if dry_run:
+            helm_cmd += ["--debug"]
         run_subprocess(
             helm_cmd,
             (LOG, f"[{namespace}] Generating Kubernetes configs from Helm templates"),
@@ -163,7 +165,8 @@ class Operation:
     @classmethod
     def run(cls, args) -> BenchmarkResult | None:
         cls.config = get_main_config(BASE_PATH)
-        cls.namespaces = list(get_namespaces(cls.config).items())
+        namespaces = get_namespaces(cls.config)
+        cls.namespaces = list(namespaces.items())
         cls.namespaces.sort(key=lambda x: x[1]["id"])
 
         cls.settings = args.set or []

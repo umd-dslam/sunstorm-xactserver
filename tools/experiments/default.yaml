@@ -1,6 +1,8 @@
 # This is an example of an experiment configuration file. It contains all available options.
 # See the Experiment class in experiment.py for the type definitions.
 
+# Type of database system
+dbtype: postgres
 # Name of the benchbase benchmark to run
 benchmark: hot
 # The scale factor to use for the benchmark. The meaning of this value is benchmark-specific.

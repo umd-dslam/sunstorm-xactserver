@@ -28,6 +28,10 @@ hot:
   # The maximum number of keys to select in scanning queries
   maxscancount: 50
 
+tpcc:
+  weights: 45,43,4,4,4
+  foreignkeys: false
+
 #---------------------------------------------------------------------------
 #       The following values are modified by the benchmark.py tool
 #---------------------------------------------------------------------------
@@ -44,6 +48,7 @@ ordered_namespaces:
   - global
   - us-east-1
 
+dbtype: postgres
 remotexact: true
 namespace_id: 0
 loadall: false
