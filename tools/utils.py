@@ -138,7 +138,7 @@ def get_main_config(base_path: Path) -> MainConfig:
         if region_info.get("context") is None:
             region_info["context"] = find_context(region)
 
-    if main_config.get("global_region_context") is None:
+    if (main_config.get("global_region")) and (main_config.get("global_region_context") is None):
         main_config["global_region_context"] = find_context(
             main_config["global_region"]
         )
@@ -166,7 +166,7 @@ class Kube:
         context = None
 
         main_config = get_main_config(base_path)
-        if region == main_config["global_region"]:
+        if ("global_region" in main_config) and (region == main_config["global_region"]):
             context = main_config.get("global_region_context", None)
 
         if context is None:

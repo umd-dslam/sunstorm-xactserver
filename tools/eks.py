@@ -47,7 +47,7 @@ def run_subprocess(
 def generate_eks_configs(regions: list[RegionInfo]):
     WORKSPACE_PATH.mkdir(parents=True, exist_ok=True)
 
-    global_region = next(region for region in regions if region.is_global)
+    global_region_name = next((region.name for region in regions if region.is_global), None)
     for region in regions:
         stdout = run_subprocess(
             [
@@ -57,7 +57,7 @@ def generate_eks_configs(regions: list[RegionInfo]):
                 "--set",
                 f"region={region.name}",
                 "--set",
-                f"global_region={global_region.name}",
+                f"global_region={global_region_name}",
             ],
             region,
             print_log=False,
@@ -138,16 +138,31 @@ if __name__ == "__main__":
         choices=["create", "delete", "generate"],
     )
     parser.add_argument(
+        "--base-path",
+        action="store", 
+        type=str,
+        help="Base path containing the cluster configs."
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print the commands that would be executed without actually executing them.",
     )
     args = parser.parse_args()
 
+    if args.base_path:
+        BASE_PATH = Path(__file__).parent.resolve() / args.base_path
+        WORKSPACE_PATH = BASE_PATH / "workspace"
+        DEPLOY_PATH = BASE_PATH / "deploy"
+    
     config = get_main_config(BASE_PATH / "deploy")
 
-    global_region = config["global_region"]
-    regions = set(config["regions"] or []) | {global_region}
+    regions = set(config["regions"] or [])
+    if "global_region" in config:
+        global_region = config["global_region"]
+        regions.add(global_region)
+    else:
+        global_region = None
 
     generate_only = False
     action_fn = lambda info, dry_run: None
