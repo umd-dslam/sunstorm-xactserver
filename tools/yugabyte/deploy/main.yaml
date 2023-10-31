@@ -3,12 +3,12 @@
 regions:
   us-east-1:
     id: 1
-    # context: minikube
+    context: minikube
   us-east-2:
     id: 2
-    # context: minikube
-  us-west-1:
-    id: 3
+    context: minikube
+  # us-west-1:
+    # id: 3
     # context: minikube
   # us-west-2:
   #   id: 5

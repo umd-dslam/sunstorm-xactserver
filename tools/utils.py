@@ -151,9 +151,9 @@ class NamespaceInfo(TypedDict):
 
 
 def get_namespaces(config: MainConfig):
-    namespaces: dict[str, NamespaceInfo] = {
-        "global": {"region": config["global_region"], "id": 0}
-    }
+    namespaces: dict[str, NamespaceInfo] = {}
+    if "global_region" in config:
+        namespaces["global"] =  {"region": config["global_region"], "id": 0}
     regions = config.get("regions") or {}
     for region, region_info in regions.items():
         namespaces[region] = {"region": region, "id": region_info["id"]}

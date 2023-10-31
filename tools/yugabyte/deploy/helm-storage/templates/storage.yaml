@@ -1,0 +1,11 @@
+kind: StorageClass
+metadata:
+  name: yb-storage-{{.Values.region}}
+apiVersion: storage.k8s.io/v1
+allowVolumeExpansion: true
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp2
+  replicationType: none
+  fsType: xfs
+  region: {{.Values.region}}

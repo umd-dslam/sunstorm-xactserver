@@ -1,0 +1,43 @@
+# Number of safekeeper replicas
+safekeeper_replicas: 1
+
+# EBS volume ID to store global data like metrics, minio, etc.
+# No EBS volume will be used if this is empty. If you run deploy.py,
+# this value will be set automatically.
+hub_ebs_volume_id: null
+
+compute:
+  shared_buffers: 8GB
+  temp_buffers: 128MB
+  max_connections: 100
+  max_prepared_transactions: 128
+  max_pred_locks_per_transaction: 256
+  validate_index: off
+  validate_table: on
+  validate_tuple: on
+
+# r5.4xlarge (16 vCPUs, 128 GB RAM)
+# compute:
+#   shared_buffers: 64GB
+#   temp_buffers: 2GB
+#   max_connections: 500
+#   max_prepared_transactions: 1024
+#   max_pred_locks_per_transaction: 1024
+#   validate_index: off
+#   validate_table: on
+#   validate_tuple: on
+
+#---------------------------------------------------------------------------
+#       The following values are modified by the deploy.py tool
+#---------------------------------------------------------------------------
+namespaces:
+  global:
+    region: us-east-1
+  us-east-1:
+    region: us-east-1
+
+ordered_namespaces:
+  - global
+  - us-east-1
+
+namespace_id: 0

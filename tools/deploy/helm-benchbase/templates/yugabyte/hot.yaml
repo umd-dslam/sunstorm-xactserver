@@ -1,0 +1,214 @@
+{{ if and (eq .Values.benchmark "hot") (eq .Values.dbtype "yugabyte") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: benchbase-config
+  labels:
+    app: benchbase-config
+    benchmark: hot
+    part-of: benchbase
+data:
+  config.xml: |
+    <?xml version="1.0"?>
+    <parameters>
+
+        <!-- Connection details -->
+        <type>YUGABYTEDB</type>
+        <driver>org.postgresql.Driver</driver>
+        <url>jdbc:postgresql://yb-tserver-service:5433/yugabyte?sslmode=disable&amp;ApplicationName=ycsb&amp;reWriteBatchedInserts=true</url>
+        <username>yugabyte</username>
+        <password>{{ default "" .Values.password }}</password>
+        <isolation>TRANSACTION_SERIALIZABLE</isolation>
+        <batchsize>128</batchsize>
+
+        <ddlpath>/config/ddl.sql</ddlpath>
+
+        <!-- Scalefactor in YCSB is *1000 the number of rows in the USERTABLE-->
+        <scalefactor>{{ .Values.scalefactor }}</scalefactor>
+        
+        <!-- Override the field size for each column in USERTABLE -->
+        <fieldSize>10</fieldSize>
+
+        <!-- Load data in all partitions -->
+        <loadall>{{ .Values.loadall }}</loadall>
+
+        <!-- Current region -->
+        <region>{{ .Values.namespace_id }}</region>
+
+        <!-- Number of hot keys per partition -->
+        <hot>{{ .Values.hot.hot }}</hot>
+
+        <!-- Number of keys per transaction -->
+        <keyspertxn>{{ .Values.hot.keyspertxn }}</keyspertxn>
+        
+        <!-- The maximum number of keys to select in scanning queries -->
+        <maxscancount>{{ .Values.hot.maxscancount }}</maxscancount>
+
+        <!-- The workload -->
+        <terminals>{{ .Values.terminals }}</terminals>
+        <works>
+            <work>
+                <time>{{ .Values.time }}</time>
+                <rate>{{ .Values.rate }}</rate>
+                <weights>{{ .Values.hot.weights }}</weights>
+            </work>
+        </works>
+
+        <!-- HOT Procedures declaration -->
+        <transactiontypes>
+            <!-- Workload A: 50% Read, 50% Write -->
+            <transactiontype>
+                <name>WorkloadA1</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadA2</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadA3</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadA4</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadA5</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadA6</name>
+            </transactiontype>
+            <!-- Workload B: 95% Read, 5% Write -->
+            <transactiontype>
+                <name>WorkloadB1</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadB2</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadB3</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadB4</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadB5</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadB6</name>
+            </transactiontype>
+            <!-- Workload C: 100% Read -->
+            <transactiontype>
+                <name>WorkloadC1</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadC2</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadC3</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadC4</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadC5</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadC6</name>
+            </transactiontype>
+            <!-- Workload D: 95% Read (latest), 5% Insert -->
+            <transactiontype>
+                <name>WorkloadD1</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadD2</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadD3</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadD4</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadD5</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadD6</name>
+            </transactiontype>
+            <!-- Workload E: 95% Scan, 5% Insert -->
+            <transactiontype>
+                <name>WorkloadE1</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadE2</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadE3</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadE4</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadE5</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadE6</name>
+            </transactiontype>
+            <!-- Workload F: 50% Read, 50% RMW -->
+            <transactiontype>
+                <name>WorkloadF1</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadF2</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadF3</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadF4</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadF5</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadF6</name>
+            </transactiontype>
+        </transactiontypes>
+    </parameters>
+
+  ddl.sql: |
+    {{- $numRegions := sub (len .Values.ordered_namespaces) 1 }}
+    {{- $regionsRange := untilStep 1 (int (add1 (int $numRegions))) 1}}
+
+    {{- range $i := $regionsRange }}
+    DROP TABLE IF EXISTS usertable_{{ $i }};
+    DROP TABLESPACE IF EXISTS tablespace_{{ $i }};
+    {{- end }}
+
+    {{- range $i := $regionsRange }}
+    CREATE TABLESPACE tablespace_{{ $i }} WITH 
+    (
+        replica_placement='{
+            "num_replicas": 1,
+            "placement_blocks": [{"cloud":"aws",
+                "region": "{{ index .Values.ordered_namespaces $i}}",
+                "zone":"{{ index .Values.ordered_namespaces $i}}a",
+                "min_num_replicas":1}]
+        }'
+    );
+    {{- end }}
+
+    {{- range $i := $regionsRange }}
+ 
+    CREATE TABLE usertable_{{ $i }} (
+        ycsb_key int primary key,
+        field1   text,
+        field2   text,
+        field3   text,
+        field4   text,
+        field5   text,
+        field6   text,
+        field7   text,
+        field8   text,
+        field9   text,
+        field10  text
+    ) TABLESPACE tablespace_{{ $i }} SPLIT INTO 1 TABLETS;
+    {{- end }}
+{{ end }}

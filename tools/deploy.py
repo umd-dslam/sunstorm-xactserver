@@ -50,9 +50,50 @@ def try_with_timeout(fn, timeout: int):
                     f"Timeout: {fn.__name__} did not return within {timeout} seconds."
                 )
 
+def set_up_storage_for_yugabytedb(config: MainConfig, dry_run: bool):
+    regions = set(config["regions"] or [])
+    if "global_region" in config:
+        regions.add(config["global_region"])
+    for region in regions:
+        helm_name = f"storage-yb-{region}"
+
+        run_subprocess(
+            [
+                "helm",
+                "uninstall",
+                helm_name,
+            ]
+            + context_flag(region, "--kube-context"),
+            (
+                LOG,
+                f"Uninstalling possibly existing yugabyte storage in region: {region}",
+            ),
+            dry_run,
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
+        )
+        run_subprocess(
+            [
+                "helm",
+                "install",
+                helm_name,
+                "--set",
+                f"region={region}",
+                (BASE_PATH / "helm-storage").as_posix(),
+            ]
+            + context_flag(region, "--kube-context"),
+            (LOG, f"Installing yugabyte storage template in region: {region}"),
+            dry_run,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
+        )
 
 def set_up_load_balancer_for_coredns(config: MainConfig, dry_run: bool):
-    regions = set(config["regions"] or []) | {config["global_region"]}
+    regions = set(config["regions"] or [])
+    if "global_region" in config:
+        regions.add(config["global_region"])
 
     if len(regions) == 1:
         LOG.info(
@@ -79,8 +120,12 @@ def set_up_load_balancer_for_coredns(config: MainConfig, dry_run: bool):
 
 
 def install_dns_configmap(config: MainConfig, dry_run: bool):
-    global_region = config["global_region"]
-    regions = set(config["regions"] or []) | {global_region}
+    regions = set(config["regions"] or [])
+    if "global_region" in config:
+        global_region = config["global_region"]
+        regions.add(global_region)
+    else: 
+        global_region = None
 
     if len(regions) == 1:
         LOG.info(
@@ -183,7 +228,7 @@ def install_dns_configmap(config: MainConfig, dry_run: bool):
         )
 
 
-def create_namespaces(config, dry_run: bool):
+def create_namespaces(config, cluster_type: str, dry_run: bool):
     namespaces = get_namespaces(config)
 
     def clean_up_namespace(namespace, namespace_info):
@@ -205,9 +250,10 @@ def create_namespaces(config, dry_run: bool):
     with ThreadPoolExecutor(max_workers=len(namespaces)) as executor:
         list(
             executor.map(
-                clean_up_neon_one_namespace,
+                clean_up_one_namespace,
                 namespaces.keys(),
                 namespaces.values(),
+                cluster_type,
                 repeat(dry_run),
             )
         )
@@ -228,7 +274,7 @@ def create_namespaces(config, dry_run: bool):
                             metadata=kubernetes.client.V1ObjectMeta(
                                 name=namespace,
                                 labels={
-                                    "part-of": "neon",
+                                    "part-of": cluster_type,
                                 },
                             )
                         ),
@@ -295,9 +341,10 @@ def deploy_neon(config: MainConfig, cleanup_only: bool, dry_run: bool):
     with ThreadPoolExecutor(max_workers=len(namespaces)) as executor:
         list(
             executor.map(
-                clean_up_neon_one_namespace,
+                clean_up_one_namespace,
                 namespaces.keys(),
                 namespaces.values(),
+                "neon",
                 repeat(dry_run),
             )
         )
@@ -309,20 +356,98 @@ def deploy_neon(config: MainConfig, cleanup_only: bool, dry_run: bool):
         list(executor.map(deploy_neon_one_namespace, namespaces.keys()))
 
 
-def clean_up_neon_one_namespace(namespace: str, namespace_info, dry_run):
+def deploy_yugabytedb(config: MainConfig, cleanup_only: bool, dry_run: bool):
+    namespaces = get_namespaces(config)
+    ordered_namespaces = [
+        item[0]
+        for item in sorted(namespaces.items(), key=lambda x: int(x[1]["id"] or 0))
+    ]
+
+    def deploy_yugabyte_one_namespace(namespace: str):
+        region = str(namespaces[namespace]["region"])
+
+        sets = []
+        for ns, ns_info in namespaces.items():
+            for k, v in ns_info.items():
+                sets.append(f"namespaces.{ns}.{k}={v}")
+
+        sets.append(f"ordered_namespaces={{{','.join(ordered_namespaces)}}}")
+        sets.append(f"namespace_id={ordered_namespaces.index(namespace)}")
+
+        yaml_config = BASE_PATH / f"yugabyte_overrides_{region}.yaml"
+        yaml_f = open(yaml_config, "w")
+        run_subprocess(
+            [
+                "helm",
+                "template",
+                (BASE_PATH / "helm-yugabyte").as_posix(),
+                "--set",
+                ",".join(sets),
+                "--set",
+                f"region={region}",
+            ],
+            (LOG, f'Creating yugabyte override in region "{region}"'),
+            dry_run,
+            check=True,
+            stdout = yaml_f,
+            stderr=subprocess.STDOUT,
+        )
+        yaml_f.close()
+
+
+        run_subprocess(
+            [
+                "helm",
+                "upgrade",
+                "--install",
+                "--version",
+                "2.19.3"
+                "--namespace",
+                namespace,
+                "-f",
+                yaml_config.as_posix(),
+                "--wait",
+                f"yugabyte-{namespace}",
+                "yugabytedb/yugabyte",
+            ]
+            + context_flag(region, "--kube-context"),
+            (LOG, f'Installing yugabyte in namespace "{namespace}" in region "{region}"'),
+            dry_run,
+            check=True,
+        )
+
+    with ThreadPoolExecutor(max_workers=len(namespaces)) as executor:
+        list(
+            executor.map(
+                clean_up_one_namespace,
+                namespaces.keys(),
+                namespaces.values(),
+                "yugabyte",
+                repeat(dry_run),
+            )
+        )
+
+    if cleanup_only:
+        return
+
+    with ThreadPoolExecutor(max_workers=len(namespaces)) as executor:
+        list(executor.map(deploy_yugabyte_one_namespace, namespaces.keys()))
+
+
+def clean_up_one_namespace(namespace: str, namespace_info, cluster_type: str, dry_run):
     region = namespace_info["region"]
     run_subprocess(
         [
             "helm",
             "uninstall",
-            f"neon-{namespace}",
+            f"{cluster_type}-{namespace}",
             "--namespace",
             namespace,
         ]
         + context_flag(region, "--kube-context"),
         (
             LOG,
-            f'Uninstalling possibly existing Neon in namespace "{namespace}" in region "{region}"',
+            f'Uninstalling possibly existing {cluster_type} in namespace "{namespace}" in region "{region}"',
         ),
         dry_run,
         check=False,
@@ -330,14 +455,21 @@ def clean_up_neon_one_namespace(namespace: str, namespace_info, dry_run):
 
 
 STAGES = [
+    "storage",
     "load-balancer",
     "dns",
     "namespace",
-    "neon",
+    "cluster",
 ]
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--base-path",
+        action="store", 
+        type=str,
+        help="Base path containing the cluster configs."
+    )
     parser.add_argument(
         "--skip-before",
         "--from",
@@ -353,9 +485,9 @@ if __name__ == "__main__":
         help="Skip all stages after the specified stage.",
     )
     parser.add_argument(
-        "--clean-up-neon",
+        "--clean-up-cluster",
         action="store_true",
-        help='Only do the cleaning up in the "neon" stage.',
+        help='Only do the cleaning up in the "cluster" stage.',
     )
     parser.add_argument(
         "--stages",
@@ -373,6 +505,12 @@ if __name__ == "__main__":
         print("\n".join(STAGES))
         exit(0)
 
+    if args.base_path:
+        BASE_PATH = Path(__file__).parent.resolve() / args.base_path / "deploy"
+        cluster_type = "yugabyte"
+    else: 
+        cluster_type = "neon"
+
     skip_before_index = STAGES.index(args.skip_before) if args.skip_before else 0
     skip_after_index = (
         STAGES.index(args.skip_after) if args.skip_after else len(STAGES) - 1
@@ -384,27 +522,41 @@ if __name__ == "__main__":
 
     log_tag = "bold yellow"
 
-    if STAGES[0] in unskipped_stages:
+    if (STAGES[0] in unskipped_stages) and (cluster_type == "yugabyte"):
+        LOG.info(
+            f"[{log_tag}]Setting up storage for YugabyteDB[/{log_tag}]",
+            extra={"markup": True},
+        )
+        set_up_storage_for_yugabytedb(config, args.dry_run)
+
+    if STAGES[1] in unskipped_stages:
         LOG.info(
             f"[{log_tag}]Setting up load balancer for CoreDNS[/{log_tag}]",
             extra={"markup": True},
         )
         set_up_load_balancer_for_coredns(config, args.dry_run)
 
-    if STAGES[1] in unskipped_stages:
+    if STAGES[2] in unskipped_stages:
         LOG.info(
             f"[{log_tag}]Installing DNS configmap[/{log_tag}]", extra={"markup": True}
         )
         install_dns_configmap(config, args.dry_run)
 
-    if STAGES[2] in unskipped_stages:
-        LOG.info(f"[{log_tag}]Creating namespaces[/{log_tag}]", extra={"markup": True})
-        create_namespaces(config, args.dry_run)
-
     if STAGES[3] in unskipped_stages:
-        LOG.info(f"[{log_tag}]Deploying Neon[/{log_tag}]", extra={"markup": True})
-        deploy_neon(
-            config,
-            args.clean_up_neon,
-            args.dry_run,
-        )
+        LOG.info(f"[{log_tag}]Creating namespaces[/{log_tag}]", extra={"markup": True})
+        create_namespaces(config, cluster_type, args.dry_run)
+
+    if STAGES[4] in unskipped_stages:
+        LOG.info(f"[{log_tag}]Deploying {cluster_type}[/{log_tag}]", extra={"markup": True})
+        if (cluster_type == "neon"):
+            deploy_neon(
+                config,
+                args.clean_up_cluster,
+                args.dry_run,
+            )
+        else: 
+            deploy_yugabytedb(
+                config, 
+                args.clean_up_cluster,
+                args.dry_run,
+            )

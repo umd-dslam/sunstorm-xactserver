@@ -1,0 +1,48 @@
+# The values here will be filled in by the deploy.py script so we don't specify them here.
+# The following values are just for reference.
+
+instance_types:
+  standard-workers: r5.4xlarge
+  client: c5.xlarge
+
+spot:
+  standard_worker: true
+  client: true
+
+region: us-east-1
+
+subnets:
+  us-east-1:
+    us-east-1a: subnet-01ffdf1e8d2d11bce 
+    us-east-1b: subnet-0f2ae7a9189cd2786
+    us-east-1c: subnet-0346cab72850ef316
+  us-east-2:
+    us-east-2a: subnet-0cde3976b2a0d524c
+    us-east-2b: subnet-0f0a7b144a2a5d0f7
+    us-east-2c: subnet-08c099609234207be
+  us-west-1:
+    us-west-1a: subnet-05f98b4f44c64847e
+    us-west-1b: subnet-08f4dcbd56e6814c1
+  us-west-2:
+    us-west-2a: subnet-0c7307ae51cd54955
+    us-west-2b: subnet-017e607e654b73f35
+    us-west-2c: subnet-06401fc941a2b272e
+    us-west-2d: subnet-08b07ebe86eeeaffa
+  eu-west-1:
+    eu-west-1a: subnet-0ffc60f2e1a784c05
+    eu-west-1b: subnet-097b92d96accfde20
+    eu-west-1c: subnet-0765b6609bf1ab069
+  eu-west-2:
+    eu-west-2a: subnet-01d4009a020da46df
+    eu-west-2b: subnet-0e2ad7f39541c75df
+    eu-west-2c: subnet-0c7df5b4993c904ef
+
+security_groups:
+  us-east-1: sg-018aeab319579349c
+  us-east-2: sg-05538d3ef06e925d8
+  us-west-1: sg-0941de724bb2351cb
+  us-west-2: sg-0f6f9d8fed793f085
+  eu-west-1: sg-0af119315a40fa0f9
+  eu-west-2: sg-0ec4e1d97b23dff45
+  
+aws_ebs_csi_driver: false

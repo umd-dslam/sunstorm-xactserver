@@ -1,0 +1,37 @@
+apiVersion: v1
+data:
+  Corefile: |
+    .:53 {
+        errors
+        ready
+        health
+        kubernetes cluster.local in-addr.arpa ip6.arpa {
+             pods insecure
+             fallthrough in-addr.arpa ip6.arpa
+        }
+        prometheus :9153
+        forward . /etc/resolv.conf
+        cache 10
+        loop
+        reload
+        loadbalance
+    }
+    {{- $currentRegion := .Values.region }}
+    {{- $addresses := .Values.addresses }}
+    {{- range $region := (keys $addresses | sortAlpha) }}
+    {{- if ne $region $currentRegion }}
+    {{ $region }}.svc.cluster.local:53 {
+      log
+      errors
+      ready
+      cache 10
+      forward . {{ get $addresses $region | join " " }} {
+          force_tcp
+      }
+    }
+    {{- end }}
+    {{- end }}
+kind: ConfigMap
+metadata:
+  name: coredns
+  namespace: kube-system

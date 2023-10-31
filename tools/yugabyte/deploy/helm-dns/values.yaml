@@ -1,0 +1,19 @@
+# The values here will be filled in by the deploy.py script so we don't specify them here.
+# The following values are just for reference.
+#
+# addresses:
+#   us-east-1:
+#     - "1.1.1.1"
+#     - "2.2.2.2"
+#     - "3.3.3.3"
+#   us-east-2:
+#     - "4.4.4.4"
+#     - "5.5.5.5"
+#   us-west-1:
+#     - "6.6.6.6"
+#     - "7.7.7.7"
+#     - "8.8.8.8"
+#   us-west-2:
+#     - "9.9.9.9"
+# region: us-east-1
+# global_region: us-east-1
