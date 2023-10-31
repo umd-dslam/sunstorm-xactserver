@@ -26,6 +26,13 @@ data:
       #       - compute.{{ $r }}:9187
       #     {{- end }}
 
+      - job_name: safekeeper
+        static_configs:
+          - targets:
+          {{- range $r := .Values.ordered_namespaces }}
+            - safekeeper-0.safekeeper.{{ $r }}:7676
+          {{- end }}
+
       - job_name: xactserver
         static_configs:
           - targets:
