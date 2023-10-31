@@ -144,6 +144,21 @@
               "vartype": "string"
           },
           {
+              "name": "remotexact.validate_index",
+              "value": "false",
+              "vartype": "bool"
+          },
+          {
+              "name": "remotexact.validate_table",
+              "value": "true",
+              "vartype": "bool"
+          },
+          {
+              "name": "remotexact.validate_tuple",
+              "value": "true",
+              "vartype": "bool"
+          },
+          {
               "name": "multi_region",
               "value": "on",
               "vartype": "bool"
