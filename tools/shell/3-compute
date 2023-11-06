@@ -1,10 +1,32 @@
 #!/bin/bash
-
 source common
 
-set -eux
+set -eu
 
-spect_template=./spec-template.json
+stop_only=0
+
+while (( "$#" )); do
+  case "$1" in
+    --stop)
+      stop_only=1
+      shift 1
+      ;;
+    *) # unsupported flags
+      echo "Error: Unsupported flag $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+echo "Stopping any previous compute instance"
+kill $(cat logs/compute.pid) || true
+pkill postgres || true
+
+if [ $stop_only -eq 1 ]; then
+    exit 0
+fi
+
+spec_template=./spec-template.json
 spec=./spec.json
 
 echo "Waiting pageserver become ready."
@@ -33,7 +55,7 @@ echo "Tenant id: ${tenant_id}"
 echo "Timeline id: ${timeline_id}"
 
 echo "Overwrite variables in spec file"
-sed "s/TENANT_ID/${tenant_id}/" ${spect_template} > ${spec}
+sed "s/TENANT_ID/${tenant_id}/" ${spec_template} > ${spec}
 sed -i "s/TIMELINE_ID/${timeline_id}/" ${spec}
 sed -i "s/SAFEKEEPERS_ADDR/${ADDRESSES[$REGION_ID]}:5454/" ${spec}
 sed -i "s/REGION/${REGION_ID}/" ${spec}

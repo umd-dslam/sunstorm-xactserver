@@ -1,0 +1,120 @@
+#!/bin/bash
+source common
+
+set -eu
+
+run_broker=0
+run_pageserver=0
+run_safekeeper=0
+run_xactserver=0
+flag_set=0
+stop_only=0
+new_data=0
+
+while (( "$#" )); do
+  case "$1" in
+    -p|--pageserver)
+      run_pageserver=1
+      flag_set=1
+      shift 1
+      ;;
+    -s|--safekeeper)
+      run_safekeeper=1
+      flag_set=1
+      shift 1
+      ;;
+    -x|--xactserver)
+      run_xactserver=1
+      flag_set=1
+      shift 1
+      ;;
+    -n|--new)
+      new_data=1
+      shift 1
+      ;;
+    --stop)
+      stop_only=1
+      shift 1
+      ;;
+    --) # end argument parsing
+      shift
+      break
+      ;;
+    *) # unsupported flags
+      echo "Error: Unsupported flag $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# If no components are specified, start all of them
+if [ $flag_set -eq 0 ]; then
+  run_broker=1
+  run_pageserver=1
+  run_safekeeper=1
+  run_xactserver=1
+fi
+
+if [ $run_broker -eq 1 ] && [ "${ADDRESSES[$REGION_ID]}" = "$HUB_ADDR" ]; then
+  echo "Stopping any previous storage broker instance"
+  kill $(cat logs/storage_broker.pid) || true
+
+  if [ $stop_only -eq 0 ]; then
+    run storage_broker "$NEON_DIR/target/release/storage_broker --listen-addr=0.0.0.0:50051"
+  fi
+fi
+
+# If the data directory doesn't exist, copy the data from minio
+if [ $stop_only -eq 0 ] && ([ ! -d $DATA ] || [ $new_data -eq 1 ]); then
+  rm -rf $DATA
+  mkdir -p $DATA
+  until (mc alias set minio http://$HUB_ADDR:9000 minioadmin minioadmin) do
+      echo 'Waiting to start minio...' && sleep 1
+  done
+  mc cp -r minio/sunstorm/.neon $DATA/
+fi
+
+if [ $run_pageserver -eq 1 ]; then
+  echo "Stopping any previous pageserver instance"
+  kill $(cat logs/pageserver.pid) || true
+
+  if [ $stop_only -eq 0 ]; then
+    run pageserver "$NEON_DIR/target/release/pageserver -D $DATA/.neon/ \
+      -c broker_endpoint='http://$HUB_ADDR:50051'                       \
+      -c listen_pg_addr='0.0.0.0:6400'                                  \
+      -c listen_http_addr='0.0.0.0:9898'"
+  fi
+fi
+
+if [ $run_safekeeper -eq 1 ]; then
+  echo "Stopping any previous safekeeper instance"
+  kill $(cat logs/safekeeper.pid) || true
+
+  if [ $stop_only -eq 0 ]; then
+    run safekeeper "$NEON_DIR/target/release/safekeeper \
+      --id=1                                            \
+      --datadir=$DATA                                   \
+      --advertise-pg=${ADDRESSES[$REGION_ID]}:5454      \
+      --listen-pg=0.0.0.0:5454                          \
+      --listen-http=0.0.0.0:7676                        \
+      --broker-endpoint=http://$HUB_ADDR:50051"
+  fi
+fi
+
+if [ $run_xactserver -eq 1 ]; then
+  echo "Stopping any previous xactserver instance"
+  kill $(cat logs/xactserver.pid) || true
+
+  if [ $stop_only -eq 0 ]; then
+    run xactserver "$XACTSERVER_DIR/target/release/xactserver         \
+      --listen-pg=0.0.0.0:10000                                       \
+      --connect-pg=postgresql://cloud_admin@localhost:55433/postgres  \
+      --max-conn-pool-size-pg=100                                     \
+      --node-id=$REGION_ID                                            \
+      --nodes=$NODE_URLS                                              \
+      --max-conn-pool-size-peer=100                                   \
+      --listen-peer=0.0.0.0:23000                                     \
+      --listen-http=0.0.0.0:8080                                      \
+      --no-ansi"
+  fi
+fi
