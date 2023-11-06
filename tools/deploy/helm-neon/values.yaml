@@ -7,7 +7,7 @@ safekeeper_replicas: 1
 hub_ebs_volume_id: null
 
 compute:
-  shared_buffers: 8GB
+  shared_buffers: 2GB
   temp_buffers: 128MB
   max_connections: 100
   max_prepared_transactions: 128
@@ -27,6 +27,13 @@ compute:
 #   validate_table: on
 #   validate_tuple: on
 
+prometheus:
+  remote_write:
+    url: https://prometheus-prod-13-prod-us-east-0.grafana.net/api/prom/push
+    basic_auth:
+      username: 951279
+      password:
+
 #---------------------------------------------------------------------------
 #       The following values are modified by the deploy.py tool
 #---------------------------------------------------------------------------
@@ -35,9 +42,12 @@ namespaces:
     region: us-east-1
   us-east-1:
     region: us-east-1
+  us-east-2:
+    region: us-east-2
 
 ordered_namespaces:
   - global
   - us-east-1
+  - us-east-2
 
 namespace_id: 0

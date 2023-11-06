@@ -39,4 +39,10 @@ data:
           {{- range $r := .Values.ordered_namespaces }}
             - xactserver.{{ $r }}:8080
           {{- end }}
+
+    remote_write:
+      - url: {{ .Values.prometheus.remote_write.url }}
+        basic_auth:
+          username: {{ .Values.prometheus.remote_write.basic_auth.username }}
+          password: {{ .Values.prometheus.remote_write.basic_auth.password }}
 {{ end }}
