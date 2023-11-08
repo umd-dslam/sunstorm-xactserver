@@ -2,18 +2,23 @@ global:
   scrape_interval: 2s 
 
 scrape_configs:
-  - job_name: 'pageserver'
+  - job_name: pageserver
     static_configs:
       - targets:
-        - 'localhost:9898'
+        - localhost:9898
 
-  - job_name: 'xactserver'
+  - job_name: safekeeper
+    static_configs:
+      - targets:
+        - localhost:7676
+
+  - job_name: xactserver
     static_configs:
       - targets: 
-        - 'localhost:8080'
+        - localhost:8080
 
 remote_write:
   - url: https://prometheus-prod-13-prod-us-east-0.grafana.net/api/prom/push
     basic_auth:
       username: 951279
-      password: <secret>
+      password: 

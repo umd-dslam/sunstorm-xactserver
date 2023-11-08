@@ -55,7 +55,7 @@ if [ $flag_set -eq 0 ]; then
   run_xactserver=1
 fi
 
-if [ $run_broker -eq 1 ] && [ "${ADDRESSES[$REGION_ID]}" = "$HUB_ADDR" ]; then
+if [ $run_broker -eq 1 ] && [ "${PS_ADDRESSES[$REGION_ID]}" = "$HUB_ADDR" ]; then
   echo "Stopping any previous storage broker instance"
   kill $(cat logs/storage_broker.pid) || true
 
@@ -94,7 +94,7 @@ if [ $run_safekeeper -eq 1 ]; then
     run safekeeper "$NEON_DIR/target/release/safekeeper \
       --id=1                                            \
       --datadir=$DATA                                   \
-      --advertise-pg=${ADDRESSES[$REGION_ID]}:5454      \
+      --advertise-pg=${SK_ADDRESSES[$REGION_ID]}:5454   \
       --listen-pg=0.0.0.0:5454                          \
       --listen-http=0.0.0.0:7676                        \
       --broker-endpoint=http://$HUB_ADDR:50051"

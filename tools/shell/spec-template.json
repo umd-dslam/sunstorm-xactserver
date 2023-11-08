@@ -115,7 +115,7 @@
           },
           {
               "name": "neon.pageserver_connstring",
-              "value": "host=localhost port=6400",
+              "value": "host=PAGESERVER_ADDR port=6400",
               "vartype": "string"
           },
           {
