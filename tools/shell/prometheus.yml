@@ -17,6 +17,13 @@ scrape_configs:
       - targets: 
         - localhost:8080
 
+  - job_name: pushgateway
+    honor_labels: true
+    scrape_interval: 1s
+    static_configs:
+      - targets:
+        - localhost:9091
+
 remote_write:
   - url: https://prometheus-prod-13-prod-us-east-0.grafana.net/api/prom/push
     basic_auth:

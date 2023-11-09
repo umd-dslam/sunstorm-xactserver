@@ -9,6 +9,12 @@ use crate::RollbackInfo;
 use crate::RollbackReason;
 use crate::XactStatus;
 
+const DURATION_BUCKETS: &[f64] = &[
+    0.000_001, 0.000_010, 0.000_100, // 1 us, 10 us, 100 us
+    0.001_000, 0.010_000, 0.100_000, // 1 ms, 10 ms, 100 ms
+    1.0, 10.0, 100.0, // 1 s, 10 s, 100 s
+];
+
 lazy_static! {
     pub static ref STARTED_XACTS: IntCounterVec = register_int_counter_vec!(
         "xactserver_started_xacts_total",
@@ -26,12 +32,14 @@ lazy_static! {
         "xactserver_commit_duration_seconds",
         "Time a transaction spent in the xactserver",
         &["region", "coordinator", "is_local"],
+        DURATION_BUCKETS.into()
     )
     .unwrap();
     pub static ref EXECUTION_DURATION: HistogramVec = register_histogram_vec!(
         "xactserver_execution_duration_seconds",
         "Time spent for executing a transaction",
         &["region", "coordinator", "is_local"],
+        DURATION_BUCKETS.into()
     )
     .unwrap();
 }

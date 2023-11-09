@@ -17,11 +17,22 @@ services:
     restart: always
     image: prom/prometheus:latest
     network_mode: host
+    ports:
+      - 9090:9090
     configs:
       - source: prometheus
         target: /etc/prometheus/prometheus.yml
+
+  prometheus-pushgateway:
+    restart: always
+    image: prom/pushgateway:latest
+    network_mode: host
+    ports:
+      - 9091:9091
 
   grafana:
     restart: always
     image: ctring/grafana:sunstorm
     network_mode: host
+    ports:
+      - 3000:3000
