@@ -81,14 +81,39 @@ spec:
           emptyDir:
             sizeLimit: 40Gi
       affinity:
-        podAffinity:
-          # Compute nodes must be co-located with the pageserver
+        nodeAffinity:
+          # This rule is useful when we deploy all "regions" in the same physical region, making
+          # them not have a division based on cluster context. Therefore, we need to rely on the
+          # node labels to separate them by regions.
           requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {{- include "nodesInCurrentRegion" . | indent 20 }}
+          {{- if eq .Release.Namespace "global" }}
+          # In the global region, everything is placed on the "hub" node
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
                 matchExpressions:
-                  - key: app
+                  - key: role
+                    operator: In
+                    values:
+                      - hub
+          {{- else }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: role
+                    operator: In
+                    values:
+                      - compute
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: role
                     operator: In
                     values:
                       - pageserver
-              topologyKey: "kubernetes.io/hostname"
+          {{- end }}
 

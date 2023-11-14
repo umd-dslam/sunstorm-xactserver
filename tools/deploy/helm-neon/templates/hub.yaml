@@ -17,8 +17,8 @@ spec:
     - name: prometheus
       targetPort: prometheus
       port: 9090
-    - name: prometheus-pushgateway
-      targetPort: prometheus-pushgateway
+    - name: pushgateway
+      targetPort: pushgateway
       port: 9091
     - name: grafana
       targetPort: grafana
@@ -33,40 +33,6 @@ spec:
   # clusterIP to None) to expose the pod IPs directly instead of using the service IP.
   clusterIP: None
 ---
-{{ if .Values.hub_ebs_volume_id }}
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: hub-data-aws
-  labels:
-    type: amazonEBS
-spec:
-  capacity:
-    storage: 2Gi
-  accessModes:
-    - ReadWriteOnce
-  awsElasticBlockStore:
-    volumeID: {{ .Values.hub_ebs_volume_id }}
-    fsType: ext4
-  storageClassName: ""
-  claimRef:
-    name: hub-data
-    namespace: global
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: hub-data
-spec:
-  storageClassName: ""
-  volumeName: hub-data-aws
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 2Gi
----
-{{ end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -91,7 +57,7 @@ spec:
         fsGroup: 2000
       containers:
         - name: minio
-          image: quay.io/minio/minio:RELEASE.2023-05-04T21-44-30Z
+          image: minio/minio:latest
           env:
             - name: MINIO_BROWSER_LOGIN_ANIMATION
               value: "off"
@@ -123,10 +89,10 @@ spec:
               mountPath: /data  
             - name: hub-config
               mountPath: /config
-        - name: prometheus-pushgateway
+        - name: pushgateway
           image: prom/pushgateway:latest
           ports:
-            - name: prometheus-pushgateway
+            - name: pushgateway
               containerPort: 9091
         - name: grafana
           image: ctring/grafana:sunstorm
@@ -139,13 +105,8 @@ spec:
           configMap:
             name: hub-config
         - name: hub-data
-          {{ if .Values.hub_ebs_volume_id }}
-          persistentVolumeClaim:
-            claimName: hub-data
-          {{ else }}
           emptyDir:
             sizeLimit: 4Gi
-          {{ end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -156,20 +117,8 @@ spec:
             - weight: 100
               preference:
                 matchExpressions:
-                  - key: hub
+                  - key: role
                     operator: In
                     values:
-                      - all
                       - hub
-        podAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 1
-              podAffinityTerm:
-                labelSelector:
-                  matchExpressions:
-                    - key: app
-                      operator: In
-                      values:
-                        - pageserver
-                topologyKey: "kubernetes.io/hostname"
 {{ end }}

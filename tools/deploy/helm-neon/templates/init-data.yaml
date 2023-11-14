@@ -24,7 +24,7 @@ spec:
                 create .                                                    \
                 --keep-neon                                                 \
                 --num-regions {{ sub (len .Values.ordered_namespaces) 1 }}  \
-                --tenant-config ingest_batch_size:100                       \
+                --tenant-config ingest_batch_size:500                       \
                 --tenant-config checkpoint_distance:1073741824  # 1GB
 
               # Wait until minio is ready then upload the data
@@ -39,11 +39,10 @@ spec:
       restartPolicy: Never
       affinity:
         nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              preference:
-                matchExpressions:
-                  - {{- include "nodesInCurrentRegion" . | indent 20 }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                - {{- include "nodesInCurrentRegion" . | indent 18 }}
         podAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 100

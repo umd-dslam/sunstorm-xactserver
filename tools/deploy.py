@@ -271,10 +271,6 @@ def deploy_neon(config: MainConfig, cleanup_only: bool, dry_run: bool):
         sets.append(f"ordered_namespaces={{{','.join(ordered_namespaces)}}}")
         sets.append(f"namespace_id={ordered_namespaces.index(namespace)}")
 
-        hub_ebs_volume_id = config.get("hub_ebs_volume_id")
-        if namespace == "global" and hub_ebs_volume_id:
-            sets.append(f"hub_ebs_volume_id={hub_ebs_volume_id}")
-
         run_subprocess(
             [
                 "helm",

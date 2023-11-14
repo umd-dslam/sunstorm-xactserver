@@ -78,35 +78,33 @@ spec:
             sizeLimit: 40Gi
       affinity:
         nodeAffinity:
-          {{- if ne .Release.Namespace "global" }}
+          # This rule is useful when we deploy all "regions" in the same physical region, making
+          # them not have a division based on cluster context. Therefore, we need to rely on the
+          # node labels to separate them by regions.
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
               - matchExpressions:
                   - {{- include "nodesInCurrentRegion" . | indent 20 }}
-                  - key: role
-                    operator: NotIn
-                    values:
-                      - client
-          {{- end }}
+          {{- if eq .Release.Namespace "global" }}
+          # In the global region, everything is placed on the "hub" node
           preferredDuringSchedulingIgnoredDuringExecution:
-            {{- if eq .Release.Namespace "global" }}
-            - weight: 100
-              preference:
-                matchExpressions:
-                  - key: hub
-                    operator: In
-                    values:
-                      - all
-                      - pageserver
-            {{- else }}
             - weight: 100
               preference:
                 matchExpressions:
                   - key: role
                     operator: In
                     values:
-                      - server
-            {{- end }}
+                      - hub
+          {{- else }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: role
+                    operator: In
+                    values:
+                      - pageserver
+          {{- end }}
         podAntiAffinity:
           # This is to ensure that pageserver pods are not scheduled on the same node.
           preferredDuringSchedulingIgnoredDuringExecution:

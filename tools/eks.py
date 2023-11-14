@@ -93,27 +93,6 @@ def create_eks_cluster(info: RegionInfo, dry_run: bool):
 def delete_eks_cluster(info: RegionInfo, dry_run: bool):
     eks_config_file = WORKSPACE_PATH / f"eks-{info.name}.yaml"
 
-    if info.is_global:
-        # The cluster deletion will be stuck if the EBS CSI driver
-        # is not deleted first.
-        with open(eks_config_file, "r") as yaml_file:
-            eks_config = yaml.safe_load(yaml_file)
-        run_subprocess(
-            [
-                "eksctl",
-                "delete",
-                "addon",
-                "--name",
-                "aws-ebs-csi-driver",
-                "--cluster",
-                eks_config["metadata"]["name"],
-                "--region",
-                info.name,
-            ],
-            info,
-            dry_run=dry_run,
-        )
-
     # Delete the cluster
     run_subprocess(
         [

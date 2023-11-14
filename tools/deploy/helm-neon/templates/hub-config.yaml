@@ -50,4 +50,47 @@ data:
         basic_auth:
           username: {{ .Values.prometheus.remote_write.basic_auth.username }}
           password: {{ .Values.prometheus.remote_write.basic_auth.password }}
+        write_relabel_configs:
+          - source_labels: [__name__]
+            regex: '^go.*$'
+            action: drop
+          - source_labels: [__name__]
+            regex: '^libmetrics.*$'
+            action: drop
+          - source_labels: [__name__]
+            regex: '^pageserver_startup.*$'
+            action: drop
+          - source_labels: [__name__]
+            regex: '^pageserver_io.*$'
+            action: drop
+          - source_labels: [__name__]
+            regex: '^pageserver_basebackup.*$'
+            action: drop
+          - source_labels: [__name__]
+            regex: '^pageserver_tenant.*$'
+            action: drop
+          - source_labels: [__name__]
+            regex: '^pageserver_unexpected.*$'
+            action: drop
+          - source_labels: [__name__]
+            regex: '^safekeeper_acceptor.*$|^safekeeper_backup.*$'
+            action: drop
+          - source_labels: [__name__]
+            regex: '^safekeeper_broker.*$'
+            action: drop
+          - source_labels: [__name__]
+            regex: '^safekeeper_persist.*$'
+            action: drop
+          - source_labels: [__name__]
+            regex: '^safekeeper_timeline.*$'
+            action: drop
+          - source_labels: [__name__]
+            regex: '^safekeeper_pg.*$'
+            action: drop
+          - source_labels: [__name__]
+            regex: '^safekeeper_write.*$'
+            action: drop
+          - source_labels: [__name__]
+            regex: '^safekeeper_flush.*$'
+            action: drop
 {{ end }}

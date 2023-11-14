@@ -61,12 +61,11 @@ spec:
       restartPolicy: Always
       affinity:
         podAffinity:
-          # Xactserver must be co-located with pageserver
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchExpressions:
                   - key: app
                     operator: In
                     values:
-                      - pageserver
+                      - compute
               topologyKey: "kubernetes.io/hostname"

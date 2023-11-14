@@ -79,16 +79,24 @@ spec:
       restartPolicy: Always
       affinity:
         nodeAffinity:
-          {{- if ne .Release.Namespace "global" }}
+          # This rule is useful when we deploy all "regions" in the same physical region, making
+          # them not have a division based on cluster context. Therefore, we need to rely on the
+          # node labels to separate them by regions.
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
               - matchExpressions:
                   - {{- include "nodesInCurrentRegion" . | indent 20 }}
+          {{- if eq .Release.Namespace "global" }}
+          # In the global region, everything is placed on the "hub" node
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
                   - key: role
-                    operator: NotIn
+                    operator: In
                     values:
-                      - client
-          {{- end }}
+                      - hub
+          {{- else }}
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 100
               preference:
@@ -103,30 +111,12 @@ spec:
                   - key: role
                     operator: In
                     values:
-                      - server
-        # podAntiAffinity:
-        #   # We prefer that safekeeper pods are not scheduled on the same node.
-        #   preferredDuringSchedulingIgnoredDuringExecution:
-        #     - weight: 1
-        #       podAffinityTerm:
-        #         labelSelector:
-        #           matchExpressions:
-        #             - key: app
-        #               operator: In
-        #               values:
-        #                 - safekeeper
-        #               {{- if ne .Release.Namespace "global" }}
-        #                 - pageserver
-        #                 - xactserver  
-        #                 - compute
-        #               {{- end }}
-        #         topologyKey: "kubernetes.io/hostname"
-        podAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
+                      - compute
+            - weight: 50
+              preference:
                 matchExpressions:
-                  - key: app
+                  - key: role
                     operator: In
                     values:
                       - pageserver
-              topologyKey: "kubernetes.io/hostname"
+          {{- end }}

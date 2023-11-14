@@ -2,12 +2,14 @@
 # The following values are just for reference.
 
 instance_types:
-  server: r5.4xlarge
+  compute: r5.4xlarge
+  pageserver: c5.4xlarge
   client: c5.xlarge
-  hub: c5.xlarge
+  hub: c5.4xlarge
 
 spot:
-  server: false
+  compute: false
+  pageserver: false
   client: false
   hub: false
 
@@ -48,4 +50,3 @@ security_groups:
   eu-west-1: sg-0af119315a40fa0f9
   eu-west-2: sg-0ec4e1d97b23dff45
   
-aws_ebs_csi_driver: false
