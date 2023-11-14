@@ -39,6 +39,11 @@ data:
           {{- range $r := .Values.ordered_namespaces }}
             - xactserver.{{ $r }}:8080
           {{- end }}
+      
+      - job_name: pushgateway
+        static_configs:
+          - targets:
+            - localhost:9091
 
     remote_write:
       - url: {{ .Values.prometheus.remote_write.url }}

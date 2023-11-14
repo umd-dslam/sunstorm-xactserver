@@ -13,11 +13,13 @@ import os
 import signal
 import shutil
 import subprocess
+import itertools
 
 from utils import get_logger, Command, initialize_and_run_commands
 from neonclone import clone_neon
 
 LOG = get_logger(__name__)
+
 
 class Neon:
     def __init__(self, bin: str, env: dict[str, str], dry_run: bool):
@@ -261,6 +263,7 @@ class CreateCommand(NeonCommand):
         parser.add_argument(
             "--keep-neon", action="store_true", help="Keep neon running afterwards"
         )
+        parser.add_argument("--tenant-config", action="append", default=[])
 
     def do_command(self, args):
         neon = self.get_neon(args)
@@ -273,15 +276,16 @@ class CreateCommand(NeonCommand):
             os.makedirs(global_region_dir, exist_ok=True)
         neon.run(
             [
-                "init", 
+                "init",
                 "--pg-version",
                 args.pg_version,
             ],
-            cwd=global_region_dir
+            cwd=global_region_dir,
         )
         neon.run(["start"], cwd=global_region_dir)
         neon.run(
-            ["tenant", "create", "--set-default", "--pg-version", args.pg_version],
+            ["tenant", "create", "--set-default", "--pg-version", args.pg_version]
+            + list(itertools.chain(*[["-c", c] for c in args.tenant_config])),
             cwd=global_region_dir,
         )
 

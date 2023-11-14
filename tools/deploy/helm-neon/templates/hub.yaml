@@ -17,6 +17,9 @@ spec:
     - name: prometheus
       targetPort: prometheus
       port: 9090
+    - name: prometheus-pushgateway
+      targetPort: prometheus-pushgateway
+      port: 9091
     - name: grafana
       targetPort: grafana
       port: 3000
@@ -120,6 +123,11 @@ spec:
               mountPath: /data  
             - name: hub-config
               mountPath: /config
+        - name: prometheus-pushgateway
+          image: prom/pushgateway:latest
+          ports:
+            - name: prometheus-pushgateway
+              containerPort: 9091
         - name: grafana
           image: ctring/grafana:sunstorm
           imagePullPolicy: Always

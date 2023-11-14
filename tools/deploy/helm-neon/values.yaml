@@ -32,7 +32,7 @@ prometheus:
     url: https://prometheus-prod-13-prod-us-east-0.grafana.net/api/prom/push
     basic_auth:
       username: 951279
-      password:
+      password: 
 
 #---------------------------------------------------------------------------
 #       The following values are modified by the deploy.py tool

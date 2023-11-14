@@ -18,12 +18,14 @@ spec:
           args:
             - |
               # Generate the base data for the cluster
-              python3.12 /tools/neonctl.py   \
-                --neon-dir /usr/local/bin \
-                --pg-dir /usr/local       \
-                create .                  \
-                --keep-neon               \
-                --num-regions {{ sub (len .Values.ordered_namespaces) 1 }}
+              python3.12 /tools/neonctl.py                                  \
+                --neon-dir /usr/local/bin                                   \
+                --pg-dir /usr/local                                         \
+                create .                                                    \
+                --keep-neon                                                 \
+                --num-regions {{ sub (len .Values.ordered_namespaces) 1 }}  \
+                --tenant-config ingest_batch_size:100                       \
+                --tenant-config checkpoint_distance:1073741824  # 1GB
 
               # Wait until minio is ready then upload the data
               until (/usr/bin/mc alias set minio http://hub:9000 minioadmin minioadmin) do
