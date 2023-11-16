@@ -282,7 +282,14 @@ class CreateCommand(NeonCommand):
             ],
             cwd=global_region_dir,
         )
-        neon.run(["start"], cwd=global_region_dir)
+        neon.run(
+            [
+                "start",
+                "--pageserver-config-override",
+                'control_plane_api=""',
+            ],
+            cwd=global_region_dir,
+        )
         neon.run(
             ["tenant", "create", "--set-default", "--pg-version", args.pg_version]
             + list(itertools.chain(*[["-c", c] for c in args.tenant_config])),

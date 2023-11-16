@@ -5,27 +5,27 @@ scrape_configs:
   - job_name: pageserver
     static_configs:
       - targets:
-        - localhost:9898
+        - host.docker.internal:9898
 
   - job_name: safekeeper
     static_configs:
       - targets:
-        - localhost:7676
+        - host.docker.internal:7676
 
   - job_name: xactserver
     static_configs:
       - targets: 
-        - localhost:8080
+        - host.docker.internal:8080
 
   - job_name: pushgateway
     honor_labels: true
     scrape_interval: 1s
     static_configs:
       - targets:
-        - localhost:9091
+        - host.docker.internal:9091
 
 remote_write:
   - url: https://prometheus-prod-13-prod-us-east-0.grafana.net/api/prom/push
     basic_auth:
       username: 951279
-      password: 
+      password: glc_eyJvIjoiODQwMDAzIiwibiI6InN0YWNrLTYyNTIwOS1pbnRlZ3JhdGlvbi1zdW5zdG9ybSIsImsiOiI4UzJrOXlZODU2aUZVV01nODVTMFZ3OVEiLCJtIjp7InIiOiJwcm9kLXVzLWVhc3QtMCJ9fQ==

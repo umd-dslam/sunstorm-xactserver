@@ -10,6 +10,7 @@ run_xactserver=0
 flag_set=0
 stop_only=0
 new_data=0
+download_data_only=0
 
 while (( "$#" )); do
   case "$1" in
@@ -36,6 +37,10 @@ while (( "$#" )); do
       stop_only=1
       shift 1
       ;;
+    --download-data)
+      download_data_only=1
+      shift 1
+      ;;
     --) # end argument parsing
       shift
       break
@@ -55,15 +60,6 @@ if [ $flag_set -eq 0 ]; then
   run_xactserver=1
 fi
 
-if [ $run_broker -eq 1 ] && [ "${PS_ADDRESSES[$REGION_ID]}" = "$HUB_ADDR" ]; then
-  echo "Stopping any previous storage broker instance"
-  kill $(cat logs/storage_broker.pid) || true
-
-  if [ $stop_only -eq 0 ]; then
-    run storage_broker "$NEON_DIR/target/release/storage_broker --listen-addr=0.0.0.0:50051"
-  fi
-fi
-
 # If the data directory doesn't exist, copy the data from minio
 if [ $stop_only -eq 0 ] && ([ ! -d $DATA ] || [ $new_data -eq 1 ]); then
   rm -rf $DATA
@@ -74,15 +70,30 @@ if [ $stop_only -eq 0 ] && ([ ! -d $DATA ] || [ $new_data -eq 1 ]); then
   mc cp -r minio/sunstorm/.neon $DATA/
 fi
 
+if [ $download_data_only -eq 1 ]; then
+  exit 0
+fi
+
+if [ $run_broker -eq 1 ] && [ "${PS_ADDRESSES[$REGION_ID]}" = "$HUB_ADDR" ]; then
+  echo "Stopping any previous storage broker instance"
+  kill $(cat logs/storage_broker.pid) || true
+
+  if [ $stop_only -eq 0 ]; then
+    run storage_broker "$NEON_DIR/target/release/storage_broker --listen-addr=0.0.0.0:50051"
+  fi
+fi
+
 if [ $run_pageserver -eq 1 ]; then
   echo "Stopping any previous pageserver instance"
   kill $(cat logs/pageserver.pid) || true
 
   if [ $stop_only -eq 0 ]; then
-    run pageserver "$NEON_DIR/target/release/pageserver -D $DATA/.neon/ \
-      -c broker_endpoint='http://$HUB_ADDR:50051'                       \
-      -c listen_pg_addr='0.0.0.0:6400'                                  \
-      -c listen_http_addr='0.0.0.0:9898'"
+    run pageserver "$NEON_DIR/target/release/pageserver -D $DATA/.neon/pageserver_1 \
+      -c broker_endpoint='http://$HUB_ADDR:50051'                                   \
+      -c listen_pg_addr='0.0.0.0:6400'                                              \
+      -c listen_http_addr='0.0.0.0:9898'                                            \
+      -c control_plane_api=''                                                       \
+      -c remote_storage={local_path='../local_fs_remote_storage/pageserver'}"
   fi
 fi
 

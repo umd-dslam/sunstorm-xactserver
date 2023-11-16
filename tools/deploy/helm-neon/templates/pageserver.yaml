@@ -46,7 +46,7 @@ spec:
     spec:
       containers:
         - name: pageserver
-          image: ctring/neon:latest
+          image: ctring/neon:6777555391
           command:
             - /bin/sh
             - -ecx

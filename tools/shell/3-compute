@@ -26,7 +26,7 @@ if [ $stop_only -eq 1 ]; then
     exit 0
 fi
 
-spec_template=./spec-template.json
+spec_template=./spec-template-neon.json
 spec=./spec.json
 
 echo "Waiting pageserver become ready."
@@ -42,13 +42,14 @@ if [ $tenant_id = "null" ]; then
 fi
 
 timelines=$(curl -s http://${PS_ADDRESSES[$REGION_ID]}:9898/v1/tenant/${tenant_id}/timeline/)
-region_id_to_timeline_id=$(echo ${timelines} | jq '[.[] | {key: .region_id, value: .timeline_id}] | from_entries')
 
-timeline_id=$(echo ${region_id_to_timeline_id} | jq -r ".[\"${REGION_ID}\"]")
-if [ $timeline_id = "null" ]; then
-    echo "ERROR: Timeline id is null"
-    exit 1
-fi
+# region_id_to_timeline_id=$(echo ${timelines} | jq '[.[] | {key: .region_id, value: .timeline_id}] | from_entries')
+# timeline_id=$(echo ${region_id_to_timeline_id} | jq -r ".[\"${REGION_ID}\"]")
+# if [ $timeline_id = "null" ]; then
+#     echo "ERROR: Timeline id is null"
+#     exit 1
+# fi
+timeline_id=$(echo ${timelines} | jq -r '.[0].timeline_id')
 
 echo "Region id: ${REGION_ID}"
 echo "Tenant id: ${tenant_id}"

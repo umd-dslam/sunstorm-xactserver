@@ -1,38 +1,34 @@
 # Number of safekeeper replicas
 safekeeper_replicas: 1
 
-# EBS volume ID to store global data like metrics, minio, etc.
-# No EBS volume will be used if this is empty. If you run deploy.py,
-# this value will be set automatically.
-hub_ebs_volume_id: null
-
-compute:
-  shared_buffers: 2GB
-  temp_buffers: 128MB
-  max_connections: 100
-  max_prepared_transactions: 128
-  max_pred_locks_per_transaction: 256
-  validate_index: off
-  validate_table: on
-  validate_tuple: on
-
-# r5.4xlarge (16 vCPUs, 128 GB RAM)
 # compute:
-#   shared_buffers: 64GB
-#   temp_buffers: 2GB
-#   max_connections: 500
-#   max_prepared_transactions: 1024
-#   max_pred_locks_per_transaction: 1024
+#   shared_buffers: 2GB
+#   temp_buffers: 128MB
+#   max_connections: 100
+#   max_prepared_transactions: 128
+#   max_pred_locks_per_transaction: 256
 #   validate_index: off
 #   validate_table: on
 #   validate_tuple: on
+
+# r5.4xlarge (16 vCPUs, 128 GB RAM)
+compute:
+  shared_buffers: 64GB
+  temp_buffers: 2GB
+  max_connections: 500
+  max_prepared_transactions: 1024
+  max_pred_locks_per_transaction: 1024
+  validate_index: on
+  validate_table: on
+  validate_tuple: on
 
 prometheus:
   remote_write:
     url: https://prometheus-prod-13-prod-us-east-0.grafana.net/api/prom/push
     basic_auth:
       username: 951279
-      password: 
+      # password:
+      password: glc_eyJvIjoiODQwMDAzIiwibiI6InN0YWNrLTYyNTIwOS1pbnRlZ3JhdGlvbi1zdW5zdG9ybSIsImsiOiI4UzJrOXlZODU2aUZVV01nODVTMFZ3OVEiLCJtIjp7InIiOiJwcm9kLXVzLWVhc3QtMCJ9fQ==
 
 #---------------------------------------------------------------------------
 #       The following values are modified by the deploy.py tool

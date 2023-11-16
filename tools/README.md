@@ -226,3 +226,25 @@ Destroy the EKS clusters:
 ```
 python3 eks.py delete
 ```
+
+# Run experiment
+Check main.yaml
+Check values.yaml in helm-eks
+```
+python3 tools/eks.py create
+```
+```
+python3 tools/deploy.py
+```
+Monitor:
+```
+python3 tools/monitor.py status
+```
+```
+port-forward svc/hub 9000 9001 9090 3000 -n global --context ctring@neon.us-east-1.eksctl.io
+```
+Go to localhost:9090 => status => target to check region connectivity.
+
+```
+python3 tools/experiment.py --logs-per-sec 10 -o ~/data/sunstorm/ycsb/latency ycsb-latency
+```

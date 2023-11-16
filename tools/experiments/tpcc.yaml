@@ -1,4 +1,4 @@
-# python3 tools/experiment.py --logs-per-sec 10 -o ~/data/sunstorm/ycsb/throughput ycsb-throughput
+# python3 tools/experiment.py --logs-per-sec 10 -o ~/data/sunstorm/tpcc tpcc
 dbtype: postgres
 reload_every: 5
 benchmark: hot
@@ -42,19 +42,19 @@ replace:
   - match:
       - hot.weights:
           name: A-mr5
-        hot.hot: 500
+        hot.hot: 1000
       - hot.weights:
           name: B-mr5
-        hot.hot: 500
+        hot.hot: 1000
       - hot.weights:
           name: D-mr5
-        hot.hot: 500
+        hot.hot: 1000
       - hot.weights:
           name: E-mr5
-        hot.hot: 500
+        hot.hot: 1000
       - hot.weights:
           name: F-mr5
-        hot.hot: 500
+        hot.hot: 1000
     set:
       terminals: 64
   - match:

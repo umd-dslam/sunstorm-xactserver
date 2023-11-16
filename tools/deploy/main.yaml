@@ -3,15 +3,15 @@
 regions:
   us-east-1:
     id: 1
-    # context: minikube
+    context: ctring@neon.us-east-1.eksctl.io
   us-east-2:
     id: 2
+    context: ctring@neon.us-east-1.eksctl.io
+  # us-west-1:
+  #   id: 3
     # context: minikube
-  us-west-1:
-    id: 3
-    # context: minikube
-  eu-west-1:
-    id: 4
+  # eu-west-1:
+  #   id: 4
     # context: minikube
   # us-west-2:
   #   id: 5
@@ -24,7 +24,3 @@ regions:
 # be one of the regions listed above, or a different region.
 global_region: us-east-1
 # global_region_context: minikube
-
-# EBS volume ID to store global data like metrics, minio, etc.
-# No EBS volume will be used if this is not set. 
-# hub_ebs_volume_id: vol-xxxxxxxxxxxxxxxxx

@@ -23,9 +23,7 @@ spec:
                 --pg-dir /usr/local                                         \
                 create .                                                    \
                 --keep-neon                                                 \
-                --num-regions {{ sub (len .Values.ordered_namespaces) 1 }}  \
-                --tenant-config ingest_batch_size:500                       \
-                --tenant-config checkpoint_distance:1073741824  # 1GB
+                --num-regions {{ sub (len .Values.ordered_namespaces) 1 }}                         
 
               # Wait until minio is ready then upload the data
               until (/usr/bin/mc alias set minio http://hub:9000 minioadmin minioadmin) do
