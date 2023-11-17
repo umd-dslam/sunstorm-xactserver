@@ -3,7 +3,16 @@ source common
 
 set -eu
 
+usage() {
+  echo "Usage: $0 [options]"
+  echo "Options:"
+  echo "      --stop          Stop the compute instance"
+  echo "      --vanilla       Run vanilla neon compute"
+  exit 1
+}
+
 stop_only=0
+vanilla=0
 
 while (( "$#" )); do
   case "$1" in
@@ -11,9 +20,16 @@ while (( "$#" )); do
       stop_only=1
       shift 1
       ;;
+    --vanilla)
+      vanilla=1
+      shift 1
+      ;;
+    -h|--help)
+      usage
+      ;;
     *) # unsupported flags
       echo "Error: Unsupported flag $1" >&2
-      exit 1
+      usage
       ;;
   esac
 done
@@ -26,7 +42,11 @@ if [ $stop_only -eq 1 ]; then
     exit 0
 fi
 
-spec_template=./spec-template.json
+if [ $vanilla -eq 0 ]; then
+  spec_template=./spec-template.json
+else
+  spec_template=./spec-template-vanilla.json
+fi
 spec=./spec.json
 
 echo "Waiting pageserver become ready."
@@ -42,9 +62,14 @@ if [ $tenant_id = "null" ]; then
 fi
 
 timelines=$(curl -s http://${PS_ADDRESSES[$REGION_ID]}:9898/v1/tenant/${tenant_id}/timeline/)
-region_id_to_timeline_id=$(echo ${timelines} | jq '[.[] | {key: .region_id, value: .timeline_id}] | from_entries')
 
-timeline_id=$(echo ${region_id_to_timeline_id} | jq -r ".[\"${REGION_ID}\"]")
+if [ $vanilla -eq 0 ]; then
+  region_id_to_timeline_id=$(echo ${timelines} | jq '[.[] | {key: .region_id, value: .timeline_id}] | from_entries')
+  timeline_id=$(echo ${region_id_to_timeline_id} | jq -r ".[\"${REGION_ID}\"]")
+else
+  timeline_id=$(echo ${timelines} | jq -r '.[0].timeline_id')
+fi
+
 if [ $timeline_id = "null" ]; then
     echo "ERROR: Timeline id is null"
     exit 1

@@ -263,6 +263,7 @@ class CreateCommand(NeonCommand):
         parser.add_argument(
             "--keep-neon", action="store_true", help="Keep neon running afterwards"
         )
+        parser.add_argument("--pageserver-config", action="append", default=[])
         parser.add_argument("--tenant-config", action="append", default=[])
 
     def do_command(self, args):
@@ -282,7 +283,20 @@ class CreateCommand(NeonCommand):
             ],
             cwd=global_region_dir,
         )
-        neon.run(["start"], cwd=global_region_dir)
+        neon.run(
+            [
+                "start",
+            ]
+            + list(
+                itertools.chain(
+                    *[
+                        ["--pageserver-config-override", c]
+                        for c in args.pageserver_config
+                    ]
+                )
+            ),
+            cwd=global_region_dir,
+        )
         neon.run(
             ["tenant", "create", "--set-default", "--pg-version", args.pg_version]
             + list(itertools.chain(*[["-c", c] for c in args.tenant_config])),

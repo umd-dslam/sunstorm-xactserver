@@ -4,9 +4,32 @@ set -e
 
 source common
 
-if [ "$#" -ne 1 ]; then
-  echo "Usage: $0 <num_regions>"
+usage () {
+  echo "Usage: $0 [options] <num_regions>"
+  echo "Options:"
+  echo "      --vanilla       Run vanilla neon"
   exit 1
+}
+
+vanilla=0
+
+while (( "$#" )); do
+  case "$1" in
+    --vanilla)
+      vanilla=1
+      shift 1
+      ;;
+    -h|--help)
+      usage
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+if [ $# -ne 1 ]; then
+  usage
 fi
 
 num_regions=$1
@@ -15,11 +38,20 @@ echo "Initializing Neon cluster with $num_regions regions"
 
 # Generate the base data for the cluster
 mkdir -p init
-python3 $XACTSERVER_DIR/tools/neonctl.py  \
-  --neon-dir $NEON_DIR                    \
-  --xactserver-dir $XACTSERVER_DIR        \
-  create ./init                           \
-  --num-regions $num_regions
+if [ $vanilla -eq 0 ]; then
+  python3 $XACTSERVER_DIR/tools/neonctl.py  \
+    --neon-dir $NEON_DIR                    \
+    --xactserver-dir $XACTSERVER_DIR        \
+    create ./init                           \
+    --num-regions $num_regions
+else
+  python3 $XACTSERVER_DIR/tools/neonctl.py    \
+    --neon-dir $NEON_DIR                      \
+    --xactserver-dir $XACTSERVER_DIR          \
+    create ./init                             \
+    --num-regions $num_regions                \
+    --pageserver-config 'control_plane_api=""'
+fi
 
 # Wait until minio is ready then upload the data
 until (mc alias set minio http://localhost:9000 minioadmin minioadmin) do
