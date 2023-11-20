@@ -148,15 +148,28 @@ def get_main_config(base_path: Path) -> MainConfig:
 class NamespaceInfo(TypedDict):
     region: str
     id: int
+    target_address_and_database: str | None
 
 
 def get_namespaces(config: MainConfig):
     namespaces: dict[str, NamespaceInfo] = {
-        "global": {"region": config["global_region"], "id": 0}
+        "global": {
+            "region": config["global_region"],
+            "id": 0,
+            "target_address_and_database": config[
+                "global_region_target_address_and_database"
+            ],
+        }
     }
     regions = config.get("regions") or {}
     for region, region_info in regions.items():
-        namespaces[region] = {"region": region, "id": region_info["id"]}
+        namespaces[region] = {
+            "region": region,
+            "id": region_info["id"],
+            "target_address_and_database": region_info.get(
+                "target_address_and_database"
+            ),
+        }
     return namespaces
 
 

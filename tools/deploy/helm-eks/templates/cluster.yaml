@@ -12,6 +12,7 @@ vpc:
       {{ $key }}: { id: {{ $value }} }
       {{ end }}
 nodeGroups:
+  {{- if not (empty (get .Values.instance_types "compute")) }}
   - name: computes
     subnets:
       - {{ get .Values.subnets .Values.region | values | first }}
@@ -32,7 +33,8 @@ nodeGroups:
     labels:
       role: compute
       region: {{ .Values.region }}
-
+  {{- end }}
+  {{- if not (empty (get .Values.instance_types "pageserver")) }}
   - name: pageservers
     subnets:
       - {{ get .Values.subnets .Values.region | values | first }}
@@ -53,8 +55,9 @@ nodeGroups:
     labels:
       role: pageserver
       region: {{ .Values.region }}
-
+  {{- end }}
 managedNodeGroups:
+  {{- if not (empty (get .Values.instance_types "client")) }}
   - name: clients
     subnets:
       - {{ get .Values.subnets .Values.region | values | first }}
@@ -67,7 +70,9 @@ managedNodeGroups:
     labels:
       role: client
       region: {{ .Values.region }}
+  {{- end }}
   {{ if eq .Values.region .Values.global_region }}
+  {{- if not (empty (get .Values.instance_types "hub")) }}
   - name: hub
     subnets:
       - {{ get .Values.subnets .Values.region | values | last }}
@@ -80,4 +85,5 @@ managedNodeGroups:
     labels:
       role: hub
       region: {{ .Values.region }}
+  {{- end }}
   {{- end }}

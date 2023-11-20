@@ -4,27 +4,24 @@ regions:
   us-east-1:
     id: 1
     # context: minikube
+    # If this is specified, the benchmark will send workload to the given target
+    # instead of the default "compute" service.
+    # target_address_and_database: host.minikube.internal:55433/postgres
   us-east-2:
     id: 2
     # context: minikube
+    # target_address_and_database: host.minikube.internal:55433/postgres
   us-west-1:
     id: 3
     # context: minikube
+    # target_address_and_database: host.minikube.internal:55433/postgres
   eu-west-1:
     id: 4
     # context: minikube
-  # us-west-2:
-  #   id: 5
-  #   # context: minikube
-  # eu-west-2:
-  #   id: 6
-  #   # context: minikube
+    # target_address_and_database: host.minikube.internal:55433/postgres
 
 # The region that contains the global resources. This region can
 # be one of the regions listed above, or a different region.
 global_region: us-east-1
 # global_region_context: minikube
-
-# EBS volume ID to store global data like metrics, minio, etc.
-# No EBS volume will be used if this is not set. 
-# hub_ebs_volume_id: vol-xxxxxxxxxxxxxxxxx
+# global_region_target_address_and_database: host.minikube.internal:55433/postgres

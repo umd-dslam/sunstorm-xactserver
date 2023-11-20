@@ -15,8 +15,8 @@ data:
         <!-- Connection details -->
         <type>POSTGRES</type>
         <driver>org.postgresql.Driver</driver>
-        <url>jdbc:postgresql://compute:55433/postgres?sslmode=disable&amp;ApplicationName=ycsb&amp;reWriteBatchedInserts=true</url>
-        <username>cloud_admin</username>
+        <url>jdbc:postgresql://{{ .Values.target_address_and_database }}?sslmode=disable&amp;ApplicationName=ycsb&amp;reWriteBatchedInserts=true</url>
+        <username>{{ default "cloud_admin" .Values.username }}</username>
         <password>{{ default "" .Values.password }}</password>
         <isolation>TRANSACTION_SERIALIZABLE</isolation>
         <batchsize>128</batchsize>

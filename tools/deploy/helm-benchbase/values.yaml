@@ -10,9 +10,12 @@ scalefactor: 10
 # Number of concurrent clients
 terminals: 4
 # Duration of the benchmark in seconds
-time: 5
+time: 30
 # Maximum throughput of the benchmark
 rate: 50000
+
+username: cloud_admin
+password: 
 
 # The benchmark to run 
 benchmark: hot
@@ -48,10 +51,10 @@ ordered_namespaces:
   - global
   - us-east-1
 
+target_address_and_database: compute:55433/postgres
 dbtype: postgres
 remotexact: true
 namespace_id: 0
 loadall: false
-password: 
 
 timestamp: "0000-00-00_00-00-00"

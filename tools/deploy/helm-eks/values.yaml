@@ -2,10 +2,10 @@
 # The following values are just for reference.
 
 instance_types:
-  compute: r5.4xlarge
-  pageserver: c5.4xlarge
+  # hub: c5.4xlarge
+  # compute: r5.4xlarge
+  # pageserver: c5.4xlarge
   client: c5.xlarge
-  hub: c5.4xlarge
 
 spot:
   compute: false

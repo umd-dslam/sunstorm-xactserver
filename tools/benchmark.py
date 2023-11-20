@@ -35,7 +35,7 @@ def run_benchmark(
             (BASE_PATH / "helm-benchbase").as_posix(),
             "--namespace",
             namespace,
-        ] 
+        ]
         for s in sets:
             helm_cmd += ["--set", s]
         if dry_run:
@@ -166,9 +166,12 @@ class Operation:
     def run(cls, args) -> BenchmarkResult | None:
         cls.config = get_main_config(BASE_PATH)
         namespaces = get_namespaces(cls.config)
+
+        # Namespace sorted by id
         cls.namespaces = list(namespaces.items())
         cls.namespaces.sort(key=lambda x: x[1]["id"])
 
+        # Settings for the values.yaml file in helm-benchbase
         cls.settings = args.set or []
         ordered_namespaces = ",".join([ns for ns, _ in cls.namespaces])
         cls.settings.append(f"ordered_namespaces={{{ordered_namespaces}}}")
@@ -199,10 +202,15 @@ class Operation:
 class Create(Operation):
     @classmethod
     def do(cls):
+        additional_settings = ["operation=create"]
+        target = cls.config["global_region_target_address_and_database"]
+        if target:
+            additional_settings.append(f"target_address_and_database={target}")
+
         run_benchmark(
             "global",
             cls.config["global_region"],
-            cls.settings + ["operation=create"],
+            cls.settings + additional_settings,
             delete_only=False,
             dry_run=cls.dry_run,
         )
@@ -228,16 +236,19 @@ class Load(Operation):
         max_workers = len(cls.namespaces)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             for id, (namespace, ns_info) in enumerate(cls.namespaces):
+                per_region_settings = [
+                    "operation=load",
+                    "loadall=false",
+                    f"namespace_id={id}",
+                ]
+                target = ns_info["target_address_and_database"]
+                if target:
+                    per_region_settings.append(f"target_address_and_database={target}")
                 executor.submit(
                     run_benchmark,
                     namespace,
                     str(ns_info["region"]),
-                    cls.settings
-                    + [
-                        "operation=load",
-                        "loadall=false",
-                        f"namespace_id={id}",
-                    ],
+                    cls.settings + per_region_settings,
                     delete_only=False,
                     dry_run=cls.dry_run,
                 )
@@ -299,16 +310,19 @@ class Execute(Operation):
         max_workers = len(cls.namespaces)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             for id, (namespace, ns_info) in enumerate(cls.namespaces):
+                per_region_settings = [
+                    "operation=execute",
+                    f"timestamp={timestamp}",
+                    f"namespace_id={id}",
+                ]
+                target = ns_info["target_address_and_database"]
+                if target:
+                    per_region_settings.append(f"target={target}")
                 executor.submit(
                     run_benchmark,
                     namespace,
                     str(ns_info["region"]),
-                    cls.settings
-                    + [
-                        "operation=execute",
-                        f"timestamp={timestamp}",
-                        f"namespace_id={id}",
-                    ],
+                    cls.settings + per_region_settings,
                     delete_only=False,
                     dry_run=cls.dry_run,
                 )
