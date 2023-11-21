@@ -156,9 +156,9 @@ def get_namespaces(config: MainConfig):
         "global": {
             "region": config["global_region"],
             "id": 0,
-            "target_address_and_database": config[
+            "target_address_and_database": config.get(
                 "global_region_target_address_and_database"
-            ],
+            ),
         }
     }
     regions = config.get("regions") or {}

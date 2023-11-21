@@ -17,13 +17,16 @@ spec:
             - -ecx
           args:
             - |
-              /benchbase/entrypoint.sh --bench {{ .Values.benchmark }}           \
-                                       --config /config/config.xml               \
-                                       --execute=true                            \
-                                       --interval-monitor 1000                   \
+              /benchbase/entrypoint.sh --bench {{ .Values.benchmark }}                \
+                                       --config /config/config.xml                    \
+                                       --execute=true                                 \
+                                       --interval-monitor 1000                        \
+                                       {{- if and (not (empty .Values.pushgateway)) (ne .Release.Namespace "global") }}
+                                       --metrics-address "{{ .Values.pushgateway }}"  \
+                                       {{- end }}
                                        --json-histograms results/histograms.json | tee results/log.txt 
 
-              /usr/bin/mc alias set minio http://hub.global:9000 minioadmin minioadmin
+              /usr/bin/mc alias set minio http://{{ .Values.minio }} minioadmin minioadmin
               /usr/bin/mc mb --ignore-existing minio/results
               /usr/bin/mc cp ./results/* minio/results/{{ .Values.tag | default .Values.timestamp }}/{{ .Values.namespace_id }}-{{ .Release.Namespace }}/
           volumeMounts:

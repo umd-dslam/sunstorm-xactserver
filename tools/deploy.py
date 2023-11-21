@@ -325,12 +325,30 @@ def clean_up_neon_one_namespace(namespace: str, namespace_info, dry_run):
     )
 
 
-STAGES = [
-    "load-balancer",
-    "dns",
-    "namespace",
-    "neon",
-]
+def start_pushgateway(config: MainConfig, dry_run: bool):
+    namespaces = get_namespaces(config)
+    for namespace, ns_info in namespaces.items():
+        if namespace == "global":
+            continue
+        region = ns_info["region"]
+        run_subprocess(
+            [
+                "kubectl",
+                "apply",
+                "-f",
+                (BASE_PATH / "pushgateway.yaml").as_posix(),
+                "--namespace",
+                namespace,
+            ]
+            + context_flag(region),
+            (LOG, f"Starting pushgateway in region {region}."),
+            dry_run,
+            check=True,
+        )
+        LOG.info(f"Pushgateway in region {region} created.")
+
+
+STAGES = ["load-balancer", "dns", "namespace", "neon", "pushgateway"]
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -404,3 +422,9 @@ if __name__ == "__main__":
             args.clean_up_neon,
             args.dry_run,
         )
+
+    if STAGES[4] in unskipped_stages:
+        LOG.info(
+            f"[{log_tag}]Deploying Pushgateway[/{log_tag}]", extra={"markup": True}
+        )
+        start_pushgateway(config, args.dry_run)

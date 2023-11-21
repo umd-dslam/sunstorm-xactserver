@@ -196,7 +196,7 @@ class Operation:
 
     @classmethod
     def log(cls) -> BenchmarkResult | None:
-        raise NotImplementedError()
+        return None
 
 
 class Create(Operation):
@@ -317,7 +317,7 @@ class Execute(Operation):
                 ]
                 target = ns_info["target_address_and_database"]
                 if target:
-                    per_region_settings.append(f"target={target}")
+                    per_region_settings.append(f"target_address_and_database={target}")
                 executor.submit(
                     run_benchmark,
                     namespace,
@@ -409,10 +409,6 @@ class Delete(Operation):
                     dry_run=cls.dry_run,
                 )
 
-    @classmethod
-    def log(cls) -> BenchmarkResult | None:
-        return None
-
 
 def main(cmd_args: list[str]) -> BenchmarkResult:
     parser = argparse.ArgumentParser()
@@ -424,7 +420,7 @@ def main(cmd_args: list[str]) -> BenchmarkResult:
         load: load the data in parallel,
         sload: load the data sequentially,
         execute: execute the benchmark,
-        delete: terminate all running benchmarks,
+        delete: terminate all running benchmarks)
         """,
     )
     parser.add_argument(

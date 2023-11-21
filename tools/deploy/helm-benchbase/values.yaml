@@ -6,16 +6,22 @@ operation: create
 tag: null
 
 # Scale factor of the dataset. Its definition depends on the benchmark
-scalefactor: 10
+scalefactor: 1000
 # Number of concurrent clients
-terminals: 4
+terminals: 32
 # Duration of the benchmark in seconds
-time: 30
+time: 60
 # Maximum throughput of the benchmark
 rate: 50000
 
+# Username and password to access the database
 username: cloud_admin
 password: 
+
+# Address of the pushgateway
+pushgateway: pushgateway:9091
+# Address of minio
+minio: hub.global:9000
 
 # The benchmark to run 
 benchmark: hot
