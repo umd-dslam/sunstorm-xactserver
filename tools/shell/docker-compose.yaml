@@ -13,6 +13,7 @@ services:
       - 9001:9001
     command: server /data --address :9000 --console-address ":9001"
     volumes:
+      # sudo chown -R 1000:1000 /media/data/minio
       - /media/data/minio:/data
 
   prometheus:
@@ -25,6 +26,7 @@ services:
       - source: prometheus
         target: /etc/prometheus/prometheus.yml
     volumes:
+      # sudo chown -R 65534:65534 /media/data/prometheus
       - /media/data/prometheus:/prometheus
 
   prometheus-pushgateway:
@@ -40,5 +42,11 @@ services:
     network_mode: host
     ports:
       - 3000:3000
+    # With this, grafana will start out with no dashboards,
+    # so to get started, comment out the volumes to see the
+    # dashboards embedded in the image, save the dashboard
+    # json model to somewhere, then uncomment the volumes,
+    # and import the dashboard json model.
     volumes:
+      # sudo chown -R 472:0 /media/data/grafana
       - /media/data/grafana:/var/lib/grafana
