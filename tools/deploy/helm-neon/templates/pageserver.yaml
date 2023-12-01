@@ -63,7 +63,8 @@ spec:
               /usr/local/bin/pageserver -D /data/.neon/                                            \
                                         -c "broker_endpoint='http://storage-broker.global:50051'"  \
                                         -c "listen_pg_addr='0.0.0.0:6400'"                         \
-                                        -c "listen_http_addr='0.0.0.0:9898'"
+                                        -c "listen_http_addr='0.0.0.0:9898'                        \
+                                        -c "page_cache_size=13107200"
           volumeMounts:
             - name: data
               mountPath: /data
