@@ -18,7 +18,7 @@ scrape_configs:
         - localhost:8080
 
   - job_name: pushgateway
-    honor_labels: true
+    honor_labels: false
     scrape_interval: 1s
     static_configs:
       - targets:

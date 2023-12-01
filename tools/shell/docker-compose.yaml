@@ -12,6 +12,8 @@ services:
       - 9000:9000
       - 9001:9001
     command: server /data --address :9000 --console-address ":9001"
+    volumes:
+      - /media/data/minio:/data
 
   prometheus:
     restart: always
@@ -22,6 +24,8 @@ services:
     configs:
       - source: prometheus
         target: /etc/prometheus/prometheus.yml
+    volumes:
+      - /media/data/prometheus:/prometheus
 
   prometheus-pushgateway:
     restart: always
@@ -36,3 +40,5 @@ services:
     network_mode: host
     ports:
       - 3000:3000
+    volumes:
+      - /media/data/grafana:/var/lib/grafana
