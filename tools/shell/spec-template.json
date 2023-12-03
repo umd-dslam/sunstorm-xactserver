@@ -50,7 +50,7 @@
           },
           {
               "name": "max_connections",
-              "value": "100",
+              "value": "1000",
               "vartype": "integer"
           },
           {
@@ -135,7 +135,7 @@
           },
           {
               "name": "max_prepared_transactions",
-              "value": "128",
+              "value": "500",
               "vartype": "integer"
           },
           {
@@ -145,7 +145,7 @@
           },
           {
               "name": "remotexact.validate_index",
-              "value": "false",
+              "value": "true",
               "vartype": "bool"
           },
           {
@@ -170,7 +170,7 @@
           },
           {
               "name": "temp_buffers",
-              "value": "128MB",
+              "value": "1GB",
               "vartype": "integer"
           },
           {
@@ -192,6 +192,11 @@
               "name": "max_parallel_workers_per_gather",
               "value": "0",
               "vartype": "integer"
+          },
+          {
+              "name": "full_page_writes",
+              "value": "off",
+              "vartype": "bool"
           }
       ]
   },
