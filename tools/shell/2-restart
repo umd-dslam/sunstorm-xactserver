@@ -110,7 +110,7 @@ if [ $run_pageserver -eq 1 ]; then
         -c broker_endpoint='http://$HUB_ADDR:50051'                      \
         -c listen_pg_addr='0.0.0.0:6400'                                 \
         -c listen_http_addr='0.0.0.0:9898'                               \
-        -c page_cache_size=13107200"
+        -c page_cache_size=1310720"
     else
       run pageserver "$NEON_DIR/target/release/pageserver -D $DATA/.neon/pageserver_1 \
         -c broker_endpoint='http://$HUB_ADDR:50051'                                   \
