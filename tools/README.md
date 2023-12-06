@@ -1,4 +1,32 @@
-# EKS Deployment Instructions
+# Deployment & Benchmarking
+
+The servers can be deployed on Kubernetes clusters or directly on the EC2 instances. However, it is recommended that the benchmarking tools are deployed on Kubernetes to simplify the control of the clients across different regions.
+
+## Table of Contents
+- [One-time network configuration](#one-time-network-configuration)
+    - [Set up VPC peering](#set-up-vpc-peering)
+    - [Create subnets](#create-subnets)
+    - [Create security groups](#create-security-groups)
+- [Create EKS clusters](#create-eks-clusters)
+    - [Specify EKS configurations](#specify-eks-configurations)
+    - [Specify AWS regions](#specify-aws-regions)
+    - [Run the EKS clusters creation script](#run-the-eks-clusters-creation-script)
+- [Deploy the servers](#deploy-the-servers)
+    - [On Kubernetes](#on-kubernetes)
+    - [On EC2 instances](#on-ec2-instances)
+- [Useful commands to manage the EKS clusters](#useful-commands-to-manage-the-eks-clusters)
+    - [Monitoring tool](#monitoring-tool)
+    - [Contexts](#contexts)
+    - [Resources](#resources)
+    - [Logs](#logs)
+    - [Port-forwarding](#port-forwarding)
+- [Run the benchmark](#run-the-benchmark)
+    - [If the servers are deployed direclty on the EC2 instances](#if-the-servers-are-deployed-direclty-on-the-ec2-instances)
+    - [Create the benchmark schema](#create-the-benchmark-schema)
+    - [Load the data](#load-the-data)
+    - [Execute the benchmark](#execute-the-benchmark)
+- [Run the experiments](#run-the-experiments)
+- [Clean up](#clean-up)
 
 ## One-time network configuration
 
@@ -23,13 +51,6 @@ For pods to communicate across separate Kubernetes clusters, the VPCs in all reg
 
 1. For every region, navigate to the Route Tables section and find the route table of the newly created VPC. [Update this route table](https://docs.aws.amazon.com/vpc/latest/peering/vpc-peering-routing.html) with new entries that point traffic to the other peered VPCs. The **Destination** should be the CIDR block of a destination region, and the **Target** should be the VPC peering connection between the current and the destination region.
 
-### Create security groups
-
-For every region, create a security group that allows all traffic from other regions. In the example above, the security group will have one inbound rule where the **Source** is `10.0.0.0/8` so that we allow traffic from all other regions.
-
-Copy the ID of this security group and use it in the `securityGroups` fields in the EKS yaml file (e.g. `deploy/eks/us-east-1.yml`) of the corresponding region.
-
-
 ### Create subnets
 
 Create at least one subnet in each VPC. Open the EKS yaml file of the respective region in the `deploy/eks` directory (e.g. `deploy/eks/us-east-1.yaml`) and put in the subnet IDs in the `vpc.subnets.public` field. For example, the subnets of the VPC in the region `us-east-1` above could be:
@@ -42,6 +63,13 @@ Create at least one subnet in each VPC. Open the EKS yaml file of the respective
 
 The `deploy/eks/us-east-1.yaml` would contain the following:
 
+### Create security groups
+
+For every region, create a security group that allows all traffic from other regions. In the example above, the security group will have one inbound rule where the **Source** is `10.0.0.0/8` so that we allow traffic from all other regions.
+
+Copy the ID of this security group and use it in the `securityGroups` fields in the EKS yaml file (e.g. `deploy/eks/us-east-1.yml`) of the corresponding region.
+
+
 ```yaml
 vpc:
   subnets:
@@ -53,9 +81,9 @@ vpc:
 
 ## Create EKS clusters
 
-### Specify EC2 instances
+### Specify EKS configurations
 
-For every region, adjust the parameters under `managedNodeGroups` of the EKS yaml file as needed (e.g. `instanceType`, `desiredCapacity`, etc.). Remember to specify extra instances in the AWS region that holds the global resources.
+For every region, adjust the configurations in `deploy/helm-eks/values.yaml` as needed. If you are not deploying the servers on Kubernetes, only specify the instance type in `instance_types.client` and comment out other components.
 
 The full schema of this config file can be found [here](https://eksctl.io/usage/schema/#managedNodeGroups).
 
@@ -73,7 +101,11 @@ python3 eks.py create
 
 It may take around 15 minutes for the clusters to be created. You can check the status of the clusters in the log files in `deploy/eks` or the AWS console.
 
-## Deploy the system
+## Deploy the servers
+
+Every region must have at least one machine that runs the server. Make sure that the EBS volume has enough IOPS and throughput to handle the workload (e.g. we use the `io2` volume type to run our experiments). If deploying directly on the EC2 instances, remember to add one extra machine to one of the regions. This machine, called "hub" hereafter, will run the "global" region and other utilities (e.g. minio, promethus, and grafana).
+
+### On Kubernetes
 
 Adjust the parameters in the file `deploy/helm-neon/values.yaml` as needed (note that the `regions` field will be overwritten by the tool so can be ignored), then run the following command to deploy the system:
 
@@ -89,9 +121,58 @@ This tool also provides options to skip some stages in the development process i
 python3 deploy.py --skip-before neon
 ```
 
-# Useful commands to manage the cluster
+### On EC2 instances 
 
-## Contexts
+The following instructions assume the machines are running Ubuntu 22.04.
+
+The shell scripts for starting the servers on EC2 instances are located in `deploy/shell`. First of all, install the Python packages in `requirements.txt` on every machine:
+
+```bash
+pip install -r tools/requirements.txt
+```
+
+#### Start the Docker containers
+
+Optional: Mount an EBS volume to store the metrics at `/media/data`.
+
+Run the following commands (even if you don't mount the EBS volume):
+```
+sudo mkdir -p /media/data/minio /media/data/prometheus /media/data/grafana
+sudo chown -R 1000:1000 /media/data/minio
+sudo chown -R 65534:65534 /media/data/prometheus
+sudo chown -R 472:0 /media/data/grafana
+```
+
+Add the private IP addresses of the servers to the `pageserver`, `safekeeper`, and `xactserver` jobs in `shell/prometheus.yml`. 
+
+Add the private IP addresses of the clients to the `pushgateway` job in `shell/prometheus.yml`
+
+Start the Docker containers 
+```
+docker compose up -d
+```
+
+#### Start the servers
+
+Update the variables at the top of `shell/common` file on all instances to match with the information of the EC2 instances (e.g. private IP addresses).
+
+On the hub, run `1-init <number-of-regions>` to initialize the data for the given number of regions (excluding the global region). If you need to re-run this script, make sure to remove the generated `init` directory before that.
+
+On every machine (including the hub), run `2-start` and `3-compute` to start the components of server. Run these scripts with the `-h` flag to see more options.
+
+To stop everything, run `4-stop`.
+
+
+## Useful commands to manage the EKS clusters
+
+### Monitoring tool
+
+Use the `monitor.py` script to monitor the pods across the regions specified in `main.yaml`
+```
+python3 tools/monitor.py status
+```
+
+### Contexts
 
 To control the cluster in a particular region, you need to set the context of `kubectl` to that region. To see the existing contexts, run:
 
@@ -108,7 +189,7 @@ CURRENT   NAME                              CLUSTER                    AUTHINFO 
 
 From this point on, we will specify the context of the command using the `--context` flag. Remember to replace it with the context of your cluster.
 
-## Resources
+### Resources
 
 Get all deployments in `us-east-1`. The `-A` flag is used to get resources from all namespaces. If you want to get resources from a specific namespace, replace `-A` with `-n <namespace>`.
 
@@ -138,7 +219,7 @@ It is useful to see the status of the pods to make sure every thing is up and ru
 kubectl get pod -A -o wide --context ctring@neon.us-east-1.eksctl.io
 ```
 
-## Logs
+### Logs
 
 Get the logs of the `xactserver` deployment in `us-east-1`
 
@@ -153,7 +234,7 @@ kubectl logs deploy/xactserver -n us-east-1 --context ctring@neon.us-east-1.eksc
 
 Add `-f` if you want to follow the logs.
 
-## Port forwarding
+### Port forwarding
 
 It is useful to be able to connect to minio or the compute node from your local machine. To do so, run the following command to forward the port of the resource to your local machine:
 
@@ -165,12 +246,21 @@ kubectl port-forward svc/minio -n global 9000 9001 --context ctring@neon.us-east
 kubectl port-forward svc/compute -n us-east-1 55433 --context ctring@neon.us-east-1.eksctl.io
 ```
 
+## Run the benchmark
 
-# Run the benchmark
+Set the parameters for the benchmark appropriately in `deploy/helm-benchbase/values.yaml`. Remember to change `minio` to point to the hub if you deploy the servers without Kubernetes. Note that you can change any of these values later in the command line.
 
-Set the parameters for the benchmark appropriately in `deploy/helm-benchbase/values.yaml`. Note that you can change any of these values later in the command line.
+### If the servers are deployed direclty on the EC2 instances
 
-## Create the benchmark schema
+Run the following commands to create necessary resources to run the benchmark on Kubernetes:
+```
+python3 tools/deploy.py --skip-before namespace --skip-after namespace
+python3 tools/deploy.py --skip-before pushgateway --skip-after pushgateway
+```
+
+Make sure that the `target_address_and_database` field is set to the URL to connect to the databases in every region, including the global region.
+
+### Create the benchmark schema
 
 ```
 python3 benchmark.py create
@@ -184,7 +274,7 @@ Check the logs of the schema creation job
 kubectl logs job/create-load -n global --context ctring@neon.us-east-1.eksctl.io
 ```
 
-## Load the data
+### Load the data
 
 ```
 python3 benchmark.py load
@@ -196,7 +286,7 @@ Check the logs of the data loading job
 kubectl logs job/create-load -n global --context ctring@neon.us-east-1.eksctl.io
 ```
 
-## Execute the benchmark
+### Execute the benchmark
 
 ```
 python3 benchmark.py execute
@@ -210,16 +300,35 @@ kubectl logs job/execute -n us-east-1 --context ctring@neon.us-east-1.eksctl.io
 
 The results can be found on Minio.
 
-Overwrite the values directly in the command line:
+You can overwrite the values directly in the command line:
 
 ```
 python3 tools/benchmark.py execute -s tag=hot0mr0 -s hot.mr=0 -s hot.hot=0
 python3 tools/benchmark.py execute -s tag=hot0mr5 -s hot.mr=5 -s hot.hot=0
 python3 tools/benchmark.py execute -s tag=hot0mr10 -s hot.mr=10 -s hot.hot=0
-...
 ```
 
-# Clean up
+## Run the experiments
+The experiment script automates running the benchmark over multiple combinations of the parameters. 
+
+If the servers are deployed on Kubernetes, forward the Minio port to localhost
+```
+port-forward svc/hub 9000 9001 -n global --context ctring@neon.us-east-1.eksctl.io
+```
+
+Run the experiment script. The following command would run the ycsb-throughput experiment (see the configurations under the `experiments` directory), and download the results from minio to the `~/data/sunstorm/ycsb/throughput` directory. The `logs-per-sec` flag is used to reduce the logging rate on the terminal while running the experiment.
+
+```
+python3 tools/experiment.py           \
+  --logs-per-sec 50                   \
+  --minio <address-to-minio>:9000     \
+  -o ~/data/sunstorm/ycsb/throughput  \
+  ycsb-throughput   
+```
+
+The progress of the experiment is saved under the workspace directory. You can modify the progress files to re-run or skip a data point. Use `-h` to see more options for the `experiment.py` script.
+
+## Clean up
 
 Destroy the EKS clusters:
 

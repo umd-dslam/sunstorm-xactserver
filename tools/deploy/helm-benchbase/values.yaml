@@ -1,3 +1,6 @@
+# Type of database (postgres, mysql, or yugabyte)
+dbtype: postgres
+
 # The operation to perform, can be "create", "load", or "execute".
 # If you run benchmark.py, this value will be set automatically.
 operation: create
@@ -14,8 +17,8 @@ time: 60
 # Maximum throughput of the benchmark
 rate: 50000
 
-# Username and password to access the database
-username: cloud_admin
+# Username and password to access the database. Leave empty to use the defaults
+username:
 password: 
 
 # Address of the pushgateway
@@ -58,7 +61,6 @@ ordered_namespaces:
   - us-east-1
 
 target_address_and_database: compute:55433/postgres
-dbtype: postgres
 remotexact: true
 namespace_id: 0
 loadall: false
