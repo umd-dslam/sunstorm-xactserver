@@ -198,7 +198,8 @@ data:
         field8   text,
         field9   text,
         field10  text
-    );
+    )
+    WITH (fillfactor=90);
     {{- end }}
 
     {{- range $i := $regionsRange }}

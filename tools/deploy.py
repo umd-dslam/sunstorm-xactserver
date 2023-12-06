@@ -331,6 +331,22 @@ def start_pushgateway(config: MainConfig, dry_run: bool):
         if namespace == "global":
             continue
         region = ns_info["region"]
+
+        run_subprocess(
+            [
+                "kubectl",
+                "delete",
+                "-f",
+                (BASE_PATH / "pushgateway.yaml").as_posix(),
+                "--namespace",
+                namespace,
+            ]
+            + context_flag(region),
+            (LOG, f"Removing possibly existing pushgateway in region {region}."),
+            dry_run,
+            check=False,
+        )
+
         run_subprocess(
             [
                 "kubectl",

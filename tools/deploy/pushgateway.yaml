@@ -11,7 +11,7 @@ spec:
     - name: pushgateway
       targetPort: pushgateway
       port: 9091
-      nodePort: 9091
+      nodePort: 30091
   selector:
     app: pushgateway
 ---

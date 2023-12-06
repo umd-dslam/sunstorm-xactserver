@@ -1,4 +1,4 @@
-terminals: null
+terminals: 40
 hot.keyspertxn: 8
 hot.maxscancount: 50
 hot.hot: [0, 1000]
