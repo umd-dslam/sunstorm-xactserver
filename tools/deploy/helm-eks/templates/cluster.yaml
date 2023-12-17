@@ -5,17 +5,20 @@ metadata:
   name: neon
   region: {{ .Values.region }}
 
+{{- $subnets := get .Values.subnets .Values.region }}
 vpc:
   subnets:
     public:
-      {{ range $key, $value := get .Values.subnets .Values.region -}}
+      {{ range $key, $value := $subnets -}}
       {{ $key }}: { id: {{ $value }} }
       {{ end }}
+
+{{- $node_subnet := get $subnets (printf "%sa" .Values.region) }}
 nodeGroups:
   {{- if not (empty (get .Values.instance_types "compute")) }}
   - name: computes
     subnets:
-      - {{ get .Values.subnets .Values.region | values | first }}
+      - {{ $node_subnet }}
     {{- if .Values.spot.compute }}
     instancesDistribution:
       instanceTypes: 
@@ -37,7 +40,7 @@ nodeGroups:
   {{- if not (empty (get .Values.instance_types "pageserver")) }}
   - name: pageservers
     subnets:
-      - {{ get .Values.subnets .Values.region | values | first }}
+      - {{ $node_subnet }}
     {{- if .Values.spot.pageserver }}
     instancesDistribution:
       instanceTypes: 
@@ -60,7 +63,7 @@ managedNodeGroups:
   {{- if not (empty (get .Values.instance_types "client")) }}
   - name: clients
     subnets:
-      - {{ get .Values.subnets .Values.region | values | first }}
+      - {{ $node_subnet }}
     instanceType: {{ get .Values.instance_types "client" }}
     spot: {{ .Values.spot.client }}
     desiredCapacity: 1
@@ -75,7 +78,7 @@ managedNodeGroups:
   {{- if not (empty (get .Values.instance_types "hub")) }}
   - name: hub
     subnets:
-      - {{ get .Values.subnets .Values.region | values | last }}
+      - {{ $node_subnet }}
     instanceType: {{ get .Values.instance_types "hub" }}
     spot: {{ .Values.spot.hub }}
     desiredCapacity: 1
