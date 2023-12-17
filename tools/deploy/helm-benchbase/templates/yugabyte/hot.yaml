@@ -20,6 +20,7 @@ data:
         <password>{{ default "" .Values.password }}</password>
         <isolation>TRANSACTION_SERIALIZABLE</isolation>
         <batchsize>128</batchsize>
+        <retries>1</retries>
 
         <ddlpath>/config/ddl.sql</ddlpath>
 
@@ -186,7 +187,7 @@ data:
     {{- end }}
 
     {{- range $i := $regionsRange }}
-    CREATE TABLESPACE us_east_{{ $i }}_tablespace WITH (
+    CREATE TABLESPACE region_{{ $i }}_tablespace WITH (
       replica_placement='{
         "num_replicas": 1,
         "placement_blocks": [{"cloud":"aws","region":"region-{{ $i }}","zone":"region-{{ $i }}","min_num_replicas":1}]

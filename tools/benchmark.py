@@ -276,10 +276,14 @@ class Load(Operation):
 class SLoad(Operation):
     @classmethod
     def do(cls):
+        additional_settings = ["operation=load", "loadall=true"]
+        target = cls.config["global_region_target_address_and_database"]
+        if target:
+            additional_settings.append(f"target_address_and_database={target}")
         run_benchmark(
             "global",
             cls.config["global_region"],
-            cls.settings + ["operation=load", "loadall=true"],
+            cls.settings + additional_settings,
             delete_only=False,
             dry_run=cls.dry_run,
         )
