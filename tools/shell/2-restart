@@ -96,6 +96,9 @@ if [ $stop_only -eq 0 ] && ([ ! -d $DATA ] || [ $new_data -eq 1 ]); then
   until (mc alias set minio http://$HUB_ADDR:9000 minioadmin minioadmin) do
       echo 'Waiting to start minio...' && sleep 1
   done
+  until (/usr/bin/mc stat minio/sunstorm/.neon/.done) do
+      echo 'Waiting for the base data...' && sleep 1
+  done
   mc cp -r minio/sunstorm/.neon $DATA/
 fi
 
