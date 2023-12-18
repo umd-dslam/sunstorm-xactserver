@@ -10,6 +10,8 @@ usage() {
   echo "  -s, --safekeeper    Restart only safekeeper"
   echo "  -x, --xactserver    Restart only xactserver"
   echo "  -n, --new           Start with new data"
+  echo "      --region-id     The region id"
+  echo "      --safekeeper-id The safekeeper id"
   echo "      --stop          Only stop the components"
   echo "      --download-data Only download data from minio"
   echo "      --vanilla       Run vanilla neon"
@@ -25,6 +27,8 @@ stop_only=0
 new_data=0
 download_data_only=0
 vanilla=0
+region_id=0
+safekeeper_id=0
 
 while (( "$#" )); do
   case "$1" in
@@ -46,6 +50,14 @@ while (( "$#" )); do
     -n|--new)
       new_data=1
       shift 1
+      ;;
+    --region-id)
+      region_id=$2
+      shift 2
+      ;;
+    --safekeeper-id)
+      safekeeper_id=$2
+      shift 2
       ;;
     --stop)
       stop_only=1
@@ -91,7 +103,7 @@ if [ $download_data_only -eq 1 ]; then
   exit 0
 fi
 
-if [ $run_broker -eq 1 ] && [ "${PS_ADDRESSES[$REGION_ID]}" = "$HUB_ADDR" ]; then
+if [ $run_broker -eq 1 ] && [ "${PS_ADDRESSES[$region_id]}" = "$HUB_ADDR" ]; then
   echo "Stopping any previous storage broker instance"
   kill $(cat logs/storage_broker.pid) || true
 
@@ -124,15 +136,16 @@ fi
 
 if [ $run_safekeeper -eq 1 ]; then
   echo "Stopping any previous safekeeper instance"
-  kill $(cat logs/safekeeper.pid) || true
+  safekeeper_name="safekeeper_$safekeeper_id"
+  kill $(cat logs/$safekeeper_name.pid) || true
 
   if [ $stop_only -eq 0 ]; then
-    run safekeeper "$NEON_DIR/target/release/safekeeper \
-      --id=1                                            \
-      --datadir=$DATA                                   \
-      --advertise-pg=${SK_ADDRESSES[$REGION_ID]}:5454   \
-      --listen-pg=0.0.0.0:5454                          \
-      --listen-http=0.0.0.0:7676                        \
+    run $safekeeper_name "$NEON_DIR/target/release/safekeeper         \
+      --id=$safekeeper_id                                             \
+      --datadir=$DATA                                                 \
+      --advertise-pg=${SK_ADDRESSES[$region_id,$safekeeper_id]}:5454  \
+      --listen-pg=0.0.0.0:5454                                        \
+      --listen-http=0.0.0.0:7676                                      \
       --broker-endpoint=http://$HUB_ADDR:50051"
   fi
 fi
@@ -146,7 +159,7 @@ if [ $run_xactserver -eq 1 ]; then
       --listen-pg=0.0.0.0:10000                                       \
       --connect-pg=postgresql://cloud_admin@localhost:55433/postgres  \
       --max-conn-pool-size-pg=100                                     \
-      --node-id=$REGION_ID                                            \
+      --node-id=$region_id                                            \
       --nodes=$NODE_URLS                                              \
       --max-conn-pool-size-peer=100                                   \
       --listen-peer=0.0.0.0:23000                                     \
