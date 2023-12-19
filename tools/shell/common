@@ -16,6 +16,7 @@ XACTSERVER_DIR=$HOME/sunstorm/xactserver
 NEON_DIR=$HOME/sunstorm/neon
 # The directory to store data
 DATA="./data"
+mkdir -p $DATA
 
 # Build the Node URLs for the xactserver
 urls=()
