@@ -6,13 +6,15 @@ set -eu
 usage() {
   echo "Usage: $0 [options]"
   echo "Options:"
-  echo "      --region-id     The region id" 
+  echo "      --region-id     The region id"
+  echo "      --postgres-mem  The postgres shared buffer size"
   echo "      --stop          Stop the compute instance"
   echo "      --vanilla       Run vanilla neon compute"
   exit 1
 }
 
 region_id=0
+postgres_mem="16GB"
 stop_only=0
 vanilla=0
 
@@ -20,6 +22,10 @@ while (( "$#" )); do
   case "$1" in
     --region-id)
       region_id=$2
+      shift 2
+      ;;
+    --postgres-mem)
+      postgres_mem=$2
       shift 2
       ;;
     --stop)
@@ -90,6 +96,7 @@ sed "s/TENANT_ID/${tenant_id}/" ${spec_template} > ${spec}
 sed -i "s/TIMELINE_ID/${timeline_id}/" ${spec}
 sed -i "s/SAFEKEEPERS_ADDR/$(safekeeper_addresses $region_id)/" ${spec}
 sed -i "s/PAGESERVER_ADDR/${PS_ADDRESSES[$region_id]}/" ${spec}
+sed -i "s/POSTGRES_MEM/${postgres_mem}/" ${spec}
 sed -i "s/REGION/${region_id}/" ${spec}
 
 cat ${spec}

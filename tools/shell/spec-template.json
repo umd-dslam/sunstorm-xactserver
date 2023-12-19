@@ -45,7 +45,7 @@
           },
           {
               "name": "shared_buffers",
-              "value": "8GB",
+              "value": "POSTGRES_MEM",
               "vartype": "string"
           },
           {
