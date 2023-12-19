@@ -7,7 +7,7 @@ configs:
 services:
   minio:
     restart: always
-    image: quay.io/minio/minio:RELEASE.2022-11-17T23-20-09Z
+    image: quay.io/minio/minio:latest
     ports:
       - 9000:9000
       - 9001:9001

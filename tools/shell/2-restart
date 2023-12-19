@@ -121,7 +121,7 @@ if [ $download_data_only -eq 1 ]; then
   exit 0
 fi
 
-if [ $run_broker -eq 1 ] && [ "${PS_ADDRESSES[$region_id]}" = "$HUB_ADDR" ]; then
+if [ $run_broker -eq 1 ] && [ "${PAGESERVER_ADDRS[$region_id]}" = "$HUB_ADDR" ]; then
   echo "Stopping any previous storage broker instance"
   kill $(cat logs/storage_broker.pid) || true
 
@@ -162,7 +162,7 @@ if [ $run_safekeeper -eq 1 ]; then
     run $safekeeper_name "$NEON_DIR/target/release/safekeeper         \
       --id=$safekeeper_id                                             \
       --datadir=$DATA                                                 \
-      --advertise-pg=${SK_ADDRESSES[$region_id,$safekeeper_id]}:5454  \
+      --advertise-pg=${SAFEKEEPER_ADDRS[$region_id,$safekeeper_id]}:5454  \
       --listen-pg=0.0.0.0:5454                                        \
       --listen-http=0.0.0.0:7676                                      \
       --broker-endpoint=http://$HUB_ADDR:50051"
@@ -174,15 +174,15 @@ if [ $run_xactserver -eq 1 ]; then
   kill $(cat logs/xactserver.pid) || true
 
   if [ $stop_only -eq 0 ]; then
-    run xactserver "$XACTSERVER_DIR/target/release/xactserver         \
-      --listen-pg=0.0.0.0:10000                                       \
-      --connect-pg=postgresql://cloud_admin@localhost:55433/postgres  \
-      --max-conn-pool-size-pg=100                                     \
-      --node-id=$region_id                                            \
-      --nodes=$NODE_URLS                                              \
-      --max-conn-pool-size-peer=100                                   \
-      --listen-peer=0.0.0.0:23000                                     \
-      --listen-http=0.0.0.0:8080                                      \
+    run xactserver "$XACTSERVER_DIR/target/release/xactserver                            \
+      --listen-pg=0.0.0.0:10000                                                          \
+      --connect-pg=postgresql://cloud_admin@${COMPUTE_ADDRS[$region_id]}:55433/postgres  \
+      --max-conn-pool-size-pg=100                                                        \
+      --node-id=$region_id                                                               \
+      --nodes=$NODE_URLS                                                                 \
+      --max-conn-pool-size-peer=100                                                      \
+      --listen-peer=0.0.0.0:23000                                                        \
+      --listen-http=0.0.0.0:8080                                                         \
       --no-ansi"
   fi
 fi
