@@ -13,6 +13,7 @@ usage() {
   echo "      --region-id      The region id"
   echo "      --safekeeper-id  The safekeeper id"
   echo "      --pageserver-mem The pageserver buffer cache size in 8KB blocks"
+  echo "      --signal-file   The file that signifies the data is ready"
   echo "      --stop           Only stop the components"
   echo "      --download-data  Only download data from minio"
   echo "      --vanilla        Run vanilla neon"
@@ -32,6 +33,7 @@ download_data_only=0
 region_id=0
 safekeeper_id=0
 pageserver_mem=1310720
+signal_file=.done
 
 vanilla=0
 
@@ -66,6 +68,10 @@ while (( "$#" )); do
       ;;
     --pageserver-mem)
       pageserver_mem=$2
+      shift 2
+      ;;
+    --signal-file)
+      signal_file=$2
       shift 2
       ;;
     --stop)
@@ -105,7 +111,7 @@ if [ $stop_only -eq 0 ] && ([ ! -d $DATA ] || [ $new_data -eq 1 ]); then
   until (mc alias set minio http://$HUB_ADDR:9000 minioadmin minioadmin) do
       echo 'Waiting to start minio...' && sleep 1
   done
-  until (mc stat minio/sunstorm/.neon/.done) do
+  until (mc stat minio/sunstorm/.neon/$signal_file) do
       echo 'Waiting for the base data...' && sleep 1
   done
   mc cp -r minio/sunstorm/.neon $DATA/

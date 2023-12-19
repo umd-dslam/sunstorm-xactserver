@@ -7,14 +7,20 @@ source common
 usage () {
   echo "Usage: $0 [options] <num_regions>"
   echo "Options:"
+  echo "      --signal-file   The file that signifies the data is ready"
   echo "      --vanilla       Run vanilla neon"
   exit 1
 }
 
 vanilla=0
+signal_file=.done
 
 while (( "$#" )); do
   case "$1" in
+    --signal-file)
+      signal_file=$2
+      shift 2
+      ;;
     --vanilla)
       vanilla=1
       shift 1
@@ -60,5 +66,5 @@ done
 mc mb --ignore-existing minio/sunstorm
 mc rm -r --force minio/sunstorm/.neon
 mc cp -r ./init/r0/.neon minio/sunstorm/
-touch ./init/.done
-mc cp ./init/.done minio/sunstorm/.neon/
+touch ./init/$signal_file
+mc cp ./init/$signal_file minio/sunstorm/.neon/
