@@ -46,6 +46,8 @@ while (( "$#" )); do
   esac
 done
 
+mkdir -p $DATA
+
 echo "Stopping any previous compute instance"
 kill $(cat logs/compute.pid) || true
 pkill postgres || true
