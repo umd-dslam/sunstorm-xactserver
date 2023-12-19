@@ -140,7 +140,7 @@
           },
           {
               "name": "remotexact.connstring",
-              "value": "postgresql://localhost:10000",
+              "value": "postgresql://XACTSERVER_ADDR:10000",
               "vartype": "string"
           },
           {

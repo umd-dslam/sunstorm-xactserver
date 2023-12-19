@@ -96,6 +96,7 @@ sed "s/TENANT_ID/${tenant_id}/" ${spec_template} > ${spec}
 sed -i "s/TIMELINE_ID/${timeline_id}/" ${spec}
 sed -i "s/SAFEKEEPERS_ADDR/$(safekeeper_addresses $region_id)/" ${spec}
 sed -i "s/PAGESERVER_ADDR/${PS_ADDRESSES[$region_id]}/" ${spec}
+sed -i "s/XACTSERVER_ADDR/${XS_ADDRESSES[$region_id]}/" ${spec}
 sed -i "s/POSTGRES_MEM/${postgres_mem}/" ${spec}
 sed -i "s/REGION/${region_id}/" ${spec}
 
