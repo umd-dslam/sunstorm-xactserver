@@ -1,0 +1,170 @@
+AWSTemplateFormatVersion: 2010-09-09
+Metadata:
+  'AWS::CloudFormation::Designer':
+    490cb00a-d1e3-4260-9e64-71725ab0b4ad:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 440
+        'y': 280
+      z: 0
+      embeds: []
+    7a791c52-491f-408e-9590-3257a01751f7:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 440
+        'y': 140
+      z: 0
+      embeds: []
+    4cf70855-2ef5-4b25-b569-7b7ff3f986b7:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 440
+        'y': 210
+      z: 0
+      embeds: []
+Parameters:
+  KeyName:
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    Description: Enter key pair name for connecting to the instances
+  InstanceType:
+    Type: String
+    Description: Select the instance type
+    AllowedValues:
+      - c5.xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+  MasterIpAddresses:
+    Type: List<String>
+    Description: 'Enter master IP addresses. 10.0.0.10,10.1.0.10,10.8.0.10'
+    AllowedPattern: '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$'
+    ConstraintDescription: Must be a valid IP address
+  PrivateIpAddresses:
+    Type: List<String>
+    Description: |-
+      Enter private IP addresses for 3 instances.
+      us-east-1a: 10.0.0.10,10.0.0.20,10.0.0.30
+      us-east-2a: 10.1.0.10,10.1.0.20,10.1.0.30
+      us-west-1a: 10.8.0.10,10.8.0.20,10.8.0.30
+    AllowedPattern: '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$'
+    ConstraintDescription: Must be a valid IP address
+  Region:
+    Type: Number
+    Description: 'Enter the region id number. us-east-1: 0. us-east-2: 1. us-west-1: 2'
+  LaunchTemplateVersion:
+    Type: Number
+    Description: Version of the launch template "yugabyte"
+Resources:
+  Yugabyte0:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateName: yugabyte
+        Version: !Ref LaunchTemplateVersion
+      KeyName: !Ref KeyName
+      InstanceType: !Ref InstanceType
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          PrivateIpAddress: !Select 
+            - 0
+            - !Ref PrivateIpAddresses
+      Tags:
+        - Key: Name
+          Value: yugabyte0
+      UserData: !Base64 
+        'Fn::Join':
+          - |+
+
+          - - '#!/bin/bash'
+            - !Sub 
+              - >-
+                /home/ubuntu/run-yb --master-addrs ${MasterIpAddresses}
+                --tserver-addrs ${PrivateIpAddresses} --region-id ${Region}
+                --tserver-id 0 -n
+              - MasterIpAddresses: !Join 
+                  - ','
+                  - !Ref MasterIpAddresses
+                PrivateIpAddresses: !Join 
+                  - ','
+                  - !Ref PrivateIpAddresses
+                Region: !Ref Region
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 7a791c52-491f-408e-9590-3257a01751f7
+  Yugabyte1:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateName: yugabyte
+        Version: !Ref LaunchTemplateVersion
+      KeyName: !Ref KeyName
+      InstanceType: !Ref InstanceType
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          PrivateIpAddress: !Select 
+            - 1
+            - !Ref PrivateIpAddresses
+      Tags:
+        - Key: Name
+          Value: yugabyte1
+      UserData: !Base64 
+        'Fn::Join':
+          - |+
+
+          - - '#!/bin/bash'
+            - !Sub 
+              - >-
+                /home/ubuntu/run-yb --master-addrs ${MasterIpAddresses}
+                --tserver-addrs ${PrivateIpAddresses} --region-id ${Region}
+                --tserver-id 1 -n
+              - MasterIpAddresses: !Join 
+                  - ','
+                  - !Ref MasterIpAddresses
+                PrivateIpAddresses: !Join 
+                  - ','
+                  - !Ref PrivateIpAddresses
+                Region: !Ref Region
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 4cf70855-2ef5-4b25-b569-7b7ff3f986b7
+  Yugabyte2:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateName: yugabyte
+        Version: !Ref LaunchTemplateVersion
+      KeyName: !Ref KeyName
+      InstanceType: !Ref InstanceType
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          PrivateIpAddress: !Select 
+            - 2
+            - !Ref PrivateIpAddresses
+      Tags:
+        - Key: Name
+          Value: yugabyte2
+      UserData: !Base64 
+        'Fn::Join':
+          - |+
+
+          - - '#!/bin/bash'
+            - !Sub 
+              - >-
+                /home/ubuntu/run-yb --master-addrs ${MasterIpAddresses}
+                --tserver-addrs ${PrivateIpAddresses} --region-id ${Region}
+                --tserver-id 2 -n
+              - MasterIpAddresses: !Join 
+                  - ','
+                  - !Ref MasterIpAddresses
+                PrivateIpAddresses: !Join 
+                  - ','
+                  - !Ref PrivateIpAddresses
+                Region: !Ref Region
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 490cb00a-d1e3-4260-9e64-71725ab0b4ad
