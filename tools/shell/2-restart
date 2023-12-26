@@ -42,11 +42,11 @@ signal_file=.done
 
 vanilla=0
 
-hub_addr=""
-pageserver_addr=""
-safekeeper_addr=""
-compute_addr=""
-xactserver_addrs_str=""
+hub_addr=localhost
+pageserver_addr=localhost
+safekeeper_addr=localhost
+compute_addr=localhost
+xactserver_addrs=localhost
 
 while (( "$#" )); do
   case "$1" in
@@ -114,7 +114,7 @@ while (( "$#" )); do
       shift 2
       ;;
     --xactserver-addrs)
-      xactserver_addrs_str=$2
+      IFS=',' read -r -a xactserver_addrs <<< "$2"
       shift 2
       ;;
     -h|--help)
@@ -126,28 +126,6 @@ while (( "$#" )); do
       ;;
   esac
 done
-
-if [ -z "$hub_addr" ]; then
-  hub_addr=$HUB_ADDR
-fi
-
-if [ -z "$pageserver_addr" ]; then
-  pageserver_addr=${PAGESERVER_ADDRS[$region_id]}
-fi
-
-if [ -z "$safekeeper_addr" ]; then
-  safekeeper_addr=${SAFEKEEPER_ADDRS[$region_id,$safekeeper_id]}
-fi
-
-if [ -z "$compute_addr" ]; then
-  compute_addr=${COMPUTE_ADDRS[$region_id]}
-fi
-
-if [ -z "$xactserver_addrs_str" ]; then
-  xactserver_addrs=$XACTSERVER_ADDRS
-else
-  IFS=',' read -r -a xactserver_addrs <<< "$xactserver_addrs_str"
-fi
 
 # If no components are specified, start all of them
 if [ $flag_set -eq 0 ]; then

@@ -21,9 +21,9 @@ postgres_mem="16GB"
 stop_only=0
 vanilla=0
 
-pageserver_addr=""
-safekeeper_addrs_str=""
-xactserver_addr=""
+pageserver_addr=localhost
+xactserver_addr=localhost
+safekeeper_addrs=localhost:5454
 
 while (( "$#" )); do
   case "$1" in
@@ -48,7 +48,13 @@ while (( "$#" )); do
       shift 2
       ;;
     --safekeeper-addrs)
-      safekeeper_addrs_str=$2
+      # Split the comma-separated list into an array
+      IFS=',' read -r -a safekeeper_addrs <<< "$2"
+      # Append ":5454" to each address
+      safekeeper_addrs=("${safekeeper_addrs[@]/%/:5454}")
+      # Join the array into a string
+      safekeeper_addrs=$(printf ",%s" "${safekeeper_addrs[@]}")
+      safekeeper_addrs=${safekeeper_addrs:1}
       shift 2
       ;;
     --xactserver-addr)
@@ -64,26 +70,6 @@ while (( "$#" )); do
       ;;
   esac
 done
-
-if [ -z "$pageserver_addr" ]; then
-  pageserver_addr=${PAGESERVER_ADDRS[$region_id]}
-fi
-
-if [ -z "$safekeeper_addrs_str" ]; then
-  safekeeper_addrs=$(safekeeper_addresses $region_id)
-else
-  # Split the comma-separated list into an array
-  IFS=',' read -r -a safekeeper_addrs <<< "$safekeeper_addrs_str"
-  # Append ":5454" to each address
-  safekeeper_addrs=("${safekeeper_addrs[@]/%/:5454}")
-  # Join the array into a string
-  safekeeper_addrs=$(printf ",%s" "${safekeeper_addrs[@]}")
-  safekeeper_addrs=${safekeeper_addrs:1}
-fi
-
-if [ -z "$xactserver_addr" ]; then
-  xactserver_addr=${XACTSERVER_ADDRS[$region_id]}
-fi
 
 mkdir -p $DATA
 

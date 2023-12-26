@@ -1,43 +1,11 @@
 #!/bin/bash
 
-# Address of the hub--the server that contains minio and the storage broker
-HUB_ADDR=localhost
-# The addresses of the nodes in the cluster
-PAGESERVER_ADDRS=(localhost)
-XACTSERVER_ADDRS=(localhost)
-COMPUTE_ADDRS=(localhost)
-# Use multi-dimensional arrays [region_id, safekeeper_id] to store the addresses
-# of the safekeepers
-declare -A SAFEKEEPER_ADDRS
-SAFEKEEPER_ADDRS[0,0]=localhost
-
 # The directory of the xactserver repo
 XACTSERVER_DIR=$HOME/src/sunstorm/xactserver
 # The directory of the neon repo
 NEON_DIR=$HOME/src/sunstorm/neon
 # The directory to store data
 DATA="./data"
-
-# Build the Node URLs for the xactserver
-urls=()
-for i in "${!XACTSERVER_ADDRS[@]}"; do
-  urls[$i]="http://${XACTSERVER_ADDRS[$i]}:23000"
-done
-NODE_URLS=$(printf ",%s" "${urls[@]}")
-NODE_URLS=${NODE_URLS:1}
-
-# Get the addresses of the safekeepers
-safekeeper_addresses() {
-  region_id=$1
-  safekeepers=()
-  for i in "${!SAFEKEEPER_ADDRS[@]}"; do
-    if [[ $i =~ ^$region_id, ]]; then
-      safekeepers+=("${SAFEKEEPER_ADDRS[$i]}:5454")
-    fi
-  done
-  res=$(printf ",%s" "${safekeepers[@]}")
-  echo ${res:1}
-}
 
 run() {
   name=$1
