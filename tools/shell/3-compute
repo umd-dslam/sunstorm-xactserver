@@ -11,7 +11,7 @@ usage() {
   echo "      --stop              Stop the compute instance"
   echo "      --vanilla           Run vanilla neon compute"
   echo "      --pageserver-addr   The pageserver address"
-  echo "      --safekeeper-addrs  Comma-separated list of safekeeper addresses with ports"
+  echo "      --safekeeper-addrs  Comma-separated list of safekeeper addresses"
   echo "      --xactserver-addr   The xactserver address"
   exit 1
 }
@@ -22,7 +22,7 @@ stop_only=0
 vanilla=0
 
 pageserver_addr=""
-safekeeper_addrs=""
+safekeeper_addrs_str=""
 xactserver_addr=""
 
 while (( "$#" )); do
@@ -48,7 +48,7 @@ while (( "$#" )); do
       shift 2
       ;;
     --safekeeper-addrs)
-      safekeeper_addrs=$2
+      safekeeper_addrs_str=$2
       shift 2
       ;;
     --xactserver-addr)
@@ -69,8 +69,16 @@ if [ -z "$pageserver_addr" ]; then
   pageserver_addr=${PAGESERVER_ADDRS[$region_id]}
 fi
 
-if [ -z "$safekeeper_addrs" ]; then
+if [ -z "$safekeeper_addrs_str" ]; then
   safekeeper_addrs=$(safekeeper_addresses $region_id)
+else
+  # Split the comma-separated list into an array
+  IFS=',' read -r -a safekeeper_addrs <<< "$safekeeper_addrs_str"
+  # Append ":5454" to each address
+  safekeeper_addrs=("${safekeeper_addrs[@]/%/:5454}")
+  # Join the array into a string
+  safekeeper_addrs=$(printf ",%s" "${safekeeper_addrs[@]}")
+  safekeeper_addrs=${safekeeper_addrs:1}
 fi
 
 if [ -z "$xactserver_addr" ]; then
