@@ -41,7 +41,7 @@ hub_addr=""
 pageserver_addr=""
 safekeeper_addr=""
 compute_addr=""
-xactserver_addrs=""
+xactserver_addrs_str=""
 
 while (( "$#" )); do
   case "$1" in
@@ -109,7 +109,7 @@ while (( "$#" )); do
       shift 2
       ;;
     --xactserver-addrs)
-      xactserver_addrs=$2
+      xactserver_addrs_str=$2
       shift 2
       ;;
     -h|--help)
@@ -138,8 +138,10 @@ if [ -z "$compute_addr" ]; then
   compute_addr=${COMPUTE_ADDRS[$region_id]}
 fi
 
-if [ -z "$xactserver_addrs" ]; then
-  xactserver_addrs=$NODE_URLS
+if [ -z "$xactserver_addrs_str" ]; then
+  xactserver_addrs=$XACTSERVER_ADDRS
+else
+  IFS=',' read -r -a xactserver_addrs <<< "$xactserver_addrs_str"
 fi
 
 # If no components are specified, start all of them
@@ -220,12 +222,19 @@ if [ $run_xactserver -eq 1 ]; then
   kill $(cat logs/xactserver.pid) || true
 
   if [ $stop_only -eq 0 ]; then
+    urls=()
+    for i in "${!xactserver_addrs[@]}"; do
+      urls[$i]="http://${xactserver_addrs[$i]}:23000"
+    done
+    node_urls=$(printf ",%s" "${urls[@]}")
+    node_urls=${node_urls:1}
+
     run xactserver "$XACTSERVER_DIR/target/release/xactserver             \
       --listen-pg=0.0.0.0:10000                                           \
       --connect-pg=postgresql://cloud_admin@$compute_addr:55433/postgres  \
       --max-conn-pool-size-pg=100                                         \
       --node-id=$region_id                                                \
-      --nodes=$xactserver_addrs                                           \
+      --nodes=$node_urls                                                  \
       --max-conn-pool-size-peer=100                                       \
       --listen-peer=0.0.0.0:23000                                         \
       --listen-http=0.0.0.0:8080                                          \
