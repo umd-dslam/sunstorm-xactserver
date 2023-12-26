@@ -37,6 +37,12 @@ signal_file=.done
 
 vanilla=0
 
+hub_addr=""
+pageserver_addr=""
+safekeeper_addr=""
+compute_addr=""
+xactserver_addrs=""
+
 while (( "$#" )); do
   case "$1" in
     -p|--pageserver)
@@ -86,6 +92,26 @@ while (( "$#" )); do
       vanilla=1
       shift 1
       ;;
+    --hub-addr)
+      hub_addr=$2
+      shift 2
+      ;;
+    --pageserver-addr)
+      pageserver_addr=$2
+      shift 2
+      ;;
+    --safekeeper-addr)
+      safekeeper_addr=$2
+      shift 2
+      ;;
+    --compute-addr)
+      compute_addr=$2
+      shift 2
+      ;;
+    --xactserver-addrs)
+      xactserver_addrs=$2
+      shift 2
+      ;;
     -h|--help)
       usage
       ;;
@@ -95,6 +121,26 @@ while (( "$#" )); do
       ;;
   esac
 done
+
+if [ -z "$hub_addr" ]; then
+  hub_addr=$HUB_ADDR
+fi
+
+if [ -z "$pageserver_addr" ]; then
+  pageserver_addr=${PAGESERVER_ADDRS[$region_id]}
+fi
+
+if [ -z "$safekeeper_addr" ]; then
+  safekeeper_addr=${SAFEKEEPER_ADDRS[$region_id,$safekeeper_id]}
+fi
+
+if [ -z "$compute_addr" ]; then
+  compute_addr=${COMPUTE_ADDRS[$region_id]}
+fi
+
+if [ -z "$xactserver_addrs" ]; then
+  xactserver_addrs=$NODE_URLS
+fi
 
 # If no components are specified, start all of them
 if [ $flag_set -eq 0 ]; then
@@ -108,7 +154,7 @@ fi
 if [ $stop_only -eq 0 ] && ([ ! -d $DATA ] || [ $new_data -eq 1 ]); then
   rm -rf $DATA
   mkdir -p $DATA
-  until (mc alias set minio http://$HUB_ADDR:9000 minioadmin minioadmin) do
+  until (mc alias set minio http://${hub_addr}:9000 minioadmin minioadmin) do
       echo 'Waiting to start minio...' && sleep 1
   done
   until (mc stat minio/sunstorm/.neon/$signal_file) do
@@ -121,7 +167,7 @@ if [ $download_data_only -eq 1 ]; then
   exit 0
 fi
 
-if [ $run_broker -eq 1 ] && [ "${PAGESERVER_ADDRS[$region_id]}" = "$HUB_ADDR" ]; then
+if [ $run_broker -eq 1 ] && [ "$pageserver_addr" = "$hub_addr" ]; then
   echo "Stopping any previous storage broker instance"
   kill $(cat logs/storage_broker.pid) || true
 
@@ -137,13 +183,13 @@ if [ $run_pageserver -eq 1 ]; then
   if [ $stop_only -eq 0 ]; then
     if [ $vanilla -eq 0 ]; then
       run pageserver "$NEON_DIR/target/release/pageserver -D $DATA/.neon \
-        -c broker_endpoint='http://$HUB_ADDR:50051'                      \
+        -c broker_endpoint='http://$hub_addr:50051'                      \
         -c listen_pg_addr='0.0.0.0:6400'                                 \
         -c listen_http_addr='0.0.0.0:9898'                               \
         -c page_cache_size=$pageserver_mem"
     else
       run pageserver "$NEON_DIR/target/release/pageserver -D $DATA/.neon/pageserver_1 \
-        -c broker_endpoint='http://$HUB_ADDR:50051'                                   \
+        -c broker_endpoint='http://$hub_addr:50051'                                   \
         -c listen_pg_addr='0.0.0.0:6400'                                              \
         -c listen_http_addr='0.0.0.0:9898'                                            \
         -c control_plane_api=''                                                       \
@@ -159,13 +205,13 @@ if [ $run_safekeeper -eq 1 ]; then
   kill $(cat logs/$safekeeper_name.pid) || true
 
   if [ $stop_only -eq 0 ]; then
-    run $safekeeper_name "$NEON_DIR/target/release/safekeeper         \
-      --id=$safekeeper_id                                             \
-      --datadir=$DATA                                                 \
-      --advertise-pg=${SAFEKEEPER_ADDRS[$region_id,$safekeeper_id]}:5454  \
-      --listen-pg=0.0.0.0:5454                                        \
-      --listen-http=0.0.0.0:7676                                      \
-      --broker-endpoint=http://$HUB_ADDR:50051"
+    run $safekeeper_name "$NEON_DIR/target/release/safekeeper \
+      --id=$safekeeper_id                                     \
+      --datadir=$DATA                                         \
+      --advertise-pg=${safekeeper_addr}:5454                  \
+      --listen-pg=0.0.0.0:5454                                \
+      --listen-http=0.0.0.0:7676                              \
+      --broker-endpoint=http://${hub_addr}:50051"
   fi
 fi
 
@@ -174,15 +220,15 @@ if [ $run_xactserver -eq 1 ]; then
   kill $(cat logs/xactserver.pid) || true
 
   if [ $stop_only -eq 0 ]; then
-    run xactserver "$XACTSERVER_DIR/target/release/xactserver                            \
-      --listen-pg=0.0.0.0:10000                                                          \
-      --connect-pg=postgresql://cloud_admin@${COMPUTE_ADDRS[$region_id]}:55433/postgres  \
-      --max-conn-pool-size-pg=100                                                        \
-      --node-id=$region_id                                                               \
-      --nodes=$NODE_URLS                                                                 \
-      --max-conn-pool-size-peer=100                                                      \
-      --listen-peer=0.0.0.0:23000                                                        \
-      --listen-http=0.0.0.0:8080                                                         \
+    run xactserver "$XACTSERVER_DIR/target/release/xactserver             \
+      --listen-pg=0.0.0.0:10000                                           \
+      --connect-pg=postgresql://cloud_admin@$compute_addr:55433/postgres  \
+      --max-conn-pool-size-pg=100                                         \
+      --node-id=$region_id                                                \
+      --nodes=$xactserver_addrs                                           \
+      --max-conn-pool-size-peer=100                                       \
+      --listen-peer=0.0.0.0:23000                                         \
+      --listen-http=0.0.0.0:8080                                          \
       --no-ansi"
   fi
 fi

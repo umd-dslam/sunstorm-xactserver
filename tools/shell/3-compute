@@ -18,6 +18,10 @@ postgres_mem="16GB"
 stop_only=0
 vanilla=0
 
+pageserver_addr=""
+safekeeper_addrs=""
+xactserver_addr=""
+
 while (( "$#" )); do
   case "$1" in
     --region-id)
@@ -36,6 +40,18 @@ while (( "$#" )); do
       vanilla=1
       shift 1
       ;;
+    --pageserver-addr)
+      pageserver_addr=$2
+      shift 2
+      ;;
+    --safekeeper-addr)
+      safekeeper_addrs=$2
+      shift 2
+      ;;
+    --xactserver-addr)
+      xactserver_addr=$2
+      shift 2
+      ;;
     -h|--help)
       usage
       ;;
@@ -45,6 +61,18 @@ while (( "$#" )); do
       ;;
   esac
 done
+
+if [ -z "$pageserver_addr" ]; then
+  pageserver_addr=${PAGESERVER_ADDRS[$region_id]}
+fi
+
+if [ -z "$safekeeper_addrs" ]; then
+  safekeeper_addrs=$(safekeeper_addresses $region_id)
+fi
+
+if [ -z "$xactserver_addr" ]; then
+  xactserver_addr=${XACTSERVER_ADDRS[$region_id]}
+fi
 
 mkdir -p $DATA
 
@@ -64,18 +92,18 @@ fi
 spec=./spec.json
 
 echo "Waiting pageserver become ready."
-while ! nc -z ${PAGESERVER_ADDRS[$region_id]} 6400; do
+while ! nc -z $pageserver_addr 6400; do
     sleep 1;
 done
 echo "Page server is ready."
 
-tenant_id=$(curl -s http://${PAGESERVER_ADDRS[$region_id]}:9898/v1/tenant/ | jq -r '.[0].id')
+tenant_id=$(curl -s http://${pageserver_addr}:9898/v1/tenant/ | jq -r '.[0].id')
 if [ $tenant_id = "null" ]; then
     echo "ERROR: Tenant id is null"
     exit 1
 fi
 
-timelines=$(curl -s http://${PAGESERVER_ADDRS[$region_id]}:9898/v1/tenant/${tenant_id}/timeline/)
+timelines=$(curl -s http://${pageserver_addr}:9898/v1/tenant/${tenant_id}/timeline/)
 
 if [ $vanilla -eq 0 ]; then
   region_id_to_timeline_id=$(echo ${timelines} | jq '[.[] | {key: .region_id, value: .timeline_id}] | from_entries')
@@ -96,9 +124,9 @@ echo "Timeline id: ${timeline_id}"
 echo "Overwrite variables in spec file"
 sed "s/TENANT_ID/${tenant_id}/" ${spec_template} > ${spec}
 sed -i "s/TIMELINE_ID/${timeline_id}/" ${spec}
-sed -i "s/SAFEKEEPERS_ADDR/$(safekeeper_addresses $region_id)/" ${spec}
-sed -i "s/PAGESERVER_ADDR/${PAGESERVER_ADDRS[$region_id]}/" ${spec}
-sed -i "s/XACTSERVER_ADDR/${XACTSERVER_ADDRS[$region_id]}/" ${spec}
+sed -i "s/SAFEKEEPERS_ADDR/${safekeeper_addrs}/" ${spec}
+sed -i "s/PAGESERVER_ADDR/${pageserver_addr}/" ${spec}
+sed -i "s/XACTSERVER_ADDR/${xactserver_addr}/" ${spec}
 sed -i "s/POSTGRES_MEM/${postgres_mem}/" ${spec}
 sed -i "s/REGION/${region_id}/" ${spec}
 
