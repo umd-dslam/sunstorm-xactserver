@@ -1,0 +1,417 @@
+AWSTemplateFormatVersion: 2010-09-09
+Metadata:
+  'AWS::CloudFormation::Designer':
+    490cb00a-d1e3-4260-9e64-71725ab0b4ad:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 440
+        'y': 150
+      z: 0
+      embeds: []
+    7a791c52-491f-408e-9590-3257a01751f7:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 260
+        'y': 240
+      z: 0
+      embeds: []
+    51ec5efe-26f2-43da-84d8-1ad394d84f71:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 440
+        'y': 240
+      z: 0
+      embeds: []
+    32b96c51-1d4c-4db8-9641-fd5c4c2a7be4:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 530
+        'y': 240
+      z: 0
+      embeds: []
+    a493d928-70eb-4209-b694-ac4fd6efb6e3:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 350
+        'y': 240
+      z: 0
+      embeds: []
+    67bfed40-ec5a-42ca-905c-54bc3d0138f9:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 340
+        'y': 150
+      z: 0
+      embeds: []
+Parameters:
+  KeyName:
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    Description: Enter key pair name for connecting to the instances
+  HubInstanceType:
+    Type: String
+    Description: Select the instance type for the hub.
+    Default: none
+    AllowedValues:
+      - none
+      - c5.xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+  HubIpAddress:
+    Type: String
+    Description: Enter private IP addresses for the pageserver. 10.0.0.5
+    AllowedPattern: '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$'
+  PageserverInstanceType:
+    Type: String
+    Description: Select the instance type for the pageserver
+    Default: c5.2xlarge
+    AllowedValues:
+      - c5.xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+  PageserverIpAddress:
+    Type: String
+    Description: |-
+      Enter private IP addresses for the pageserver.
+      us-east-1a = 10.0.0.10  us-east-2a = 10.1.0.10  us-west-1a = 10.8.0.10
+    AllowedPattern: '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$'
+    ConstraintDescription: Must be a valid IP address
+  PageserverMemory:
+    Type: Number
+    Description: The pageserver buffer cache size in 8KB blocks
+    Default: 1310720
+  SafekeeperInstanceType:
+    Type: String
+    Description: Select the instance type for the safekeeper
+    Default: c5.2xlarge
+    AllowedValues:
+      - c5.xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+  SafekeeperIpAddresses:
+    Type: List<String>
+    Description: |-
+      Enter private IP addresses for the safekeepers.
+      us-east-1a = 10.0.0.20,10.0.0.21,10.0.0.22
+      us-east-2a = 10.1.0.20,10.1.0.21,10.1.0.22
+      us-west-1a = 10.8.0.20,10.8.0.21,10.8.0.22
+    AllowedPattern: '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$'
+    ConstraintDescription: Must be a valid IP address
+  XactserverIpAddresses:
+    Type: List<String>
+    Description: |-
+      Enter private IP addresses for the xactservers.
+      10.0.0.5,10.0.0.20,10.1.0.20,10.8.0.20
+    AllowedPattern: '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$'
+    ConstraintDescription: Must be a valid IP address
+  ComputeInstanceType:
+    Type: String
+    Description: Select the instance type for the safekeeper
+    Default: c5.4xlarge
+    AllowedValues:
+      - c5.xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+      - r5.xlarge
+      - r5.2xlarge
+      - r5.4xlarge
+  ComputeIpAddress:
+    Type: String
+    Description: |-
+      Enter private IP addresses for the compute.
+      us-east-1a = 10.0.0.30  us-east-2a = 10.1.0.30  us-west-1a = 10.8.0.30
+    AllowedPattern: '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$'
+    ConstraintDescription: Must be a valid IP address
+  ComputeMemory:
+    Type: String
+    Description: The postgres shared buffer size
+    Default: 16GB
+  LaunchTemplateVersion:
+    Type: Number
+    Description: Version of the launch template "sunstorm"
+  Region:
+    Type: Number
+    Description: Enter the region id number. us-east-1 = 1  us-east-2 = 2  us-west-1 = 3
+  SignalFileName:
+    Type: String
+    Description: >-
+      Name of the signal file. Make sure this is not the same as the latest run
+      and is the same across all regions.
+Resources:
+  Pageserver:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateName: sunstorm
+        Version: !Ref LaunchTemplateVersion
+      KeyName: !Ref KeyName
+      InstanceType: !Ref PageserverInstanceType
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          PrivateIpAddress: !Ref PageserverIpAddress
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            Iops: 3000
+      Tags:
+        - Key: Name
+          Value: pageserver
+      UserData: !Base64 
+        'Fn::Join':
+          - |+
+
+          - - '#!/bin/bash'
+            - cd /home/ubuntu/sunstorm/xactserver/tools/shell
+            - !Sub 
+              - >-
+                sudo -u ubuntu ./2-restart --pageserver -n --region-id ${Region}
+                --signal-file ${SignalFileName} --pageserver-mem
+                ${PageserverMemory} --hub-addr ${HubIpAddress} --pageserver-addr
+                ${PageserverIpAddress}
+              - Region: !Ref Region
+                PageserverMemory: !Ref PageserverMemory
+                SignalFileName: !Ref SignalFileName
+                HubIpAddress: !Ref HubIpAddress
+                PageserverIpAddress: !Ref PageserverIpAddress
+                SafekeeperIpAddress: !Select 
+                  - 0
+                  - !Ref SafekeeperIpAddresses
+                ComputeIpAddress: !Ref ComputeIpAddress
+                XactserverIpAddresses: !Join 
+                  - ','
+                  - !Ref XactserverIpAddresses
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 7a791c52-491f-408e-9590-3257a01751f7
+  Safekeeper0:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateName: sunstorm
+        Version: !Ref LaunchTemplateVersion
+      KeyName: !Ref KeyName
+      InstanceType: !Ref SafekeeperInstanceType
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          PrivateIpAddress: !Select 
+            - 0
+            - !Ref SafekeeperIpAddresses
+      Tags:
+        - Key: Name
+          Value: safekeeper0
+      UserData: !Base64 
+        'Fn::Join':
+          - |+
+
+          - - '#!/bin/bash'
+            - cd /home/ubuntu/sunstorm/xactserver/tools/shell
+            - !Sub 
+              - >-
+                sudo -u ubuntu ./2-restart --safekeeper --xactserver -n
+                --region-id ${Region} --safekeeper-id 0 --signal-file
+                ${SignalFileName} --hub-addr ${HubIpAddress} --safekeeper-addr
+                ${SafekeeperIpAddress} --compute-addr ${ComputeIpAddress}
+                --xactserver-addrs ${XactserverIpAddresses}
+              - Region: !Ref Region
+                SignalFileName: !Ref SignalFileName
+                HubIpAddress: !Ref HubIpAddress
+                SafekeeperIpAddress: !Select 
+                  - 0
+                  - !Ref SafekeeperIpAddresses
+                ComputeIpAddress: !Ref ComputeIpAddress
+                XactserverIpAddresses: !Join 
+                  - ','
+                  - !Ref XactserverIpAddresses
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: a493d928-70eb-4209-b694-ac4fd6efb6e3
+  Safekeeper1:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateName: sunstorm
+        Version: !Ref LaunchTemplateVersion
+      KeyName: !Ref KeyName
+      InstanceType: !Ref SafekeeperInstanceType
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          PrivateIpAddress: !Select 
+            - 1
+            - !Ref SafekeeperIpAddresses
+      Tags:
+        - Key: Name
+          Value: safekeeper1
+      UserData: !Base64 
+        'Fn::Join':
+          - |+
+
+          - - '#!/bin/bash'
+            - cd /home/ubuntu/sunstorm/xactserver/tools/shell
+            - !Sub 
+              - >-
+                sudo -u ubuntu ./2-restart --safekeeper -n --region-id ${Region}
+                --safekeeper-id 1 --signal-file ${SignalFileName} --hub-addr
+                ${HubIpAddress} --safekeeper-addr ${SafekeeperIpAddress}
+              - Region: !Ref Region
+                SignalFileName: !Ref SignalFileName
+                HubIpAddress: !Ref HubIpAddress
+                SafekeeperIpAddress: !Select 
+                  - 1
+                  - !Ref SafekeeperIpAddresses
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 51ec5efe-26f2-43da-84d8-1ad394d84f71
+  Safekeeper2:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateName: sunstorm
+        Version: !Ref LaunchTemplateVersion
+      KeyName: !Ref KeyName
+      InstanceType: !Ref SafekeeperInstanceType
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          PrivateIpAddress: !Select 
+            - 2
+            - !Ref SafekeeperIpAddresses
+      Tags:
+        - Key: Name
+          Value: safekeeper2
+      UserData: !Base64 
+        'Fn::Join':
+          - |+
+
+          - - '#!/bin/bash'
+            - cd /home/ubuntu/sunstorm/xactserver/tools/shell
+            - !Sub 
+              - >-
+                sudo -u ubuntu ./2-restart --safekeeper -n --region-id ${Region}
+                --safekeeper-id 2 --signal-file ${SignalFileName} --hub-addr
+                ${HubIpAddress} --safekeeper-addr ${SafekeeperIpAddress}
+              - Region: !Ref Region
+                SignalFileName: !Ref SignalFileName
+                HubIpAddress: !Ref HubIpAddress
+                SafekeeperIpAddress: !Select 
+                  - 2
+                  - !Ref SafekeeperIpAddresses
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 32b96c51-1d4c-4db8-9641-fd5c4c2a7be4
+  Compute:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateName: sunstorm
+        Version: !Ref LaunchTemplateVersion
+      KeyName: !Ref KeyName
+      InstanceType: !Ref ComputeInstanceType
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          PrivateIpAddress: !Ref ComputeIpAddress
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp3
+      Tags:
+        - Key: Name
+          Value: compute
+      UserData: !Base64 
+        'Fn::Join':
+          - |+
+
+          - - '#!/bin/bash'
+            - cd /home/ubuntu/sunstorm/xactserver/tools/shell
+            - !Sub 
+              - >-
+                sudo -u ubuntu ./3-compute --region-id ${Region} --postgres-mem
+                ${ComputeMemory} --safekeeper-addrs
+                ${SafekeeperIpAddresses} --pageserver-addr
+                ${PageserverIpAddress} --xactserver-addr ${XactserverIpAddress}
+              - Region: !Ref Region
+                ComputeMemory: !Ref ComputeMemory
+                PageserverIpAddress: !Ref PageserverIpAddress
+                XactserverIpAddress: !Select 
+                  - !Ref Region
+                  - !Ref XactserverIpAddresses
+                SafekeeperIpAddresses: !Join 
+                  - ','
+                  - !Ref SafekeeperIpAddresses
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 490cb00a-d1e3-4260-9e64-71725ab0b4ad
+  Hub:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateName: sunstorm
+        Version: !Ref LaunchTemplateVersion
+      KeyName: !Ref KeyName
+      InstanceType: !Ref HubInstanceType
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          PrivateIpAddress: 10.0.0.5
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp3
+      Volumes:
+        - Device: /dev/sdh
+          VolumeId: vol-07c1a3991139f191c
+      Tags:
+        - Key: Name
+          Value: hub
+      UserData: !Base64 
+        'Fn::Join':
+          - |+
+
+          - - '#!/bin/bash'
+            - mkdir -p /media/data
+            - mount /dev/nvme1n1 /media/data
+            - cd /home/ubuntu/sunstorm/xactserver/tools/shell
+            - docker compose up -d
+            - !Sub 
+              - 'sudo -u ubuntu ./1-init --signal-file ${SignalFileName} 3'
+              - SignalFileName: !Ref SignalFileName
+            - !Sub 
+              - >-
+                sudo -u ubuntu ./2-restart -n --region-id 0 --pageserver-mem
+                131072 --signal-file ${SignalFileName} --hub-addr
+                ${HubIpAddress} --pageserver-addr ${PageserverIpAddress}
+                --safekeeper-addr ${SafekeeperIpAddress} --compute-addr
+                ${ComputeIpAddress} --xactserver-addrs ${XactserverIpAddresses}
+              - SignalFileName: !Ref SignalFileName
+                HubIpAddress: !Ref HubIpAddress
+                PageserverIpAddress: !Ref HubIpAddress
+                SafekeeperIpAddress: !Ref HubIpAddress
+                ComputeIpAddress: !Ref HubIpAddress
+                XactserverIpAddresses: !Join 
+                  - ','
+                  - !Ref XactserverIpAddresses
+            - !Sub 
+              - >-
+                sudo -u ubuntu ./3-compute --region-id 0 --postgres-mem 1GB
+                --safekeeper-addrs ${SafekeeperIpAddresses} --pageserver-addr
+                ${PageserverIpAddress} --xactserver-addr ${XactserverIpAddress}
+              - PageserverIpAddress: !Ref HubIpAddress
+                SafekeeperIpAddresses: !Ref HubIpAddress
+                XactserverIpAddress: !Ref HubIpAddress
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 67bfed40-ec5a-42ca-905c-54bc3d0138f9
+    Condition: CreateHub
+Conditions:
+  CreateHub: !Not 
+    - !Equals 
+      - !Ref HubInstanceType
+      - none
