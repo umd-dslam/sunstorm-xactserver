@@ -15,7 +15,12 @@ data:
         <!-- Connection details -->
         <type>YUGABYTE</type>
         <driver>org.postgresql.Driver</driver>
-        <url>jdbc:postgresql://{{ .Values.target_address_and_database }}?sslmode=disable&amp;ApplicationName=ycsb&amp;reWriteBatchedInserts=true</url>
+        {{- $targets := regexSplit ";" .Values.target_address_and_database -1 }}
+        <url>
+        {{- range $i, $target := $targets }}
+        jdbc:postgresql://{{ $target }}?sslmode=disable&amp;ApplicationName=ycsb&amp;reWriteBatchedInserts=true
+        {{- end }}
+        </url>
         <username>{{ default "postgres" .Values.username }}</username>
         <password>{{ default "" .Values.password }}</password>
         <isolation>TRANSACTION_SERIALIZABLE</isolation>
@@ -197,7 +202,7 @@ data:
 
     {{- range $i := $regionsRange }}
     CREATE TABLE usertable_{{ $i }} (
-        ycsb_key int primary key,
+        ycsb_key int,
         field1   text,
         field2   text,
         field3   text,
@@ -207,8 +212,10 @@ data:
         field7   text,
         field8   text,
         field9   text,
-        field10  text
-    ) TABLESPACE region_{{ $i }}_tablespace;
+        field10  text,
+        primary key (ycsb_key asc)
+    ) TABLESPACE region_{{ $i }}_tablespace
+      SPLIT AT VALUES ((21277),(42554),(63830),(85107),(106383),(127660),(148937),(170213),(191490),(212766),(234043),(255319),(276596),(297873),(319149),(340426),(361702),(382979),(404255),(425532),(446809),(468085),(489362),(510638),(531915),(553191),(574468),(595745),(617021),(638298),(659574),(680851),(702127),(723404),(744681),(765957),(787234),(808510),(829787),(851063),(872340),(893617),(914893),(936170),(957446),(978723));
     {{- end }}
 
 {{ end }}
