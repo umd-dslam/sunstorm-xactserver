@@ -1,4 +1,4 @@
-# python3 tools/experiment.py --logs-per-sec 10 -o ~/data/sunstorm/ycsb/latency ycsb-latency
+# python3 tools/experiment.py --logs-per-sec 10 -o ~/data/sunstorm/ycsb/latency ycsb-latency-postgres
 dbtype: postgres
 reload_every: 5
 benchmark: hot
