@@ -15,6 +15,11 @@ data:
         <!-- Connection details -->
         <type>YUGABYTE</type>
         <driver>org.postgresql.Driver</driver>
+
+        {{- if .Values.leader }}
+        <metadataUrl>jdbc:postgresql://{{ .Values.leader }}?sslmode=disable</metadataUrl>
+        {{- end }}
+
         {{- $targets := regexSplit ";" .Values.target_address_and_database -1 }}
         <url>
         {{- range $i, $target := $targets }}
@@ -180,21 +185,21 @@ data:
     </parameters>
 
   ddl.sql: |
-    {{- $numRegions := sub (len .Values.ordered_namespaces) 1 }}
-    {{- $regionsRange := untilStep 1 (int (add1 (int $numRegions))) 1}}
+    {{- $numRegions := len .Values.ordered_namespaces }}
+    {{- $regionsRange := untilStep 1 (int $numRegions) 1}}
 
     {{- range $i := $regionsRange }}
     DROP TABLE IF EXISTS usertable_{{ $i }};
     {{- end }}
 
     {{- range $i := $regionsRange }}
-    DROP TABLESPACE IF EXISTS region_{{ $i }}_tablespace;
+    DROP TABLESPACE IF EXISTS region_{{ $i }};
     {{- end }}
 
     {{- range $i := $regionsRange }}
-    CREATE TABLESPACE region_{{ $i }}_tablespace WITH (
+    CREATE TABLESPACE region_{{ $i }} WITH (
       replica_placement='{
-        "num_replicas": 1,
+        "num_replicas": 3,
         "placement_blocks": [{"cloud":"aws","region":"region-{{ $i }}","zone":"region-{{ $i }}","min_num_replicas":1}]
       }'
     );
@@ -214,7 +219,7 @@ data:
         field9   text,
         field10  text,
         primary key (ycsb_key asc)
-    ) TABLESPACE region_{{ $i }}_tablespace
+    ) TABLESPACE region_{{ $i }}
       SPLIT AT VALUES ((21277),(42554),(63830),(85107),(106383),(127660),(148937),(170213),(191490),(212766),(234043),(255319),(276596),(297873),(319149),(340426),(361702),(382979),(404255),(425532),(446809),(468085),(489362),(510638),(531915),(553191),(574468),(595745),(617021),(638298),(659574),(680851),(702127),(723404),(744681),(765957),(787234),(808510),(829787),(851063),(872340),(893617),(914893),(936170),(957446),(978723));
     {{- end }}
 

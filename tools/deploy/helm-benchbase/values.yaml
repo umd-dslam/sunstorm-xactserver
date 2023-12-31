@@ -24,7 +24,11 @@ password:
 # Address of the pushgateway
 pushgateway: pushgateway:9091
 # Address of minio
-minio: hub.global:9000
+minio: 10.0.0.5:9000
+# Address of the node to fetch metadata from. In Yugabyte, accessing the catalog
+# from the follower region is very slow, so this is used to fetch the metadata
+# from the leader region, which is much faster.
+leader: null
 
 # The benchmark to run 
 benchmark: hot

@@ -309,11 +309,17 @@ class SLoad(Operation):
 
 class Execute(Operation):
     @classmethod
+    def namespaces_without_global(cls):
+        return [ns for ns in cls.namespaces if ns[0] != "global"]
+
+    @classmethod
     def do(cls):
         timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
-        max_workers = len(cls.namespaces)
+        max_workers = len(cls.namespaces_without_global())
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            for id, (namespace, ns_info) in enumerate(cls.namespaces):
+            for id, (namespace, ns_info) in enumerate(cls.namespaces_without_global()):
+                if namespace == "global":
+                    continue
                 per_region_settings = [
                     "operation=execute",
                     f"timestamp={timestamp}",
@@ -342,7 +348,7 @@ class Execute(Operation):
                     name="execute",
                     stream=get_job_logs(item[0], item[1]["region"], "execute"),
                 ),
-                cls.namespaces,
+                cls.namespaces_without_global(),
             )
 
         lock = threading.Lock()
