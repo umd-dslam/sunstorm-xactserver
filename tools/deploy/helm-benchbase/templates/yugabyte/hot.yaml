@@ -48,6 +48,7 @@ data:
 
         <!-- Number of hot keys per partition -->
         <hot>{{ .Values.hot.hot }}</hot>
+        <hotdistribution>even</hotdistribution>
 
         <!-- Number of keys per transaction -->
         <keyspertxn>{{ .Values.hot.keyspertxn }}</keyspertxn>
@@ -59,6 +60,9 @@ data:
         <terminals>{{ .Values.terminals }}</terminals>
         <works>
             <work>
+                {{- if .Values.warmup }}
+                <warmup>{{ .Values.warmup }}</warmup>
+                {{- end }}
                 <time>{{ .Values.time }}</time>
                 <rate>{{ .Values.rate }}</rate>
                 <weights>{{ .Values.hot.weights }}</weights>

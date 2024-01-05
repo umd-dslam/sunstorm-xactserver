@@ -7,18 +7,22 @@ regions:
     # If this is specified, the benchmark will send workload to the given target
     # instead of the default "compute" service.
     # target_address_and_database: host.minikube.internal:55433/postgres
+    warmup: 0
   us-east-2:
-    id: 2
+    id: 2 
     # context: minikube
     # target_address_and_database: host.minikube.internal:55433/postgres
+    warmup: 0
   us-west-1:
     id: 3
     # context: minikube
     # target_address_and_database: host.minikube.internal:55433/postgres
-  eu-west-1:
-    id: 4
+    warmup: 0
+  # eu-west-1:
+  #   id: 4
     # context: minikube
     # target_address_and_database: host.minikube.internal:55433/postgres
+    # warmup: 0
 
 # The region that contains the global resources. This region can
 # be one of the regions listed above, or a different region.

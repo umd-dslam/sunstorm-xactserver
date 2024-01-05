@@ -1,4 +1,4 @@
-# python3 tools/experiment.py --logs-per-sec 10 -o ~/data/sunstorm/ycsb/latency ycsb-latency-yugabyte
+# python3 tools/experiment.py -o ~/data/sunstorm/ycsb/latency ycsb-latency-yugabyte
 dbtype: yugabyte
 benchmark: hot
 scalefactor: 1000

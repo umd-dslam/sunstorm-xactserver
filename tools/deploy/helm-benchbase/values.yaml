@@ -12,6 +12,8 @@ tag: null
 scalefactor: 1000
 # Number of concurrent clients
 terminals: 32
+# Warmup time in seconds
+warmup: 0
 # Duration of the benchmark in seconds
 time: 60
 # Maximum throughput of the benchmark

@@ -317,17 +317,21 @@ class Execute(Operation):
         timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
         max_workers = len(cls.namespaces_without_global())
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            for id, (namespace, ns_info) in enumerate(cls.namespaces_without_global()):
+            for namespace, ns_info in cls.namespaces_without_global():
                 if namespace == "global":
                     continue
+                namespace_id = ns_info["id"]
                 per_region_settings = [
                     "operation=execute",
                     f"timestamp={timestamp}",
-                    f"namespace_id={id}",
+                    f"namespace_id={namespace_id}",
                 ]
                 target = ns_info["target_address_and_database"]
                 if target:
                     per_region_settings.append(f"target_address_and_database={target}")
+                warmup = ns_info["warmup"]
+                if warmup:
+                    per_region_settings.append(f"warmup={warmup}")
                 executor.submit(
                     run_benchmark,
                     namespace,
