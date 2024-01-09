@@ -160,10 +160,6 @@ Resources:
       NetworkInterfaces:
         - DeviceIndex: 0
           PrivateIpAddress: !Ref PageserverIpAddress
-      BlockDeviceMappings:
-        - DeviceName: /dev/sda1
-          Ebs:
-            Iops: 3000
       Tags:
         - Key: Name
           Value: pageserver
@@ -173,6 +169,8 @@ Resources:
 
           - - '#!/bin/bash'
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
+            - sudo -u ubuntu ./4-stop
+            - sleep 2
             - !Sub 
               - >-
                 sudo -u ubuntu ./2-restart --pageserver -n --region-id ${Region}
@@ -216,6 +214,8 @@ Resources:
 
           - - '#!/bin/bash'
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
+            - sudo -u ubuntu ./4-stop
+            - sleep 2
             - !Sub 
               - >-
                 sudo -u ubuntu ./2-restart --safekeeper --xactserver -n
@@ -258,6 +258,8 @@ Resources:
 
           - - '#!/bin/bash'
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
+            - sudo -u ubuntu ./4-stop
+            - sleep 2
             - !Sub 
               - >-
                 sudo -u ubuntu ./2-restart --safekeeper -n --region-id ${Region}
@@ -294,6 +296,8 @@ Resources:
 
           - - '#!/bin/bash'
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
+            - sudo -u ubuntu ./4-stop
+            - sleep 2
             - !Sub 
               - >-
                 sudo -u ubuntu ./2-restart --safekeeper -n --region-id ${Region}
@@ -319,10 +323,6 @@ Resources:
       NetworkInterfaces:
         - DeviceIndex: 0
           PrivateIpAddress: !Ref ComputeIpAddress
-      BlockDeviceMappings:
-        - DeviceName: /dev/sda1
-          Ebs:
-            VolumeType: gp3
       Tags:
         - Key: Name
           Value: compute
@@ -332,12 +332,14 @@ Resources:
 
           - - '#!/bin/bash'
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
+            - sudo -u ubuntu ./4-stop
+            - sleep 2
             - !Sub 
               - >-
                 sudo -u ubuntu ./3-compute --region-id ${Region} --postgres-mem
-                ${ComputeMemory} --safekeeper-addrs
-                ${SafekeeperIpAddresses} --pageserver-addr
-                ${PageserverIpAddress} --xactserver-addr ${XactserverIpAddress}
+                ${ComputeMemory} --safekeeper-addrs ${SafekeeperIpAddresses}
+                --pageserver-addr ${PageserverIpAddress} --xactserver-addr
+                ${XactserverIpAddress}
               - Region: !Ref Region
                 ComputeMemory: !Ref ComputeMemory
                 PageserverIpAddress: !Ref PageserverIpAddress
@@ -361,10 +363,6 @@ Resources:
       NetworkInterfaces:
         - DeviceIndex: 0
           PrivateIpAddress: 10.0.0.5
-      BlockDeviceMappings:
-        - DeviceName: /dev/sda1
-          Ebs:
-            VolumeType: gp3
       Volumes:
         - Device: /dev/sdh
           VolumeId: vol-07c1a3991139f191c
@@ -379,7 +377,10 @@ Resources:
             - mkdir -p /media/data
             - mount /dev/nvme1n1 /media/data
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
+            - docker compose rm -fs
             - docker compose up -d
+            - sudo -u ubuntu ./4-stop
+            - sleep 2
             - !Sub 
               - 'sudo -u ubuntu ./1-init --signal-file ${SignalFileName} 3'
               - SignalFileName: !Ref SignalFileName
