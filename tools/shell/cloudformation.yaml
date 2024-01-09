@@ -334,6 +334,7 @@ Resources:
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - sudo -u ubuntu ./4-stop
             - sleep 2
+            - rm -rf /home/ubuntu/sunstorm/xactserver/tools/shell/data
             - !Sub 
               - >-
                 sudo -u ubuntu ./3-compute --region-id ${Region} --postgres-mem

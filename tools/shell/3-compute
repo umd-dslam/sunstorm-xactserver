@@ -6,6 +6,7 @@ set -eu
 usage() {
   echo "Usage: $0 [options]"
   echo "Options:"
+  echo "  -n, --new               Start with new data"
   echo "      --region-id         The region id"
   echo "      --postgres-mem      The postgres shared buffer size"
   echo "      --stop              Stop the compute instance"
@@ -16,6 +17,7 @@ usage() {
   exit 1
 }
 
+new_data=0
 region_id=0
 postgres_mem="16GB"
 stop_only=0
@@ -27,6 +29,10 @@ safekeeper_addrs=localhost:5454
 
 while (( "$#" )); do
   case "$1" in
+    -n|--new)
+      new_data=1
+      shift 1
+      ;;
     --region-id)
       region_id=$2
       shift 2
@@ -72,6 +78,10 @@ while (( "$#" )); do
 done
 
 mkdir -p $DATA
+
+if [ $new_data -eq 1 ]; then
+  rm -rf $DATA/compute
+fi
 
 echo "Stopping any previous compute instance"
 kill $(cat logs/compute.pid) || true
