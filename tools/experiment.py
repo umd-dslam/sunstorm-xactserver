@@ -69,6 +69,7 @@ class Replace(TypedDict):
 
 
 class Experiment(TypedDict):
+    name: str
     dbtype: str
     reload_every: int
     benchmark: str
@@ -145,7 +146,7 @@ def benchmark_args(exp: Experiment, prefix: str | None, suffix: str | None):
     rate = exp["rate"]
 
     base_args = [
-        "-s"
+        "-s",
         f"dbtype={dbtype}",
         "-s",
         f"benchmark={benchmark}",
@@ -227,7 +228,7 @@ def benchmark_args(exp: Experiment, prefix: str | None, suffix: str | None):
         if prefix:
             tag_parts.append(prefix)
 
-        tag_parts.append(dbtype)
+        tag_parts.append(exp["name"])
 
         # Apply the replacements
         replace_values(exp.get("replace") or [], combination)
@@ -408,7 +409,9 @@ def load_experiment(exp_name: str) -> tuple[Experiment, Path] | None:
         return None
 
     with open(exp_path) as f:
-        return yaml.load(f, Loader), exp_path
+        exp = yaml.load(f, Loader)
+        exp["name"] = exp_name
+        return exp, exp_path
 
 
 def header(fmt: str, *args):
