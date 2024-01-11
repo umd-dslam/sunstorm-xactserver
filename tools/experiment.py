@@ -227,6 +227,8 @@ def benchmark_args(exp: Experiment, prefix: str | None, suffix: str | None):
         if prefix:
             tag_parts.append(prefix)
 
+        tag_parts.append(dbtype)
+
         # Apply the replacements
         replace_values(exp.get("replace") or [], combination)
 
