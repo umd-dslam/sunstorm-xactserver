@@ -214,6 +214,8 @@ Resources:
 
           - - '#!/bin/bash'
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
+            - sudo bash -c 'echo "* hard nofile 65535" >> /etc/security/limits.conf'
+            - sudo bash -c 'echo "* soft nofile 65535" >> /etc/security/limits.conf'
             - sudo -u ubuntu ./4-stop
             - sleep 2
             - !Sub 
