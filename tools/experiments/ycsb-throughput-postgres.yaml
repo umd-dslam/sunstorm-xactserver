@@ -1,7 +1,7 @@
 # Example:
 #   python3 tools/experiment.py --logs-per-sec 10 -o ~/data/sunstorm/ycsb/throughput ycsb-throughput-postgres
 dbtype: postgres
-reload_every: 5
+reload_every: 1
 benchmark: hot
 scalefactor: 1000
 time: 120
@@ -25,39 +25,16 @@ replace:
   - match:
       - hot.weights:
           name: A-mr5
-        hot.hot: 0
       - hot.weights:
           name: B-mr5
-        hot.hot: 0
       - hot.weights:
           name: D-mr5
-        hot.hot: 0
       - hot.weights:
           name: E-mr5
-        hot.hot: 0
       - hot.weights:
           name: F-mr5
-        hot.hot: 0
     set:
-      terminals: 128
-  - match:
-      - hot.weights:
-          name: A-mr5
-        hot.hot: 1000
-      - hot.weights:
-          name: B-mr5
-        hot.hot: 1000
-      - hot.weights:
-          name: D-mr5
-        hot.hot: 1000
-      - hot.weights:
-          name: E-mr5
-        hot.hot: 1000
-      - hot.weights:
-          name: F-mr5
-        hot.hot: 1000
-    set:
-      terminals: 64
+      terminals: 96
   - match:
       - hot.weights:
           name: A-mr10
@@ -70,7 +47,20 @@ replace:
       - hot.weights:
           name: F-mr10
     set:
-      terminals: 128
+      terminals: 96
+  - match:
+      - hot.weights:
+          name: A-mr15
+      - hot.weights:
+          name: B-mr15
+      - hot.weights:
+          name: D-mr15
+      - hot.weights:
+          name: E-mr15
+      - hot.weights:
+          name: F-mr15
+    set:
+      terminals: 96
   - match:
       - hot.weights:
           name: A-mr50
@@ -83,17 +73,4 @@ replace:
       - hot.weights:
           name: F-mr50
     set:
-      terminals: 256
-  - match:
-      - hot.weights:
-          name: A-mr100
-      - hot.weights:
-          name: B-mr100
-      - hot.weights:
-          name: D-mr100
-      - hot.weights:
-          name: E-mr100
-      - hot.weights:
-          name: F-mr100
-    set:
-      terminals: 384
+      terminals: 128

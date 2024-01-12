@@ -11,7 +11,6 @@ use futures::{future, Future};
 use prometheus::HistogramTimer;
 use std::cell::OnceCell;
 use std::collections::HashMap;
-use std::convert::TryInto;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
@@ -262,7 +261,7 @@ impl XactStateManager {
 
     async fn handle_prepare_msg(&mut self, prepare: PrepareMessage) -> anyhow::Result<bool> {
         // Extract the coordinator of this transaction from the request
-        let coordinator_id = *self.coordinator_id.insert(prepare.from.try_into()?);
+        let coordinator_id = *self.coordinator_id.insert(prepare.from.into());
 
         // This must happen after coordinator id is set
         self.begin_xact_measurement();

@@ -215,10 +215,10 @@ if [ $run_xactserver -eq 1 ]; then
     run xactserver "$XACTSERVER_DIR/target/release/xactserver             \
       --listen-pg=0.0.0.0:10000                                           \
       --connect-pg=postgresql://cloud_admin@$compute_addr:55433/postgres  \
-      --max-conn-pool-size-pg=100                                         \
+      --max-conn-pool-size-pg=300                                         \
       --node-id=$region_id                                                \
       --nodes=$node_urls                                                  \
-      --max-conn-pool-size-peer=100                                       \
+      --max-conn-pool-size-peer=300                                       \
       --listen-peer=0.0.0.0:23000                                         \
       --listen-http=0.0.0.0:8080                                          \
       --no-ansi"

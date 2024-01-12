@@ -286,8 +286,10 @@ class Progress:
             return
 
         self.path.parent.mkdir(exist_ok=True)
+        keys = [p.keys() for p in self.progress]
+        fieldnames = set().union(*keys)
         with open(self.path, "w") as f:
-            writer = csv.DictWriter(f, fieldnames=self.progress[0].keys())
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(self.progress)
 

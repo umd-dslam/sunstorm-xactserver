@@ -364,6 +364,11 @@ Resources:
       NetworkInterfaces:
         - DeviceIndex: 0
           PrivateIpAddress: 10.0.0.5
+          GroupSet:
+            - sg-0389df6206baeed9a # default
+            - sg-018aeab319579349c # peers
+            - sg-025168353d1c32884 # ssh
+            - sg-0964d215659b6e7fb # observability
       Volumes:
         - Device: /dev/sdh
           VolumeId: vol-07c1a3991139f191c
