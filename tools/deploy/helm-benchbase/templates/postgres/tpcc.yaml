@@ -25,6 +25,7 @@ data:
 
         <!-- Scale factor is the number of warehouses in TPCC -->
         <scalefactor>{{ .Values.scalefactor }}</scalefactor>
+        <loaderThreads>100</loaderThreads>
 
         <!-- Load data in all partitions -->
         <loadall>{{ .Values.loadall }}</loadall>
