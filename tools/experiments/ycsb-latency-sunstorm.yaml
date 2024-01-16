@@ -1,5 +1,5 @@
-# python3 tools/experiment.py --logs-per-sec 10 -o ~/data/sunstorm/ycsb/latency ycsb-latency-postgres
-dbtype: postgres
+# python3 tools/experiment.py --logs-per-sec 10 -o ~/data/sunstorm/ycsb/latency ycsb-latency-sunstorm
+dbtype: sunstorm
 benchmark: hot
 scalefactor: 1000
 time: 60

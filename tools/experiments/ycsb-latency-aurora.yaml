@@ -1,9 +1,9 @@
-# python3 tools/experiment.py -o ~/data/sunstorm/ycsb/latency ycsb-latency-yugabyte
-dbtype: yugabyte
+# python3 tools/experiment.py --logs-per-sec 10 -o ~/data/sunstorm/ycsb/latency ycsb-latency-aurora
+dbtype: aurora
 benchmark: hot
 scalefactor: 1000
 time: 60
-rate: 100
+rate: 500
 param_keys: !include ycsb/param-keys.yaml
 param_values: !include ycsb/param-values.yaml
 replace:
