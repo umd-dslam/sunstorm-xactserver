@@ -37,7 +37,20 @@ def run_benchmark(
             namespace,
         ]
         for s in sets:
-            helm_cmd += ["--set", s]
+            # Per-region values are in the form of key=!region1:value1;region2=value2;region3=value3
+            if "=!" in s:
+                key, value = s.split("=!")
+                per_region_values = value.split(";")
+                for per_region_value in per_region_values:
+                    if ":" not in per_region_value:
+                        raise ValueError(
+                            f"Invalid per-region value: {per_region_value}"
+                        )
+                    target_region, val = per_region_value.split(":")
+                    if target_region.strip() == region:
+                        helm_cmd += ["--set", f"{key}={val.strip()}"]
+            else:
+                helm_cmd += ["--set", s]
         if dry_run:
             helm_cmd += ["--debug"]
         run_subprocess(

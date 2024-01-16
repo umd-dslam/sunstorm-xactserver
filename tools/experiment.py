@@ -191,9 +191,11 @@ def benchmark_args(exp: Experiment, prefix: str | None, suffix: str | None):
         named_values: list[NamedParameterValue] = []
         for value in values:
             if isinstance(value, dict):
+                # If a name is specified, use it
                 name = value["name"]
                 value = value["value"]
             else:
+                # Otherwise, use the value as the name
                 param_suffix = param.split(".")[-1]
                 name = f"{param_suffix}{value}"
                 value = value
@@ -213,7 +215,8 @@ def benchmark_args(exp: Experiment, prefix: str | None, suffix: str | None):
             {**x, param: v} for x in combinations for v in named_parameters[param]
         ]
 
-    def sanitize(value: ParameterValue):
+    def escape(value: ParameterValue):
+        """Escape the comma in the string values"""
         if isinstance(value, str):
             return value.replace(",", "\\,")
         return value
@@ -243,7 +246,7 @@ def benchmark_args(exp: Experiment, prefix: str | None, suffix: str | None):
 
             workload_args += [
                 "-s",
-                f"{param}={sanitize(value)}",
+                f"{param}={escape(value)}",
             ]
             workload_metadata[param] = value
             if param in tag_params:
@@ -508,7 +511,7 @@ def main(args):
                             time.sleep(DELAY_SECONDS)
 
                         header("Loading data")
-                        benchmark.main(["load"] + bm_args + set_arg + dry_run_arg)
+                        benchmark.main(["sload" if args.sload else "load"] + bm_args + set_arg + dry_run_arg)
                         header(
                             "Waiting %d seconds for the change to propagate",
                             DELAY_SECONDS,
@@ -597,6 +600,11 @@ if __name__ == "__main__":
         "--skip-create-load",
         action="store_true",
         help="Skip the create and load steps",
+    )
+    parser.add_argument(
+        "--sload",
+        action="store_true",
+        help="Use sload for loading data",
     )
     parser.add_argument(
         "--minio",
