@@ -29,7 +29,7 @@ data:
         <username>{{ default "postgres" .Values.username }}</username>
         <password>{{ default "" .Values.password }}</password>
 
-        <isolation>TRANSACTION_SERIALIZABLE</isolation>
+        <isolation>{{ default "TRANSACTION_SERIALIZABLE" .Values.isolation }}</isolation>
         <batchsize>128</batchsize>
 
         <ddlpath>/config/ddl.sql</ddlpath>
