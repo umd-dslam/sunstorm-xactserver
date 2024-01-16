@@ -9,7 +9,7 @@ import kubernetes.client
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tempfile import TemporaryFile
-from typing import TypedDict
+from typing import TypedDict, NamedTuple
 
 from utils import (
     Kube,
@@ -109,7 +109,10 @@ def run_benchmark(
         )
 
 
-def get_job_logs(namespace: str, region: str, job: str):
+def get_job_logs(namespace: str, region: str, job: str, dry_run: bool):
+    if dry_run:
+        return [f'[dry-run] logs for "{job}" in region "{region}"'.encode()]
+
     kube_config = Kube.get_config(BASE_PATH, region)
     with kubernetes.client.ApiClient(kube_config) as api_client:  # type: ignore
         batchv1 = kubernetes.client.BatchV1Api(api_client)
@@ -163,6 +166,11 @@ def get_job_logs(namespace: str, region: str, job: str):
     raise Exception(f'Could not get logs for job "{job}" in namespace "{namespace}"')
 
 
+class Namespace(NamedTuple):
+    name: str
+    info: NamespaceInfo
+
+
 class BenchmarkResult(TypedDict):
     throughput: float
     goodput: float
@@ -170,7 +178,7 @@ class BenchmarkResult(TypedDict):
 
 class Operation:
     config: MainConfig
-    namespaces: list[tuple[str, NamespaceInfo]]
+    namespaces: list[Namespace]
     settings: list[str]
     dry_run: bool
     logs_per_sec: int
@@ -181,8 +189,8 @@ class Operation:
         namespaces = get_namespaces(cls.config)
 
         # Namespace sorted by id
-        cls.namespaces = list(namespaces.items())
-        cls.namespaces.sort(key=lambda x: x[1]["id"])
+        cls.namespaces = [Namespace(*item) for item in namespaces.items()]
+        cls.namespaces.sort(key=lambda ns: ns.info["id"])
 
         # Settings for the values.yaml file in helm-benchbase
         cls.settings = args.set or []
@@ -192,29 +200,33 @@ class Operation:
             for k, v in ns_info.items():
                 cls.settings.append(f"namespaces.{ns}.{k}={v}")
 
+        # Other settings
         cls.dry_run = args.dry_run
         cls.logs_per_sec = args.logs_per_sec
 
+        # Run the operation
         if not args.logs_only:
-            cls.do()
+            cls.do(args.regions)
 
-        if not args.dry_run:
-            return cls.log()
-
-        return None
+        # Fetch the log of the operation
+        return cls.log(args.regions)
 
     @classmethod
-    def do(cls):
+    def do(cls, regions: list[str]):
         raise NotImplementedError()
 
     @classmethod
-    def log(cls) -> BenchmarkResult | None:
+    def log(cls, regions: list[str]) -> BenchmarkResult | None:
         return None
 
 
 class Create(Operation):
     @classmethod
-    def do(cls):
+    def do(cls, regions: list[str]):
+        region = cls.config["global_region"]
+        if regions and region not in regions:
+            return
+
         additional_settings = ["operation=create"]
         target = cls.config["global_region_target_address_and_database"]
         if target:
@@ -222,18 +234,22 @@ class Create(Operation):
 
         run_benchmark(
             "global",
-            cls.config["global_region"],
+            region,
             cls.settings + additional_settings,
             delete_only=False,
             dry_run=cls.dry_run,
         )
 
     @classmethod
-    def log(cls) -> BenchmarkResult | None:
+    def log(cls, regions) -> BenchmarkResult | None:
+        region = cls.config["global_region"]
+        if regions and region not in regions:
+            return None
+
         named_logs = Kube.NamedLogs(
             namespace="global",
             name="create",
-            stream=get_job_logs("global", cls.config["global_region"], "create-load"),
+            stream=get_job_logs("global", region, "create-load", cls.dry_run),
         )
 
         exit_event = threading.Event()
@@ -245,10 +261,14 @@ class Create(Operation):
 
 class Load(Operation):
     @classmethod
-    def do(cls):
+    def do(cls, regions: list[str]):
         max_workers = len(cls.namespaces)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             for id, (namespace, ns_info) in enumerate(cls.namespaces):
+                region = ns_info["region"]
+                if regions and region not in regions:
+                    continue
+
                 per_region_settings = [
                     "operation=load",
                     "loadall=false",
@@ -260,23 +280,30 @@ class Load(Operation):
                 executor.submit(
                     run_benchmark,
                     namespace,
-                    str(ns_info["region"]),
+                    region,
                     cls.settings + per_region_settings,
                     delete_only=False,
                     dry_run=cls.dry_run,
                 )
 
     @classmethod
-    def log(cls) -> BenchmarkResult | None:
+    def log(cls, regions: list[str]) -> BenchmarkResult | None:
         max_workers = len(cls.namespaces)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            filtered_namespaces = [
+                ns
+                for ns in cls.namespaces
+                if not regions or ns.info["region"] in regions
+            ]
             named_logs = executor.map(
-                lambda item: Kube.NamedLogs(
-                    namespace=item[0],
+                lambda ns: Kube.NamedLogs(
+                    namespace=ns.name,
                     name="load",
-                    stream=get_job_logs(item[0], item[1]["region"], "create-load"),
+                    stream=get_job_logs(
+                        ns.name, ns.info["region"], "create-load", cls.dry_run
+                    ),
                 ),
-                cls.namespaces,
+                filtered_namespaces,
             )
 
         exit_event = threading.Event()
@@ -288,25 +315,33 @@ class Load(Operation):
 
 class SLoad(Operation):
     @classmethod
-    def do(cls):
+    def do(cls, regions: list[str]):
+        region = cls.config["global_region"]
+        if regions and region not in regions:
+            return
+
         additional_settings = ["operation=load", "loadall=true"]
         target = cls.config["global_region_target_address_and_database"]
         if target:
             additional_settings.append(f"target_address_and_database={target}")
         run_benchmark(
             "global",
-            cls.config["global_region"],
+            region,
             cls.settings + additional_settings,
             delete_only=False,
             dry_run=cls.dry_run,
         )
 
     @classmethod
-    def log(cls) -> BenchmarkResult | None:
+    def log(cls, regions: list[str]) -> BenchmarkResult | None:
+        region = cls.config["global_region"]
+        if regions and region not in regions:
+            return
+
         named_logs = Kube.NamedLogs(
             namespace="global",
             name="sload",
-            stream=get_job_logs("global", cls.config["global_region"], "create-load"),
+            stream=get_job_logs("global", region, "create-load", cls.dry_run),
         )
 
         exit_event = threading.Event()
@@ -322,50 +357,60 @@ class SLoad(Operation):
 
 class Execute(Operation):
     @classmethod
-    def namespaces_without_global(cls):
-        return [ns for ns in cls.namespaces if ns[0] != "global"]
+    def namespaces_without_global(cls, regions: list[str]):
+        return [
+            ns
+            for ns in cls.namespaces
+            if ns.name != "global" and (not regions or ns.info["region"] in regions)
+        ]
 
     @classmethod
-    def do(cls):
+    def do(cls, regions: list[str]):
         timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
-        max_workers = len(cls.namespaces_without_global())
+        namespaces = cls.namespaces_without_global(regions)
+        max_workers = len(namespaces)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            for namespace, ns_info in cls.namespaces_without_global():
-                if namespace == "global":
+            for ns in namespaces:
+                region = ns.info["region"]
+                if regions and region not in regions:
                     continue
-                namespace_id = ns_info["id"]
+
+                namespace_id = ns.info["id"]
                 per_region_settings = [
                     "operation=execute",
                     f"timestamp={timestamp}",
                     f"namespace_id={namespace_id}",
                 ]
-                target = ns_info["target_address_and_database"]
+                target = ns.info["target_address_and_database"]
                 if target:
                     per_region_settings.append(f"target_address_and_database={target}")
-                warmup = ns_info["warmup"]
+                warmup = ns.info["warmup"]
                 if warmup:
                     per_region_settings.append(f"warmup={warmup}")
+
                 executor.submit(
                     run_benchmark,
-                    namespace,
-                    str(ns_info["region"]),
+                    ns.name,
+                    region,
                     cls.settings + per_region_settings,
                     delete_only=False,
                     dry_run=cls.dry_run,
                 )
 
     @classmethod
-    def log(cls) -> BenchmarkResult | None:
+    def log(cls, regions: list[str]) -> BenchmarkResult | None:
         max_workers = len(cls.namespaces)
         exit_event = threading.Event()
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             named_logs = executor.map(
-                lambda item: Kube.NamedLogs(
-                    namespace=item[0],
+                lambda ns: Kube.NamedLogs(
+                    namespace=ns.name,
                     name="execute",
-                    stream=get_job_logs(item[0], item[1]["region"], "execute"),
+                    stream=get_job_logs(
+                        ns.name, ns.info["region"], "execute", cls.dry_run
+                    ),
                 ),
-                cls.namespaces_without_global(),
+                cls.namespaces_without_global(regions),
             )
 
         lock = threading.Lock()
@@ -407,30 +452,36 @@ class Execute(Operation):
 
 class Delete(Operation):
     @classmethod
-    def do(cls):
-        run_benchmark(
-            "global",
-            cls.config["global_region"],
-            cls.settings + ["operation=create"],
-            delete_only=True,
-            dry_run=cls.dry_run,
-        )
+    def do(cls, regions: list[str]):
+        global_region = cls.config["global_region"]
+        if not regions or global_region in regions:
+            run_benchmark(
+                "global",
+                global_region,
+                cls.settings + ["operation=create"],
+                delete_only=True,
+                dry_run=cls.dry_run,
+            )
 
         max_workers = len(cls.namespaces)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            for namespace, ns_info in cls.namespaces:
+            for ns in cls.namespaces:
+                region = ns.info["region"]
+                if regions and region not in regions:
+                    continue
+
                 executor.submit(
                     run_benchmark,
-                    namespace,
-                    str(ns_info["region"]),
+                    ns.name,
+                    region,
                     cls.settings + ["operation=load"],
                     delete_only=True,
                     dry_run=cls.dry_run,
                 )
                 executor.submit(
                     run_benchmark,
-                    namespace,
-                    str(ns_info["region"]),
+                    ns.name,
+                    region,
                     cls.settings + ["operation=execute"],
                     delete_only=True,
                     dry_run=cls.dry_run,
@@ -455,6 +506,12 @@ def main(cmd_args: list[str]) -> BenchmarkResult:
         "-s",
         action="append",
         help="Override the values in the config file. Each argument should be in the form of key=value.",
+    )
+    parser.add_argument(
+        "--regions",
+        "-r",
+        nargs="*",
+        help="The regions to run the benchmark in. If not specified, run in all regions.",
     )
     parser.add_argument(
         "--dry-run",

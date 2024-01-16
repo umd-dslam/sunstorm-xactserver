@@ -18,7 +18,7 @@ import logging
 import time
 import threading
 
-import minio
+import minio # type: ignore
 import yaml
 
 import benchmark

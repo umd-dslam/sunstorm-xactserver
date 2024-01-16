@@ -116,6 +116,7 @@ class RegionInfo(TypedDict):
 class MainConfig(TypedDict):
     global_region: str
     global_region_context: str | None
+    global_region_target_address_and_database: str | None
     regions: dict[str, RegionInfo] | None
 
 
@@ -163,7 +164,7 @@ def get_namespaces(config: MainConfig):
             "warmup": 0,
         }
     }
-    regions = config.get("regions") or {}
+    regions: dict[str, RegionInfo] = config.get("regions") or {}
     for region, region_info in regions.items():
         namespaces[region] = {
             "region": region,
