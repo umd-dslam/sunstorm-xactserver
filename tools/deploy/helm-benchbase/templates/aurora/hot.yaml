@@ -1,4 +1,4 @@
-{{ if and (eq .Values.benchmark "hot") (eq .Values.dbtype "mysql") -}}
+{{ if and (eq .Values.benchmark "hot") (eq .Values.dbtype "aurora") -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -13,10 +13,10 @@ data:
     <parameters>
 
         <!-- Connection details -->
-        <type>MYSQL</type>
-        <driver>com.mysql.cj.jdbc.Driver</driver>
-        <url>jdbc:mysql://localhost:3306/benchbase?rewriteBatchedStatements=true&amp;allowPublicKeyRetrieval=True&amp;sslMode=DISABLED</url>
-        <username>root</username>
+        <type>POSTGRES</type>
+        <driver>org.postgresql.Driver</driver>
+        <url>jdbc:postgresql://{{ .Values.target_address_and_database }}?sslmode=disable&amp;ApplicationName=ycsb&amp;reWriteBatchedInserts=true</url>
+        <username>{{ default "cloud_admin" .Values.username }}</username>
         <password>{{ default "" .Values.password }}</password>
         <isolation>TRANSACTION_SERIALIZABLE</isolation>
         <batchsize>128</batchsize>
@@ -31,12 +31,16 @@ data:
 
         <!-- Load data in all partitions -->
         <loadall>{{ .Values.loadall }}</loadall>
+
         <!-- Current region -->
         <region>{{ .Values.namespace_id }}</region>
+
         <!-- Number of hot keys per partition -->
         <hot>{{ .Values.hot.hot }}</hot>
+
         <!-- Number of keys per transaction -->
         <keyspertxn>{{ .Values.hot.keyspertxn }}</keyspertxn>
+        
         <!-- The maximum number of keys to select in scanning queries -->
         <maxscancount>{{ .Values.hot.maxscancount }}</maxscancount>
 
@@ -190,7 +194,8 @@ data:
         field8   text,
         field9   text,
         field10  text
-    );
+    )
+    WITH (fillfactor=90);
     {{- end }}
 
 {{ end }}

@@ -1,4 +1,4 @@
-{{ if and (eq .Values.benchmark "hot") (eq .Values.dbtype "postgres") -}}
+{{ if and (eq .Values.benchmark "hot") (eq .Values.dbtype "sunstorm") -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -177,9 +177,7 @@ data:
     {{- $numRegions := sub (len .Values.ordered_namespaces) 1 }}
     {{- $regionsRange := untilStep 1 (int (add1 (int $numRegions))) 1}}
 
-    {{- if .Values.remotexact }}
     CREATE EXTENSION IF NOT EXISTS remotexact;
-    {{- end }}
 
     {{- range $i := $regionsRange }}
     DROP TABLE IF EXISTS usertable_{{ $i }};

@@ -1,4 +1,4 @@
-{{ if and (eq .Values.benchmark "tpcc") (eq .Values.dbtype "mysql") -}}
+{{ if and (eq .Values.benchmark "tpcc") (eq .Values.dbtype "sunstorm") -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -13,10 +13,10 @@ data:
     <parameters>
 
         <!-- Connection details -->
-        <type>MYSQL</type>
-        <driver>com.mysql.cj.jdbc.Driver</driver>
-        <url>jdbc:mysql://localhost:3306/benchbase?rewriteBatchedStatements=true&amp;allowPublicKeyRetrieval=True&amp;sslMode=DISABLED</url>
-        <username>root</username>
+        <type>POSTGRES</type>
+        <driver>org.postgresql.Driver</driver>
+        <url>jdbc:postgresql://{{ .Values.target_address_and_database }}?sslmode=disable&amp;ApplicationName=ycsb&amp;reWriteBatchedInserts=true</url>
+        <username>{{ default "cloud_admin" .Values.username }}</username>
         <password>{{ default "" .Values.password }}</password>
         <isolation>TRANSACTION_SERIALIZABLE</isolation>
         <batchsize>128</batchsize>
@@ -25,6 +25,7 @@ data:
 
         <!-- Scale factor is the number of warehouses in TPCC -->
         <scalefactor>{{ .Values.scalefactor }}</scalefactor>
+        <loaderThreads>100</loaderThreads>
 
         <!-- Load data in all partitions -->
         <loadall>{{ .Values.loadall }}</loadall>
@@ -76,6 +77,8 @@ data:
     {{- $numRegions := sub (len .Values.ordered_namespaces) 1 }}
     {{- $regionsRange := untilStep 1 (int (add1 (int $numRegions))) 1}}
 
+    CREATE EXTENSION IF NOT EXISTS remotexact;
+
     {{- range $i := $regionsRange }}
     DROP TABLE IF EXISTS history_{{ $i }} CASCADE;
     DROP TABLE IF EXISTS new_order_{{ $i }} CASCADE;
@@ -99,7 +102,7 @@ data:
     );
     
     {{- range $i := $regionsRange }}
-     CREATE TABLE warehouse_{{ $i }} (
+    CREATE TABLE warehouse_{{ $i }} (
         w_id       int            NOT NULL,
         w_ytd      decimal(12, 2) NOT NULL,
         w_tax      decimal(4, 4)  NOT NULL,
@@ -244,6 +247,26 @@ data:
     );
 
     CREATE INDEX idx_customer_name_{{ $i }} ON customer_{{ $i }} (c_w_id, c_d_id, c_last, c_first);
+
+    UPDATE pg_class SET relregion = {{ $i }} WHERE relname IN (
+        'warehouse_{{ $i }}',
+        'warehouse_{{ $i }}_pkey',
+        'stock_{{ $i }}',
+        'stock_{{ $i }}_pkey',
+        'district_{{ $i }}',
+        'district_{{ $i }}_pkey',
+        'customer_{{ $i }}',
+        'customer_{{ $i }}_pkey',
+        'history_{{ $i }}',
+        'oorder_{{ $i }}',
+        'oorder_{{ $i }}_pkey',
+        'oorder_{{ $i }}_o_w_id_o_d_id_o_c_id_o_id_key',
+        'new_order_{{ $i }}',
+        'new_order_{{ $i }}_pkey',
+        'order_line_{{ $i }}',
+        'order_line_{{ $i }}_pkey',
+        'idx_customer_name_{{ $i }}'
+    );
     {{- end }}
 
 {{ end }}

@@ -1,4 +1,4 @@
-{{ if and (eq .Values.benchmark "tpcc") (eq .Values.dbtype "postgres") -}}
+{{ if and (eq .Values.benchmark "tpcc") (eq .Values.dbtype "aurora") -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -76,10 +76,6 @@ data:
   ddl.sql: |
     {{- $numRegions := sub (len .Values.ordered_namespaces) 1 }}
     {{- $regionsRange := untilStep 1 (int (add1 (int $numRegions))) 1}}
-
-    {{- if .Values.remotexact }}
-    CREATE EXTENSION IF NOT EXISTS remotexact;
-    {{- end }}
 
     {{- range $i := $regionsRange }}
     DROP TABLE IF EXISTS history_{{ $i }} CASCADE;
@@ -250,25 +246,6 @@ data:
 
     CREATE INDEX idx_customer_name_{{ $i }} ON customer_{{ $i }} (c_w_id, c_d_id, c_last, c_first);
 
-    UPDATE pg_class SET relregion = {{ $i }} WHERE relname IN (
-        'warehouse_{{ $i }}',
-        'warehouse_{{ $i }}_pkey',
-        'stock_{{ $i }}',
-        'stock_{{ $i }}_pkey',
-        'district_{{ $i }}',
-        'district_{{ $i }}_pkey',
-        'customer_{{ $i }}',
-        'customer_{{ $i }}_pkey',
-        'history_{{ $i }}',
-        'oorder_{{ $i }}',
-        'oorder_{{ $i }}_pkey',
-        'oorder_{{ $i }}_o_w_id_o_d_id_o_c_id_o_id_key',
-        'new_order_{{ $i }}',
-        'new_order_{{ $i }}_pkey',
-        'order_line_{{ $i }}',
-        'order_line_{{ $i }}_pkey',
-        'idx_customer_name_{{ $i }}'
-    );
     {{- end }}
 
 {{ end }}

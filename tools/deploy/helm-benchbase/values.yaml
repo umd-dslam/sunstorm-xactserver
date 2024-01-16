@@ -1,5 +1,5 @@
-# Type of database (postgres, mysql, or yugabyte)
-dbtype: postgres
+# Type of database (sunstorm, aurora, or yugabyte)
+dbtype: sunstorm
 
 # The operation to perform, can be "create", "load", or "execute".
 # If you run benchmark.py, this value will be set automatically.
@@ -67,7 +67,6 @@ ordered_namespaces:
   - us-east-1
 
 target_address_and_database: compute:55433/postgres
-remotexact: true
 namespace_id: 0
 loadall: false
 
