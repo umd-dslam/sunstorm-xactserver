@@ -59,6 +59,13 @@ Parameters:
   KeyName:
     Type: 'AWS::EC2::KeyPair::KeyName'
     Description: Enter key pair name for connecting to the instances
+  HubOnly:
+    Type: String
+    Description: Only create the hub.
+    Default: 'no'
+    AllowedValues:
+      - 'no'
+      - 'yes'
   HubInstanceType:
     Type: String
     Description: Select the instance type for the hub.
@@ -196,6 +203,7 @@ Resources:
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 7a791c52-491f-408e-9590-3257a01751f7
+    Condition: NotHubOnly
   Safekeeper0:
     Type: 'AWS::EC2::Instance'
     Properties:
@@ -246,6 +254,7 @@ Resources:
     Metadata:
       'AWS::CloudFormation::Designer':
         id: a493d928-70eb-4209-b694-ac4fd6efb6e3
+    Condition: NotHubOnly
   Safekeeper1:
     Type: 'AWS::EC2::Instance'
     Properties:
@@ -284,6 +293,7 @@ Resources:
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 51ec5efe-26f2-43da-84d8-1ad394d84f71
+    Condition: NotHubOnly
   Safekeeper2:
     Type: 'AWS::EC2::Instance'
     Properties:
@@ -322,6 +332,7 @@ Resources:
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 32b96c51-1d4c-4db8-9641-fd5c4c2a7be4
+    Condition: NotHubOnly
   Compute:
     Type: 'AWS::EC2::Instance'
     Properties:
@@ -363,6 +374,7 @@ Resources:
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 490cb00a-d1e3-4260-9e64-71725ab0b4ad
+    Condition: NotHubOnly
   Hub:
     Type: 'AWS::EC2::Instance'
     Properties:
@@ -375,10 +387,10 @@ Resources:
         - DeviceIndex: 0
           PrivateIpAddress: 10.0.0.5
           GroupSet:
-            - sg-0389df6206baeed9a # default
-            - sg-018aeab319579349c # peers
-            - sg-025168353d1c32884 # ssh
-            - sg-0964d215659b6e7fb # observability
+            - sg-0389df6206baeed9a
+            - sg-018aeab319579349c
+            - sg-025168353d1c32884
+            - sg-0964d215659b6e7fb
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
@@ -407,11 +419,12 @@ Resources:
             - !Sub 
               - >-
                 sudo -u ubuntu ./2-restart -n --region-id 0 --pageserver-mem
-                131072 --signal-file ${SignalFileName} --hub-addr
+                ${PageserverMemory} --signal-file ${SignalFileName} --hub-addr
                 ${HubIpAddress} --pageserver-addr ${PageserverIpAddress}
                 --safekeeper-addr ${SafekeeperIpAddress} --compute-addr
                 ${ComputeIpAddress} --xactserver-addrs ${XactserverIpAddresses}
               - SignalFileName: !Ref SignalFileName
+                PageserverMemory: !Ref PageserverMemory
                 HubIpAddress: !Ref HubIpAddress
                 PageserverIpAddress: !Ref HubIpAddress
                 SafekeeperIpAddress: !Ref HubIpAddress
@@ -436,3 +449,6 @@ Conditions:
     - !Equals 
       - !Ref HubInstanceType
       - none
+  NotHubOnly: !Equals 
+    - !Ref HubOnly
+    - 'no'
