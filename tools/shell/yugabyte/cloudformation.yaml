@@ -35,6 +35,7 @@ Parameters:
   InstanceType:
     Type: String
     Description: Select the instance type
+    Default: c5.4xlarge
     AllowedValues:
       - c5.xlarge
       - c5.2xlarge

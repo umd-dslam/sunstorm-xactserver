@@ -16,6 +16,10 @@ regions:
     # aurora
     # target_address_and_database: master.coh7r4lbsfrp.us-east-1.rds.amazonaws.com:5432/postgres
     # warmup: 0
+
+    # yugabyte
+    # target_address_and_database: 10.0.0.10:5433/postgres;10.0.0.20:5433/postgres;10.0.0.30:5433/postgres
+    # warmup: 0
   us-east-2:
     id: 2 
     # context: minikube
@@ -26,6 +30,10 @@ regions:
 
     # aurora
     # target_address_and_database: follower.cc0cnngq1jy5.us-east-2.rds.amazonaws.com:5432/postgres
+    # warmup: 0
+
+    # yugabyte
+    # target_address_and_database: 10.1.0.10:5433/postgres;10.1.0.20:5433/postgres;10.1.0.30:5433/postgres
     # warmup: 0
   us-west-1:
     id: 3
@@ -39,6 +47,9 @@ regions:
     # target_address_and_database: follower.cm27bilwogwz.us-west-1.rds.amazonaws.com:5432/postgres
     # warmup: 0
 
+    # yugabyte
+    # target_address_and_database: 10.8.0.10:5433/postgres;10.8.0.20:5433/postgres;10.8.0.30:5433/postgres
+    # warmup: 0
 
 # The region that contains the global resources. This region can
 # be one of the regions listed above, or a different region.
@@ -50,3 +61,6 @@ global_region: us-east-1
 
 # aurora
 # global_region_target_address_and_database: master.coh7r4lbsfrp.us-east-1.rds.amazonaws.com:5432/postgres
+
+# yugabyte
+# global_region_target_address_and_database: 10.0.0.10:5433/postgres
