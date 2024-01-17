@@ -50,3 +50,4 @@ security_groups:
   eu-west-1: sg-0af119315a40fa0f9
   eu-west-2: sg-0ec4e1d97b23dff45
   
+ssh_key_name:

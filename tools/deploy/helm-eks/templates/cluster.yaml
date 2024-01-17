@@ -70,6 +70,11 @@ managedNodeGroups:
     securityGroups:
       attachIDs:
         - {{ get .Values.security_groups .Values.region }}
+    {{- if .Values.ssh_key_name }}
+    ssh:
+      allow: true
+      publicKeyName: {{ .Values.ssh_key_name }}
+    {{- end }}
     labels:
       role: client
       region: {{ .Values.region }}
