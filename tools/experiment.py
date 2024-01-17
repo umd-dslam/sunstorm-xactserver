@@ -18,7 +18,7 @@ import logging
 import time
 import threading
 
-import minio # type: ignore
+import minio  # type: ignore
 import yaml
 
 import benchmark
@@ -76,6 +76,7 @@ class Experiment(TypedDict):
     scalefactor: int
     time: int
     rate: int
+    isolation: str
     param_keys: list[str | ParameterKey]
     param_values: dict[
         str,
@@ -144,6 +145,7 @@ def benchmark_args(exp: Experiment, prefix: str | None, suffix: str | None):
     scalefactor = exp["scalefactor"]
     time = exp["time"]
     rate = exp["rate"]
+    isolation = exp["isolation"]
 
     base_args = [
         "-s",
@@ -156,6 +158,8 @@ def benchmark_args(exp: Experiment, prefix: str | None, suffix: str | None):
         f"time={time}",
         "-s",
         f"rate={rate}",
+        "-s",
+        f"isolation={isolation}",
     ]
 
     base_metadata: dict[str, ParameterValue] = {
@@ -164,6 +168,7 @@ def benchmark_args(exp: Experiment, prefix: str | None, suffix: str | None):
         "scalefactor": scalefactor,
         "time": time,
         "rate": rate,
+        "isolation": isolation,
     }
 
     param_keys = OrderedDict()
@@ -511,7 +516,12 @@ def main(args):
                             time.sleep(DELAY_SECONDS)
 
                         header("Loading data")
-                        benchmark.main(["sload" if args.sload else "load"] + bm_args + set_arg + dry_run_arg)
+                        benchmark.main(
+                            ["sload" if args.sload else "load"]
+                            + bm_args
+                            + set_arg
+                            + dry_run_arg
+                        )
                         header(
                             "Waiting %d seconds for the change to propagate",
                             DELAY_SECONDS,

@@ -6,9 +6,10 @@ benchmark: hot
 scalefactor: 1000
 time: 120
 rate: 50000
+isolation: '!us-east-1:TRANSACTION_SERIALIZABLE; us-east-2:TRANSACTION_REPEATABLE_READ; us-west-1:TRANSACTION_REPEATABLE_READ'
 param_keys: !include ycsb/param-keys.yaml
 param_values: !include ycsb/param-values.yaml
 replace:
   - match:
     set:
-      terminals: '! us-east-1:100; us-east-2:500; us-west-1:500'
+      terminals: 64

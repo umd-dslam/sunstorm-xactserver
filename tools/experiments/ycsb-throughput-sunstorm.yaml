@@ -6,6 +6,7 @@ benchmark: hot
 scalefactor: 1000
 time: 120
 rate: 50000
+isolation: TRANSACTION_SERIALIZABLE
 param_keys: !include ycsb/param-keys.yaml
 param_values: !include ycsb/param-values.yaml
 replace:
