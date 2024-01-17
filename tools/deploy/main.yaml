@@ -1,31 +1,52 @@
 # AWS regions to deploy to. If the context of a region is not set,
 # it will be inferred from the region name and the ".kube/config" file.
+# If "target_address_and_database" is specified, the benchmark will send
+# workload to the given target instead of the default "compute" service.
+# If "warmup" is specified, the benchmark will run for the given number
+# of seconds before the actual measurement starts.
 regions:
   us-east-1:
     id: 1
     # context: minikube
-    # If this is specified, the benchmark will send workload to the given target
-    # instead of the default "compute" service.
-    # target_address_and_database: host.minikube.internal:55433/postgres
-    warmup: 0
+    
+    # sunstorm
+    # target_address_and_database: 10.0.0.30:55433/postgres
+    # warmup: 0
+
+    # aurora
+    # target_address_and_database: master.coh7r4lbsfrp.us-east-1.rds.amazonaws.com:5432/postgres
+    # warmup: 0
   us-east-2:
     id: 2 
     # context: minikube
-    # target_address_and_database: host.minikube.internal:55433/postgres
-    warmup: 0
+
+    # sunstorm
+    # target_address_and_database: 10.1.0.30:55433/postgres
+    # warmup: 0
+
+    # aurora
+    # target_address_and_database: follower.cc0cnngq1jy5.us-east-2.rds.amazonaws.com:5432/postgres
+    # warmup: 0
   us-west-1:
     id: 3
     # context: minikube
-    # target_address_and_database: host.minikube.internal:55433/postgres
-    warmup: 0
-  # eu-west-1:
-  #   id: 4
-    # context: minikube
-    # target_address_and_database: host.minikube.internal:55433/postgres
+
+    # sunstorm
+    # target_address_and_database: 10.8.0.30:55433/postgres
     # warmup: 0
+
+    # aurora
+    # target_address_and_database: follower.cm27bilwogwz.us-west-1.rds.amazonaws.com:5432/postgres
+    # warmup: 0
+
 
 # The region that contains the global resources. This region can
 # be one of the regions listed above, or a different region.
 global_region: us-east-1
 # global_region_context: minikube
-# global_region_target_address_and_database: host.minikube.internal:55433/postgres
+
+# sunstorm
+# global_region_target_address_and_database: 10.0.0.5:55433/postgres
+
+# aurora
+# global_region_target_address_and_database: master.coh7r4lbsfrp.us-east-1.rds.amazonaws.com:5432/postgres
