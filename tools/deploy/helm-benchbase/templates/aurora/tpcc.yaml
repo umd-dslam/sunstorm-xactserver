@@ -20,6 +20,7 @@ data:
         <password>{{ default "" .Values.password }}</password>
         <isolation>{{ default "TRANSACTION_SERIALIZABLE" .Values.isolation }}</isolation>
         <batchsize>128</batchsize>
+        <loaderThreads>100</loaderThreads>
 
         <ddlpath>/config/ddl.sql</ddlpath>
 

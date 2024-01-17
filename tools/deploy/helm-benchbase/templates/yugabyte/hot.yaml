@@ -31,6 +31,7 @@ data:
         <isolation>{{ default "TRANSACTION_SERIALIZABLE" .Values.isolation }}</isolation>
         <batchsize>128</batchsize>
         <retries>1</retries>
+        <loaderThreads>16</loaderThreads>
 
         <ddlpath>/config/ddl.sql</ddlpath>
 
