@@ -87,13 +87,6 @@ Parameters:
       - c5.xlarge
       - c5.2xlarge
       - c5.4xlarge
-  PageserverIpAddress:
-    Type: String
-    Description: |-
-      Enter private IP addresses for the pageserver.
-      us-east-1a = 10.0.0.10  us-east-2a = 10.1.0.10  us-west-1a = 10.8.0.10
-    AllowedPattern: '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$'
-    ConstraintDescription: Must be a valid IP address
   PageserverMemory:
     Type: Number
     Description: The pageserver buffer cache size in 8KB blocks
@@ -106,22 +99,6 @@ Parameters:
       - c5.xlarge
       - c5.2xlarge
       - c5.4xlarge
-  SafekeeperIpAddresses:
-    Type: List<String>
-    Description: |-
-      Enter private IP addresses for the safekeepers.
-      us-east-1a = 10.0.0.20,10.0.0.21,10.0.0.22
-      us-east-2a = 10.1.0.20,10.1.0.21,10.1.0.22
-      us-west-1a = 10.8.0.20,10.8.0.21,10.8.0.22
-    AllowedPattern: '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$'
-    ConstraintDescription: Must be a valid IP address
-  XactserverIpAddresses:
-    Type: List<String>
-    Description: |-
-      Enter private IP addresses for the xactservers.
-      10.0.0.5,10.0.0.20,10.1.0.20,10.8.0.20
-    AllowedPattern: '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$'
-    ConstraintDescription: Must be a valid IP address
   ComputeInstanceType:
     Type: String
     Description: Select the instance type for the safekeeper
@@ -133,13 +110,6 @@ Parameters:
       - r5.xlarge
       - r5.2xlarge
       - r5.4xlarge
-  ComputeIpAddress:
-    Type: String
-    Description: |-
-      Enter private IP addresses for the compute.
-      us-east-1a = 10.0.0.30  us-east-2a = 10.1.0.30  us-west-1a = 10.8.0.30
-    AllowedPattern: '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$'
-    ConstraintDescription: Must be a valid IP address
   ComputeMemory:
     Type: String
     Description: The postgres shared buffer size
@@ -147,9 +117,6 @@ Parameters:
   LaunchTemplateVersion:
     Type: Number
     Description: Version of the launch template "sunstorm"
-  Region:
-    Type: Number
-    Description: Enter the region id number. us-east-1 = 1  us-east-2 = 2  us-west-1 = 3
   SignalFileName:
     Type: String
     Description: >-
@@ -166,7 +133,10 @@ Resources:
       InstanceType: !Ref PageserverInstanceType
       NetworkInterfaces:
         - DeviceIndex: 0
-          PrivateIpAddress: !Ref PageserverIpAddress
+          PrivateIpAddress: !FindInMap 
+            - RegionMap
+            - !Ref 'AWS::Region'
+            - PageserverIpAddress
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
@@ -188,18 +158,33 @@ Resources:
                 --signal-file ${SignalFileName} --pageserver-mem
                 ${PageserverMemory} --hub-addr ${HubIpAddress} --pageserver-addr
                 ${PageserverIpAddress}
-              - Region: !Ref Region
+              - Region: !FindInMap
+                  - RegionMap
+                  - !Ref 'AWS::Region'
+                  - Id
                 PageserverMemory: !Ref PageserverMemory
                 SignalFileName: !Ref SignalFileName
                 HubIpAddress: !Ref HubIpAddress
-                PageserverIpAddress: !Ref PageserverIpAddress
+                PageserverIpAddress: !FindInMap 
+                  - RegionMap
+                  - !Ref 'AWS::Region'
+                  - PageserverIpAddress
                 SafekeeperIpAddress: !Select 
                   - 0
-                  - !Ref SafekeeperIpAddresses
-                ComputeIpAddress: !Ref ComputeIpAddress
-                XactserverIpAddresses: !Join 
+                  - !FindInMap 
+                    - RegionMap
+                    - !Ref 'AWS::Region'
+                    - SafekeeperIpAddresses
+                ComputeIpAddress: !FindInMap 
+                  - RegionMap
+                  - !Ref 'AWS::Region'
+                  - ComputeIpAddress
+                XactserverIpAddresses: !Join
                   - ','
-                  - !Ref XactserverIpAddresses
+                  - !FindInMap
+                    - RegionMap
+                    - !Ref 'AWS::Region'
+                    - XactserverIpAddresses
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 7a791c52-491f-408e-9590-3257a01751f7
@@ -216,7 +201,10 @@ Resources:
         - DeviceIndex: 0
           PrivateIpAddress: !Select 
             - 0
-            - !Ref SafekeeperIpAddresses
+            - !FindInMap
+              - RegionMap
+              - !Ref 'AWS::Region'
+              - SafekeeperIpAddresses
       Tags:
         - Key: Name
           Value: safekeeper0
@@ -241,16 +229,28 @@ Resources:
                 ${SignalFileName} --hub-addr ${HubIpAddress} --safekeeper-addr
                 ${SafekeeperIpAddress} --compute-addr ${ComputeIpAddress}
                 --xactserver-addrs ${XactserverIpAddresses}
-              - Region: !Ref Region
+              - Region: !FindInMap
+                  - RegionMap
+                  - !Ref 'AWS::Region'
+                  - Id
                 SignalFileName: !Ref SignalFileName
                 HubIpAddress: !Ref HubIpAddress
                 SafekeeperIpAddress: !Select 
                   - 0
-                  - !Ref SafekeeperIpAddresses
-                ComputeIpAddress: !Ref ComputeIpAddress
-                XactserverIpAddresses: !Join 
+                  - !FindInMap 
+                    - RegionMap
+                    - !Ref 'AWS::Region'
+                    - SafekeeperIpAddresses
+                ComputeIpAddress: !FindInMap 
+                  - RegionMap
+                  - !Ref 'AWS::Region'
+                  - ComputeIpAddress
+                XactserverIpAddresses: !Join
                   - ','
-                  - !Ref XactserverIpAddresses
+                  - !FindInMap
+                    - RegionMap
+                    - !Ref 'AWS::Region'
+                    - XactserverIpAddresses
     Metadata:
       'AWS::CloudFormation::Designer':
         id: a493d928-70eb-4209-b694-ac4fd6efb6e3
@@ -267,7 +267,10 @@ Resources:
         - DeviceIndex: 0
           PrivateIpAddress: !Select 
             - 1
-            - !Ref SafekeeperIpAddresses
+            - !FindInMap
+              - RegionMap
+              - !Ref 'AWS::Region'
+              - SafekeeperIpAddresses
       Tags:
         - Key: Name
           Value: safekeeper1
@@ -284,12 +287,18 @@ Resources:
                 sudo -u ubuntu ./2-restart --safekeeper -n --region-id ${Region}
                 --safekeeper-id 1 --signal-file ${SignalFileName} --hub-addr
                 ${HubIpAddress} --safekeeper-addr ${SafekeeperIpAddress}
-              - Region: !Ref Region
+              - Region: !FindInMap
+                  - RegionMap
+                  - !Ref 'AWS::Region'
+                  - Id
                 SignalFileName: !Ref SignalFileName
                 HubIpAddress: !Ref HubIpAddress
                 SafekeeperIpAddress: !Select 
                   - 1
-                  - !Ref SafekeeperIpAddresses
+                  - !FindInMap 
+                    - RegionMap
+                    - !Ref 'AWS::Region'
+                    - SafekeeperIpAddresses
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 51ec5efe-26f2-43da-84d8-1ad394d84f71
@@ -306,7 +315,10 @@ Resources:
         - DeviceIndex: 0
           PrivateIpAddress: !Select 
             - 2
-            - !Ref SafekeeperIpAddresses
+            - !FindInMap 
+              - RegionMap
+              - !Ref 'AWS::Region'
+              - SafekeeperIpAddresses
       Tags:
         - Key: Name
           Value: safekeeper2
@@ -323,12 +335,18 @@ Resources:
                 sudo -u ubuntu ./2-restart --safekeeper -n --region-id ${Region}
                 --safekeeper-id 2 --signal-file ${SignalFileName} --hub-addr
                 ${HubIpAddress} --safekeeper-addr ${SafekeeperIpAddress}
-              - Region: !Ref Region
+              - Region: !FindInMap
+                  - RegionMap
+                  - !Ref 'AWS::Region'
+                  - Id
                 SignalFileName: !Ref SignalFileName
                 HubIpAddress: !Ref HubIpAddress
                 SafekeeperIpAddress: !Select 
                   - 2
-                  - !Ref SafekeeperIpAddresses
+                  - !FindInMap 
+                    - RegionMap
+                    - !Ref 'AWS::Region'
+                    - SafekeeperIpAddresses
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 32b96c51-1d4c-4db8-9641-fd5c4c2a7be4
@@ -343,7 +361,10 @@ Resources:
       InstanceType: !Ref ComputeInstanceType
       NetworkInterfaces:
         - DeviceIndex: 0
-          PrivateIpAddress: !Ref ComputeIpAddress
+          PrivateIpAddress: !FindInMap 
+            - RegionMap
+            - !Ref 'AWS::Region'
+            - ComputeIpAddress
       Tags:
         - Key: Name
           Value: compute
@@ -362,15 +383,30 @@ Resources:
                 ${ComputeMemory} --safekeeper-addrs ${SafekeeperIpAddresses}
                 --pageserver-addr ${PageserverIpAddress} --xactserver-addr
                 ${XactserverIpAddress}
-              - Region: !Ref Region
+              - Region: !FindInMap
+                  - RegionMap
+                  - !Ref 'AWS::Region'
+                  - Id
                 ComputeMemory: !Ref ComputeMemory
-                PageserverIpAddress: !Ref PageserverIpAddress
+                PageserverIpAddress: !FindInMap 
+                  - RegionMap
+                  - !Ref 'AWS::Region'
+                  - PageserverIpAddress
                 XactserverIpAddress: !Select 
-                  - !Ref Region
-                  - !Ref XactserverIpAddresses
+                  - !FindInMap
+                    - RegionMap
+                    - !Ref 'AWS::Region'
+                    - Id
+                  - !FindInMap
+                    - RegionMap
+                    - !Ref 'AWS::Region'
+                    - XactserverIpAddresses
                 SafekeeperIpAddresses: !Join 
                   - ','
-                  - !Ref SafekeeperIpAddresses
+                  - !FindInMap 
+                    - RegionMap
+                    - !Ref 'AWS::Region'
+                    - SafekeeperIpAddresses
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 490cb00a-d1e3-4260-9e64-71725ab0b4ad
@@ -429,9 +465,12 @@ Resources:
                 PageserverIpAddress: !Ref HubIpAddress
                 SafekeeperIpAddress: !Ref HubIpAddress
                 ComputeIpAddress: !Ref HubIpAddress
-                XactserverIpAddresses: !Join 
+                XactserverIpAddresses: !Join
                   - ','
-                  - !Ref XactserverIpAddresses
+                  - !FindInMap
+                    - RegionMap
+                    - !Ref 'AWS::Region'
+                    - XactserverIpAddresses
             - !Sub 
               - >-
                 sudo -u ubuntu ./3-compute --region-id 0 --postgres-mem 1GB
@@ -452,3 +491,41 @@ Conditions:
   NotHubOnly: !Equals 
     - !Ref HubOnly
     - 'no'
+Mappings:
+  RegionMap:
+    us-east-1:
+      Id: 1
+      PageserverIpAddress: 10.0.0.10
+      SafekeeperIpAddresses:
+        - 10.0.0.20
+        - 10.0.0.21
+        - 10.0.0.22
+      ComputeIpAddress: 10.0.0.30
+      XactserverIpAddresses:
+        - 10.0.0.20
+        - 10.1.0.20
+        - 10.8.0.20
+    us-east-2:
+      Id: 2
+      PageserverIpAddress: 10.1.0.10
+      SafekeeperIpAddresses:
+        - 10.1.0.20
+        - 10.1.0.21
+        - 10.1.0.22
+      ComputeIpAddress: 10.1.0.30
+      XactserverIpAddresses:
+        - 10.0.0.20
+        - 10.1.0.20
+        - 10.8.0.20
+    us-west-1:
+      Id: 3
+      PageserverIpAddress: 10.8.0.10
+      SafekeeperIpAddresses:
+        - 10.8.0.20
+        - 10.8.0.21
+        - 10.8.0.22
+      ComputeIpAddress: 10.8.0.30
+      XactserverIpAddresses:
+        - 10.0.0.20
+        - 10.1.0.20
+        - 10.8.0.20
