@@ -243,13 +243,13 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
-            - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - >-
               sudo bash -c 'echo "* hard nofile 65535" >>
               /etc/security/limits.conf'
             - >-
               sudo bash -c 'echo "* soft nofile 65535" >>
               /etc/security/limits.conf'
+            - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - sudo -u ubuntu ./4-stop
             - sleep 2
             - !If
@@ -493,6 +493,12 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
+            - >-
+              sudo bash -c 'echo "* hard nofile 65535" >>
+              /etc/security/limits.conf'
+            - >-
+              sudo bash -c 'echo "* soft nofile 65535" >>
+              /etc/security/limits.conf'
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - sudo -u ubuntu ./4-stop
             - sleep 2
@@ -533,7 +539,7 @@ Resources:
                   - !FindInMap
                     - RegionMap
                     - !Ref 'AWS::Region'
-                    - Ordinal
+                    - Id
                   - !FindInMap
                     - RegionMap
                     - global
@@ -663,7 +669,6 @@ Mappings:
         - 10.1.0.20
         - 10.8.0.20
     us-east-1:
-      Ordinal: 0
       Id: 1
       PageserverIpAddress: 10.0.0.10
       SafekeeperIpAddresses:
@@ -672,7 +677,6 @@ Mappings:
         - 10.0.0.22
       ComputeIpAddress: 10.0.0.30
     us-east-2:
-      Ordinal: 1
       Id: 2
       PageserverIpAddress: 10.1.0.10
       SafekeeperIpAddresses:
@@ -681,7 +685,6 @@ Mappings:
         - 10.1.0.22
       ComputeIpAddress: 10.1.0.30
     us-west-1:
-      Ordinal: 2
       Id: 3
       PageserverIpAddress: 10.8.0.10
       SafekeeperIpAddresses:
