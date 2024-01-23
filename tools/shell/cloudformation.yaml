@@ -55,6 +55,15 @@ Metadata:
         'y': 150
       z: 0
       embeds: []
+    1471e125-1cbe-4c49-b087-97d40411eb00:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 160
+        'y': 190
+      z: 0
+      embeds: []
 Parameters:
   KeyName:
     Type: 'AWS::EC2::KeyPair::KeyName'
@@ -122,7 +131,23 @@ Parameters:
     Description: >-
       Name of the signal file. Make sure this is not the same as the latest run
       and is the same across all regions.
+  LoadTpcC:
+    Type: String
+    Description: Load TPC-C data from S3.
+    Default: 'no'
+    AllowedValues:
+      - 'no'
+      - 'yes'
 Resources:
+  S3Access:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      InstanceProfileName: S3Access
+      Roles:
+        - S3FullAccessFromEC2
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 1471e125-1cbe-4c49-b087-97d40411eb00
   Pageserver:
     Type: 'AWS::EC2::Instance'
     Properties:
@@ -131,6 +156,7 @@ Resources:
         Version: !Ref LaunchTemplateVersion
       KeyName: !Ref KeyName
       InstanceType: !Ref PageserverInstanceType
+      IamInstanceProfile: S3Access
       NetworkInterfaces:
         - DeviceIndex: 0
           PrivateIpAddress: !FindInMap 
@@ -140,7 +166,7 @@ Resources:
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
-            VolumeSize: 450
+            VolumeSize: 350
       Tags:
         - Key: Name
           Value: pageserver
@@ -149,12 +175,31 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
+            - sudo apt install -y parallel
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - sudo -u ubuntu ./4-stop
             - sleep 2
+            - !If
+              - LoadTpcC
+              - 'Fn::Join':
+                - |+
+
+                - - !Sub
+                    - sudo -u ubuntu aws s3 ls --recursive s3://sunstorm-${Region}/tpcc-200x3/ | awk '{print $4}' > tpcc-keys
+                    - Region: !Ref "AWS::Region"
+                  - if [[ "$RESTART" -ne 1 ]]; then
+                  - !Sub 
+                    - sudo -u ubuntu parallel -j 16 f={}';' aws s3 cp s3://sunstorm-${Region}/'$f' data/'${!f##tpcc-200x3/}' < tpcc-keys
+                    - Region: !Ref "AWS::Region"
+                  - else
+                  - !Sub
+                    - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-200x3/ data/
+                    - Region: !Ref "AWS::Region"
+                  - fi
+              - sudo -u ubuntu ./2-restart -n --download-data
             - !Sub 
               - >-
-                sudo -u ubuntu ./2-restart --pageserver -n --region-id ${Region}
+                sudo -u ubuntu ./2-restart --pageserver --region-id ${Region}
                 --signal-file ${SignalFileName} --pageserver-mem
                 ${PageserverMemory} --hub-addr ${HubIpAddress} --pageserver-addr
                 ${PageserverIpAddress}
@@ -183,7 +228,7 @@ Resources:
                   - ','
                   - !FindInMap
                     - RegionMap
-                    - !Ref 'AWS::Region'
+                    - global
                     - XactserverIpAddresses
     Metadata:
       'AWS::CloudFormation::Designer':
@@ -197,6 +242,7 @@ Resources:
         Version: !Ref LaunchTemplateVersion
       KeyName: !Ref KeyName
       InstanceType: !Ref SafekeeperInstanceType
+      IamInstanceProfile: S3Access
       NetworkInterfaces:
         - DeviceIndex: 0
           PrivateIpAddress: !Select 
@@ -213,6 +259,7 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
+            - sudo apt install -y parallel
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - >-
               sudo bash -c 'echo "* hard nofile 65535" >>
@@ -222,9 +269,35 @@ Resources:
               /etc/security/limits.conf'
             - sudo -u ubuntu ./4-stop
             - sleep 2
+            - !If
+              - LoadTpcC
+              - 'Fn::Join':
+                - |+
+
+                - - !Sub
+                    - sudo -u ubuntu aws s3 ls --recursive s3://sunstorm-${Region}/tpcc-200x3/ | awk '/tpcc-200x3\/${TenantId}/ {print $4}' > tpcc-keys
+                    - Region: !Ref "AWS::Region"
+                      TenantId: !FindInMap
+                        - RegionMap
+                        - global
+                        - TpcCTenantId
+                  - if [[ "$RESTART" -ne 1 ]]; then
+                  - !Sub
+                    - sudo -u ubuntu parallel -j 16 f={}';' aws s3 cp s3://sunstorm-${Region}/'$f' data/'${!f##tpcc-200x3/}' < tpcc-keys
+                    - Region: !Ref "AWS::Region"
+                  - else
+                  - !Sub
+                    - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-200x3/${TenantId} data/${TenantId}
+                    - Region: !Ref "AWS::Region"
+                      TenantId: !FindInMap
+                        - RegionMap
+                        - global
+                        - TpcCTenantId
+                  - fi
+              - sudo -u ubuntu ./2-restart -n --download-data
             - !Sub 
               - >-
-                sudo -u ubuntu ./2-restart --safekeeper --xactserver -n
+                sudo -u ubuntu ./2-restart --safekeeper --xactserver
                 --region-id ${Region} --safekeeper-id 0 --signal-file
                 ${SignalFileName} --hub-addr ${HubIpAddress} --safekeeper-addr
                 ${SafekeeperIpAddress} --compute-addr ${ComputeIpAddress}
@@ -249,7 +322,7 @@ Resources:
                   - ','
                   - !FindInMap
                     - RegionMap
-                    - !Ref 'AWS::Region'
+                    - global
                     - XactserverIpAddresses
     Metadata:
       'AWS::CloudFormation::Designer':
@@ -263,6 +336,7 @@ Resources:
         Version: !Ref LaunchTemplateVersion
       KeyName: !Ref KeyName
       InstanceType: !Ref SafekeeperInstanceType
+      IamInstanceProfile: S3Access
       NetworkInterfaces:
         - DeviceIndex: 0
           PrivateIpAddress: !Select 
@@ -279,12 +353,39 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
+            - sudo apt install -y parallel
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - sudo -u ubuntu ./4-stop
             - sleep 2
+            - !If
+              - LoadTpcC
+              - 'Fn::Join':
+                - |+
+
+                - - !Sub
+                    - sudo -u ubuntu aws s3 ls --recursive s3://sunstorm-${Region}/tpcc-200x3/ | awk '/tpcc-200x3\/${TenantId}/ {print $4}' > tpcc-keys
+                    - Region: !Ref "AWS::Region"
+                      TenantId: !FindInMap
+                        - RegionMap
+                        - global
+                        - TpcCTenantId
+                  - if [[ "$RESTART" -ne 1 ]]; then
+                  - !Sub
+                    - sudo -u ubuntu parallel -j 16 f={}';' aws s3 cp s3://sunstorm-${Region}/'$f' data/'${!f##tpcc-200x3/}' < tpcc-keys
+                    - Region: !Ref "AWS::Region"
+                  - else
+                  - !Sub
+                    - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-200x3/${TenantId} data/${TenantId}
+                    - Region: !Ref "AWS::Region"
+                      TenantId: !FindInMap
+                        - RegionMap
+                        - global
+                        - TpcCTenantId
+                  - fi
+              - sudo -u ubuntu ./2-restart -n --download-data
             - !Sub 
               - >-
-                sudo -u ubuntu ./2-restart --safekeeper -n --region-id ${Region}
+                sudo -u ubuntu ./2-restart --safekeeper --region-id ${Region}
                 --safekeeper-id 1 --signal-file ${SignalFileName} --hub-addr
                 ${HubIpAddress} --safekeeper-addr ${SafekeeperIpAddress}
               - Region: !FindInMap
@@ -311,6 +412,7 @@ Resources:
         Version: !Ref LaunchTemplateVersion
       KeyName: !Ref KeyName
       InstanceType: !Ref SafekeeperInstanceType
+      IamInstanceProfile: S3Access
       NetworkInterfaces:
         - DeviceIndex: 0
           PrivateIpAddress: !Select 
@@ -327,12 +429,39 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
+            - sudo apt install -y parallel
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - sudo -u ubuntu ./4-stop
             - sleep 2
+            - !If
+              - LoadTpcC
+              - 'Fn::Join':
+                - |+
+
+                - - !Sub
+                    - sudo -u ubuntu aws s3 ls --recursive s3://sunstorm-${Region}/tpcc-200x3/ | awk '/tpcc-200x3\/${TenantId}/ {print $4}' > tpcc-keys
+                    - Region: !Ref "AWS::Region"
+                      TenantId: !FindInMap
+                        - RegionMap
+                        - global
+                        - TpcCTenantId
+                  - if [[ "$RESTART" -ne 1 ]]; then
+                  - !Sub
+                    - sudo -u ubuntu parallel -j 16 f={}';' aws s3 cp s3://sunstorm-${Region}/'$f' data/'${!f##tpcc-200x3/}' < tpcc-keys
+                    - Region: !Ref "AWS::Region"
+                  - else
+                  - !Sub
+                    - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-200x3/${TenantId} data/${TenantId}
+                    - Region: !Ref "AWS::Region"
+                      TenantId: !FindInMap
+                        - RegionMap
+                        - global
+                        - TpcCTenantId
+                  - fi
+              - sudo -u ubuntu ./2-restart -n --download-data
             - !Sub 
               - >-
-                sudo -u ubuntu ./2-restart --safekeeper -n --region-id ${Region}
+                sudo -u ubuntu ./2-restart --safekeeper --region-id ${Region}
                 --safekeeper-id 2 --signal-file ${SignalFileName} --hub-addr
                 ${HubIpAddress} --safekeeper-addr ${SafekeeperIpAddress}
               - Region: !FindInMap
@@ -359,6 +488,7 @@ Resources:
         Version: !Ref LaunchTemplateVersion
       KeyName: !Ref KeyName
       InstanceType: !Ref ComputeInstanceType
+      IamInstanceProfile: S3Access
       NetworkInterfaces:
         - DeviceIndex: 0
           PrivateIpAddress: !FindInMap 
@@ -373,10 +503,28 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
+            - sudo apt install -y parallel
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - sudo -u ubuntu ./4-stop
             - sleep 2
-            - rm -rf /home/ubuntu/sunstorm/xactserver/tools/shell/data
+            - !If
+              - LoadTpcC
+              - 'Fn::Join':
+                - |+
+
+                - - !Sub
+                    - sudo -u ubuntu aws s3 ls --recursive s3://sunstorm-${Region}/tpcc-200x3/ | awk '/tpcc-200x3\/compute/ {print $4}' > tpcc-keys
+                    - Region: !Ref "AWS::Region"
+                  - if [[ "$RESTART" -ne 1 ]]; then
+                  - !Sub
+                    - sudo -u ubuntu parallel -j 16 f={}';' aws s3 cp s3://sunstorm-${Region}/'$f' data/'${!f##tpcc-200x3/}' < tpcc-keys
+                    - Region: !Ref "AWS::Region"
+                  - else
+                  - !Sub
+                    - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-200x3/compute data/compute
+                    - Region: !Ref "AWS::Region"
+                  - fi
+              - rm -rf /home/ubuntu/sunstorm/xactserver/tools/shell/data
             - !Sub 
               - >-
                 sudo -u ubuntu ./3-compute --region-id ${Region} --postgres-mem
@@ -399,7 +547,7 @@ Resources:
                     - Id
                   - !FindInMap
                     - RegionMap
-                    - !Ref 'AWS::Region'
+                    - global
                     - XactserverIpAddresses
                 SafekeeperIpAddresses: !Join 
                   - ','
@@ -419,6 +567,7 @@ Resources:
         Version: !Ref LaunchTemplateVersion
       KeyName: !Ref KeyName
       InstanceType: !Ref HubInstanceType
+      IamInstanceProfile: S3Access
       NetworkInterfaces:
         - DeviceIndex: 0
           PrivateIpAddress: 10.0.0.5
@@ -430,7 +579,7 @@ Resources:
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
-            VolumeSize: 450
+            VolumeSize: 350
       Volumes:
         - Device: /dev/sdh
           VolumeId: vol-07c1a3991139f191c
@@ -442,6 +591,7 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
+            - sudo apt install -y parallel
             - mkdir -p /media/data
             - mount /dev/nvme1n1 /media/data
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
@@ -450,11 +600,29 @@ Resources:
             - sudo -u ubuntu ./4-stop
             - sleep 2
             - !Sub 
-              - 'sudo -u ubuntu ./1-init --signal-file ${SignalFileName} 3'
+              - 'if [[ "$RESTART" -ne 1 ]]; then sudo -u ubuntu ./1-init --signal-file ${SignalFileName} 3; fi'
               - SignalFileName: !Ref SignalFileName
+            - !If
+              - LoadTpcC
+              - 'Fn::Join':
+                - |+
+
+                - - !Sub
+                    - sudo -u ubuntu aws s3 ls --recursive s3://sunstorm-${Region}/tpcc-200x3-hub/ | awk '{print $4}' > tpcc-keys
+                    - Region: !Ref "AWS::Region"
+                  - if [[ "$RESTART" -ne 1 ]]; then
+                  - !Sub 
+                    - sudo -u ubuntu parallel -j 16 f={}';' aws s3 cp s3://sunstorm-${Region}/'$f' data/'${!f##tpcc-200x3-hub/}' < tpcc-keys
+                    - Region: !Ref "AWS::Region"
+                  - else
+                  - !Sub
+                    - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-200x3-hub/ data/
+                    - Region: !Ref "AWS::Region"
+                  - fi
+              - sudo -u ubuntu ./2-restart -n --download-data
             - !Sub 
               - >-
-                sudo -u ubuntu ./2-restart -n --region-id 0 --pageserver-mem
+                sudo -u ubuntu ./2-restart --region-id 0 --pageserver-mem
                 ${PageserverMemory} --signal-file ${SignalFileName} --hub-addr
                 ${HubIpAddress} --pageserver-addr ${PageserverIpAddress}
                 --safekeeper-addr ${SafekeeperIpAddress} --compute-addr
@@ -469,7 +637,7 @@ Resources:
                   - ','
                   - !FindInMap
                     - RegionMap
-                    - !Ref 'AWS::Region'
+                    - global
                     - XactserverIpAddresses
             - !Sub 
               - >-
@@ -491,8 +659,17 @@ Conditions:
   NotHubOnly: !Equals 
     - !Ref HubOnly
     - 'no'
+  LoadTpcC: !Equals 
+    - !Ref LoadTpcC
+    - 'yes'
 Mappings:
   RegionMap:
+    global:
+      TpcCTenantId: c4f8e20001f61d8b26bda0162f73105a
+      XactserverIpAddresses:
+        - 10.0.0.20
+        - 10.1.0.20
+        - 10.8.0.20
     us-east-1:
       Id: 1
       PageserverIpAddress: 10.0.0.10
@@ -501,10 +678,6 @@ Mappings:
         - 10.0.0.21
         - 10.0.0.22
       ComputeIpAddress: 10.0.0.30
-      XactserverIpAddresses:
-        - 10.0.0.20
-        - 10.1.0.20
-        - 10.8.0.20
     us-east-2:
       Id: 2
       PageserverIpAddress: 10.1.0.10
@@ -513,10 +686,6 @@ Mappings:
         - 10.1.0.21
         - 10.1.0.22
       ComputeIpAddress: 10.1.0.30
-      XactserverIpAddresses:
-        - 10.0.0.20
-        - 10.1.0.20
-        - 10.8.0.20
     us-west-1:
       Id: 3
       PageserverIpAddress: 10.8.0.10
@@ -525,7 +694,3 @@ Mappings:
         - 10.8.0.21
         - 10.8.0.22
       ComputeIpAddress: 10.8.0.30
-      XactserverIpAddresses:
-        - 10.0.0.20
-        - 10.1.0.20
-        - 10.8.0.20
