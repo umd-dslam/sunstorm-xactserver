@@ -55,15 +55,6 @@ Metadata:
         'y': 150
       z: 0
       embeds: []
-    1471e125-1cbe-4c49-b087-97d40411eb00:
-      size:
-        width: 60
-        height: 60
-      position:
-        x: 160
-        'y': 190
-      z: 0
-      embeds: []
 Parameters:
   KeyName:
     Type: 'AWS::EC2::KeyPair::KeyName'
@@ -139,15 +130,6 @@ Parameters:
       - 'no'
       - 'yes'
 Resources:
-  S3Access:
-    Type: 'AWS::IAM::InstanceProfile'
-    Properties:
-      InstanceProfileName: S3Access
-      Roles:
-        - S3FullAccessFromEC2
-    Metadata:
-      'AWS::CloudFormation::Designer':
-        id: 1471e125-1cbe-4c49-b087-97d40411eb00
   Pageserver:
     Type: 'AWS::EC2::Instance'
     Properties:
@@ -156,7 +138,7 @@ Resources:
         Version: !Ref LaunchTemplateVersion
       KeyName: !Ref KeyName
       InstanceType: !Ref PageserverInstanceType
-      IamInstanceProfile: S3Access
+      IamInstanceProfile: S3FullAccessFromEC2
       NetworkInterfaces:
         - DeviceIndex: 0
           PrivateIpAddress: !FindInMap 
@@ -195,7 +177,10 @@ Resources:
                     - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-200x3/ data/
                     - Region: !Ref "AWS::Region"
                   - fi
-              - sudo -u ubuntu ./2-restart -n --download-data
+              - !Sub
+                - sudo -u ubuntu ./2-restart -n --download-data --signal-file ${SignalFileName} --hub-addr ${HubIpAddress}
+                - SignalFileName: !Ref SignalFileName
+                  HubIpAddress: !Ref HubIpAddress
             - !Sub 
               - >-
                 sudo -u ubuntu ./2-restart --pageserver --region-id ${Region}
@@ -241,7 +226,7 @@ Resources:
         Version: !Ref LaunchTemplateVersion
       KeyName: !Ref KeyName
       InstanceType: !Ref SafekeeperInstanceType
-      IamInstanceProfile: S3Access
+      IamInstanceProfile: S3FullAccessFromEC2
       NetworkInterfaces:
         - DeviceIndex: 0
           PrivateIpAddress: !Select 
@@ -292,7 +277,10 @@ Resources:
                         - global
                         - TpcCTenantId
                   - fi
-              - sudo -u ubuntu ./2-restart -n --download-data
+              - !Sub
+                - sudo -u ubuntu ./2-restart -n --download-data --signal-file ${SignalFileName} --hub-addr ${HubIpAddress}
+                - SignalFileName: !Ref SignalFileName
+                  HubIpAddress: !Ref HubIpAddress
             - !Sub 
               - >-
                 sudo -u ubuntu ./2-restart --safekeeper --xactserver
@@ -334,7 +322,7 @@ Resources:
         Version: !Ref LaunchTemplateVersion
       KeyName: !Ref KeyName
       InstanceType: !Ref SafekeeperInstanceType
-      IamInstanceProfile: S3Access
+      IamInstanceProfile: S3FullAccessFromEC2
       NetworkInterfaces:
         - DeviceIndex: 0
           PrivateIpAddress: !Select 
@@ -379,7 +367,10 @@ Resources:
                         - global
                         - TpcCTenantId
                   - fi
-              - sudo -u ubuntu ./2-restart -n --download-data
+              - !Sub
+                - sudo -u ubuntu ./2-restart -n --download-data --signal-file ${SignalFileName} --hub-addr ${HubIpAddress}
+                - SignalFileName: !Ref SignalFileName
+                  HubIpAddress: !Ref HubIpAddress
             - !Sub 
               - >-
                 sudo -u ubuntu ./2-restart --safekeeper --region-id ${Region}
@@ -409,7 +400,7 @@ Resources:
         Version: !Ref LaunchTemplateVersion
       KeyName: !Ref KeyName
       InstanceType: !Ref SafekeeperInstanceType
-      IamInstanceProfile: S3Access
+      IamInstanceProfile: S3FullAccessFromEC2
       NetworkInterfaces:
         - DeviceIndex: 0
           PrivateIpAddress: !Select 
@@ -454,7 +445,10 @@ Resources:
                         - global
                         - TpcCTenantId
                   - fi
-              - sudo -u ubuntu ./2-restart -n --download-data
+              - !Sub
+                - sudo -u ubuntu ./2-restart -n --download-data --signal-file ${SignalFileName} --hub-addr ${HubIpAddress}
+                - SignalFileName: !Ref SignalFileName
+                  HubIpAddress: !Ref HubIpAddress
             - !Sub 
               - >-
                 sudo -u ubuntu ./2-restart --safekeeper --region-id ${Region}
@@ -484,7 +478,7 @@ Resources:
         Version: !Ref LaunchTemplateVersion
       KeyName: !Ref KeyName
       InstanceType: !Ref ComputeInstanceType
-      IamInstanceProfile: S3Access
+      IamInstanceProfile: S3FullAccessFromEC2
       NetworkInterfaces:
         - DeviceIndex: 0
           PrivateIpAddress: !FindInMap 
@@ -539,7 +533,7 @@ Resources:
                   - !FindInMap
                     - RegionMap
                     - !Ref 'AWS::Region'
-                    - Id
+                    - Ordinal
                   - !FindInMap
                     - RegionMap
                     - global
@@ -562,7 +556,7 @@ Resources:
         Version: !Ref LaunchTemplateVersion
       KeyName: !Ref KeyName
       InstanceType: !Ref HubInstanceType
-      IamInstanceProfile: S3Access
+      IamInstanceProfile: S3FullAccessFromEC2
       NetworkInterfaces:
         - DeviceIndex: 0
           PrivateIpAddress: 10.0.0.5
@@ -613,7 +607,10 @@ Resources:
                     - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-200x3-hub/ data/
                     - Region: !Ref "AWS::Region"
                   - fi
-              - sudo -u ubuntu ./2-restart -n --download-data
+              - !Sub
+                - sudo -u ubuntu ./2-restart -n --download-data --signal-file ${SignalFileName} --hub-addr ${HubIpAddress}
+                - SignalFileName: !Ref SignalFileName
+                  HubIpAddress: !Ref HubIpAddress
             - !Sub 
               - >-
                 sudo -u ubuntu ./2-restart --region-id 0 --pageserver-mem
@@ -661,10 +658,12 @@ Mappings:
     global:
       TpcCTenantId: c4f8e20001f61d8b26bda0162f73105a
       XactserverIpAddresses:
+        - 10.0.0.5
         - 10.0.0.20
         - 10.1.0.20
         - 10.8.0.20
     us-east-1:
+      Ordinal: 0
       Id: 1
       PageserverIpAddress: 10.0.0.10
       SafekeeperIpAddresses:
@@ -673,6 +672,7 @@ Mappings:
         - 10.0.0.22
       ComputeIpAddress: 10.0.0.30
     us-east-2:
+      Ordinal: 1
       Id: 2
       PageserverIpAddress: 10.1.0.10
       SafekeeperIpAddresses:
@@ -681,6 +681,7 @@ Mappings:
         - 10.1.0.22
       ComputeIpAddress: 10.1.0.30
     us-west-1:
+      Ordinal: 2
       Id: 3
       PageserverIpAddress: 10.8.0.10
       SafekeeperIpAddresses:
