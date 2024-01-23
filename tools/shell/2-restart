@@ -153,8 +153,8 @@ if [ $download_data_only -eq 1 ]; then
 fi
 
 if [ $run_broker -eq 1 ] && [ "$pageserver_addr" = "$hub_addr" ]; then
-  echo "Stopping any previous storage broker instance"
-  pkill storage_broker || true
+  echo "===Stopping any previous storage broker instance"
+  pkill -e storage_broker || true
 
   if [ $stop_only -eq 0 ]; then
     run storage_broker "$NEON_DIR/target/release/storage_broker --listen-addr=0.0.0.0:50051"
@@ -162,8 +162,8 @@ if [ $run_broker -eq 1 ] && [ "$pageserver_addr" = "$hub_addr" ]; then
 fi
 
 if [ $run_pageserver -eq 1 ]; then
-  echo "Stopping any previous pageserver instance"
-  pkill pageserver || true
+  echo "===Stopping any previous pageserver instance"
+  pkill -e pageserver || true
 
   if [ $stop_only -eq 0 ]; then
     if [ $vanilla -eq 0 ]; then
@@ -185,9 +185,9 @@ if [ $run_pageserver -eq 1 ]; then
 fi
 
 if [ $run_safekeeper -eq 1 ]; then
-  echo "Stopping any previous safekeeper instance"
+  echo "===Stopping any previous safekeeper instance"
   safekeeper_name="safekeeper_$safekeeper_id"
-  pkill safekeeper || true
+  pkill -e safekeeper || true
 
   if [ $stop_only -eq 0 ]; then
     run $safekeeper_name "$NEON_DIR/target/release/safekeeper \
@@ -201,8 +201,8 @@ if [ $run_safekeeper -eq 1 ]; then
 fi
 
 if [ $run_xactserver -eq 1 ]; then
-  echo "Stopping any previous xactserver instance"
-  pkill xactserver || true
+  echo "===Stopping any previous xactserver instance"
+  pkill -e xactserver || true
 
   if [ $stop_only -eq 0 ]; then
     urls=()

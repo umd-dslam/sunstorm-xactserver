@@ -83,9 +83,9 @@ if [ $new_data -eq 1 ]; then
   rm -rf $DATA/compute
 fi
 
-echo "Stopping any previous compute instance"
-kill $(cat logs/compute.pid) || true
-pkill postgres || true
+echo "===Stopping any previous compute instance"
+pkill -e compute_ctl || true
+pkill -e postgres || true
 
 if [ $stop_only -eq 1 ]; then
     exit 0
