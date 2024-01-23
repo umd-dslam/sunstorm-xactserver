@@ -175,7 +175,6 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
-            - sudo apt install -y parallel
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - sudo -u ubuntu ./4-stop
             - sleep 2
@@ -259,7 +258,6 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
-            - sudo apt install -y parallel
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - >-
               sudo bash -c 'echo "* hard nofile 65535" >>
@@ -353,7 +351,6 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
-            - sudo apt install -y parallel
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - sudo -u ubuntu ./4-stop
             - sleep 2
@@ -429,7 +426,6 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
-            - sudo apt install -y parallel
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - sudo -u ubuntu ./4-stop
             - sleep 2
@@ -503,7 +499,6 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
-            - sudo apt install -y parallel
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - sudo -u ubuntu ./4-stop
             - sleep 2
@@ -591,7 +586,6 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
-            - sudo apt install -y parallel
             - mkdir -p /media/data
             - mount /dev/nvme1n1 /media/data
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
