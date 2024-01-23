@@ -154,7 +154,7 @@ fi
 
 if [ $run_broker -eq 1 ] && [ "$pageserver_addr" = "$hub_addr" ]; then
   echo "Stopping any previous storage broker instance"
-  kill $(cat logs/storage_broker.pid) || true
+  pkill storage_broker || true
 
   if [ $stop_only -eq 0 ]; then
     run storage_broker "$NEON_DIR/target/release/storage_broker --listen-addr=0.0.0.0:50051"
@@ -163,7 +163,7 @@ fi
 
 if [ $run_pageserver -eq 1 ]; then
   echo "Stopping any previous pageserver instance"
-  kill $(cat logs/pageserver.pid) || true
+  pkill pageserver || true
 
   if [ $stop_only -eq 0 ]; then
     if [ $vanilla -eq 0 ]; then
@@ -187,7 +187,7 @@ fi
 if [ $run_safekeeper -eq 1 ]; then
   echo "Stopping any previous safekeeper instance"
   safekeeper_name="safekeeper_$safekeeper_id"
-  kill $(cat logs/$safekeeper_name.pid) || true
+  pkill safekeeper || true
 
   if [ $stop_only -eq 0 ]; then
     run $safekeeper_name "$NEON_DIR/target/release/safekeeper \
@@ -202,7 +202,7 @@ fi
 
 if [ $run_xactserver -eq 1 ]; then
   echo "Stopping any previous xactserver instance"
-  kill $(cat logs/xactserver.pid) || true
+  pkill xactserver || true
 
   if [ $stop_only -eq 0 ]; then
     urls=()
