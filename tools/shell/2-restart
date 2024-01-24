@@ -171,7 +171,8 @@ if [ $run_pageserver -eq 1 ]; then
         -c broker_endpoint='http://$hub_addr:50051'                      \
         -c listen_pg_addr='0.0.0.0:6400'                                 \
         -c listen_http_addr='0.0.0.0:9898'                               \
-        -c page_cache_size=$pageserver_mem"
+        -c page_cache_size=$pageserver_mem                               \
+        -c tenant_config.checkpoint_distance=1073741824"
     else
       run pageserver "$NEON_DIR/target/release/pageserver -D $DATA/.neon/pageserver_1 \
         -c broker_endpoint='http://$hub_addr:50051'                                   \
@@ -179,7 +180,8 @@ if [ $run_pageserver -eq 1 ]; then
         -c listen_http_addr='0.0.0.0:9898'                                            \
         -c control_plane_api=''                                                       \
         -c remote_storage={local_path='../local_fs_remote_storage/pageserver'}        \
-        -c page_cache_size=$pageserver_mem"
+        -c page_cache_size=$pageserver_mem                                            \
+        -c tenant_config.checkpoint_distance=1073741824"
     fi
   fi
 fi
