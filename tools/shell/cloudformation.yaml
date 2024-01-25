@@ -157,16 +157,23 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
+            - mkfs -t xfs /dev/nvme1n1 || true
+            - mount /dev/nvme1n1 /media/sunstorm
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - sudo -u ubuntu ./4-stop
             - sleep 2
-            - !If
+            - !If 
               - LoadTpcC
-              - !Sub
-                - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-100x3/.neon data/.neon
-                - Region: !Ref "AWS::Region"
-              - !Sub
-                - sudo -u ubuntu ./2-restart -n --download-data --signal-file ${SignalFileName} --hub-addr ${HubIpAddress}
+              - !Sub 
+                - >-
+                  sudo -u ubuntu aws s3 sync --delete
+                  s3://sunstorm-${Region}/tpcc-100x3/.neon /media/sunstorm/.neon
+                - Region: !Ref 'AWS::Region'
+              - !Sub 
+                - >-
+                  sudo -u ubuntu ./2-restart -n --download-data --signal-file
+                  ${SignalFileName} --hub-addr ${HubIpAddress} --data
+                  /media/sunstorm
                 - SignalFileName: !Ref SignalFileName
                   HubIpAddress: !Ref HubIpAddress
             - !Sub 
@@ -174,8 +181,8 @@ Resources:
                 sudo -u ubuntu ./2-restart --pageserver --region-id ${Region}
                 --signal-file ${SignalFileName} --pageserver-mem
                 ${PageserverMemory} --hub-addr ${HubIpAddress} --pageserver-addr
-                ${PageserverIpAddress}
-              - Region: !FindInMap
+                ${PageserverIpAddress} --data /media/sunstorm
+              - Region: !FindInMap 
                   - RegionMap
                   - !Ref 'AWS::Region'
                   - Id
@@ -196,9 +203,9 @@ Resources:
                   - RegionMap
                   - !Ref 'AWS::Region'
                   - ComputeIpAddress
-                XactserverIpAddresses: !Join
+                XactserverIpAddresses: !Join 
                   - ','
-                  - !FindInMap
+                  - !FindInMap 
                     - RegionMap
                     - global
                     - XactserverIpAddresses
@@ -219,7 +226,7 @@ Resources:
         - DeviceIndex: 0
           PrivateIpAddress: !Select 
             - 0
-            - !FindInMap
+            - !FindInMap 
               - RegionMap
               - !Ref 'AWS::Region'
               - SafekeeperIpAddresses
@@ -240,27 +247,32 @@ Resources:
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - sudo -u ubuntu ./4-stop
             - sleep 2
-            - !If
+            - !If 
               - LoadTpcC
-              - !Sub
-                - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-100x3/${TenantId} data/${TenantId}
-                - Region: !Ref "AWS::Region"
-                  TenantId: !FindInMap
+              - !Sub 
+                - >-
+                  sudo -u ubuntu aws s3 sync --delete
+                  s3://sunstorm-${Region}/tpcc-100x3/${TenantId}
+                  data/${TenantId}
+                - Region: !Ref 'AWS::Region'
+                  TenantId: !FindInMap 
                     - RegionMap
                     - global
                     - TpcCTenantId
-              - !Sub
-                - sudo -u ubuntu ./2-restart -n --download-data --signal-file ${SignalFileName} --hub-addr ${HubIpAddress}
+              - !Sub 
+                - >-
+                  sudo -u ubuntu ./2-restart -n --download-data --signal-file
+                  ${SignalFileName} --hub-addr ${HubIpAddress}
                 - SignalFileName: !Ref SignalFileName
                   HubIpAddress: !Ref HubIpAddress
             - !Sub 
               - >-
-                sudo -u ubuntu ./2-restart --safekeeper --xactserver
-                --region-id ${Region} --safekeeper-id 0 --signal-file
-                ${SignalFileName} --hub-addr ${HubIpAddress} --safekeeper-addr
+                sudo -u ubuntu ./2-restart --safekeeper --xactserver --region-id
+                ${Region} --safekeeper-id 0 --signal-file ${SignalFileName}
+                --hub-addr ${HubIpAddress} --safekeeper-addr
                 ${SafekeeperIpAddress} --compute-addr ${ComputeIpAddress}
                 --xactserver-addrs ${XactserverIpAddresses}
-              - Region: !FindInMap
+              - Region: !FindInMap 
                   - RegionMap
                   - !Ref 'AWS::Region'
                   - Id
@@ -276,9 +288,9 @@ Resources:
                   - RegionMap
                   - !Ref 'AWS::Region'
                   - ComputeIpAddress
-                XactserverIpAddresses: !Join
+                XactserverIpAddresses: !Join 
                   - ','
-                  - !FindInMap
+                  - !FindInMap 
                     - RegionMap
                     - global
                     - XactserverIpAddresses
@@ -299,7 +311,7 @@ Resources:
         - DeviceIndex: 0
           PrivateIpAddress: !Select 
             - 1
-            - !FindInMap
+            - !FindInMap 
               - RegionMap
               - !Ref 'AWS::Region'
               - SafekeeperIpAddresses
@@ -314,17 +326,22 @@ Resources:
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - sudo -u ubuntu ./4-stop
             - sleep 2
-            - !If
+            - !If 
               - LoadTpcC
-              - !Sub
-                - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-100x3/${TenantId} data/${TenantId}
-                - Region: !Ref "AWS::Region"
-                  TenantId: !FindInMap
+              - !Sub 
+                - >-
+                  sudo -u ubuntu aws s3 sync --delete
+                  s3://sunstorm-${Region}/tpcc-100x3/${TenantId}
+                  data/${TenantId}
+                - Region: !Ref 'AWS::Region'
+                  TenantId: !FindInMap 
                     - RegionMap
                     - global
                     - TpcCTenantId
-              - !Sub
-                - sudo -u ubuntu ./2-restart -n --download-data --signal-file ${SignalFileName} --hub-addr ${HubIpAddress}
+              - !Sub 
+                - >-
+                  sudo -u ubuntu ./2-restart -n --download-data --signal-file
+                  ${SignalFileName} --hub-addr ${HubIpAddress}
                 - SignalFileName: !Ref SignalFileName
                   HubIpAddress: !Ref HubIpAddress
             - !Sub 
@@ -332,7 +349,7 @@ Resources:
                 sudo -u ubuntu ./2-restart --safekeeper --region-id ${Region}
                 --safekeeper-id 1 --signal-file ${SignalFileName} --hub-addr
                 ${HubIpAddress} --safekeeper-addr ${SafekeeperIpAddress}
-              - Region: !FindInMap
+              - Region: !FindInMap 
                   - RegionMap
                   - !Ref 'AWS::Region'
                   - Id
@@ -376,17 +393,22 @@ Resources:
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - sudo -u ubuntu ./4-stop
             - sleep 2
-            - !If
+            - !If 
               - LoadTpcC
-              - !Sub
-                - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-100x3/${TenantId} data/${TenantId}
-                - Region: !Ref "AWS::Region"
-                  TenantId: !FindInMap
+              - !Sub 
+                - >-
+                  sudo -u ubuntu aws s3 sync --delete
+                  s3://sunstorm-${Region}/tpcc-100x3/${TenantId}
+                  data/${TenantId}
+                - Region: !Ref 'AWS::Region'
+                  TenantId: !FindInMap 
                     - RegionMap
                     - global
                     - TpcCTenantId
-              - !Sub
-                - sudo -u ubuntu ./2-restart -n --download-data --signal-file ${SignalFileName} --hub-addr ${HubIpAddress}
+              - !Sub 
+                - >-
+                  sudo -u ubuntu ./2-restart -n --download-data --signal-file
+                  ${SignalFileName} --hub-addr ${HubIpAddress}
                 - SignalFileName: !Ref SignalFileName
                   HubIpAddress: !Ref HubIpAddress
             - !Sub 
@@ -394,7 +416,7 @@ Resources:
                 sudo -u ubuntu ./2-restart --safekeeper --region-id ${Region}
                 --safekeeper-id 2 --signal-file ${SignalFileName} --hub-addr
                 ${HubIpAddress} --safekeeper-addr ${SafekeeperIpAddress}
-              - Region: !FindInMap
+              - Region: !FindInMap 
                   - RegionMap
                   - !Ref 'AWS::Region'
                   - Id
@@ -442,11 +464,13 @@ Resources:
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - sudo -u ubuntu ./4-stop
             - sleep 2
-            - !If
+            - !If 
               - LoadTpcC
-              - !Sub
-                - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-100x3/compute data/compute
-                - Region: !Ref "AWS::Region"
+              - !Sub 
+                - >-
+                  sudo -u ubuntu aws s3 sync --delete
+                  s3://sunstorm-${Region}/tpcc-100x3/compute data/compute
+                - Region: !Ref 'AWS::Region'
               - rm -rf /home/ubuntu/sunstorm/xactserver/tools/shell/data
             - !Sub 
               - >-
@@ -454,7 +478,7 @@ Resources:
                 ${ComputeMemory} --safekeeper-addrs ${SafekeeperIpAddresses}
                 --pageserver-addr ${PageserverIpAddress} --xactserver-addr
                 ${XactserverIpAddress}
-              - Region: !FindInMap
+              - Region: !FindInMap 
                   - RegionMap
                   - !Ref 'AWS::Region'
                   - Id
@@ -464,11 +488,11 @@ Resources:
                   - !Ref 'AWS::Region'
                   - PageserverIpAddress
                 XactserverIpAddress: !Select 
-                  - !FindInMap
+                  - !FindInMap 
                     - RegionMap
                     - !Ref 'AWS::Region'
                     - Id
-                  - !FindInMap
+                  - !FindInMap 
                     - RegionMap
                     - global
                     - XactserverIpAddresses
@@ -522,18 +546,24 @@ Resources:
             - sudo -u ubuntu ./4-stop
             - sleep 2
             - !Sub 
-              - 'if [[ "$RESTART" -ne 1 ]]; then sudo -u ubuntu ./1-init --signal-file ${SignalFileName} 3; fi'
+              - >-
+                if [[ "$RESTART" -ne 1 ]]; then sudo -u ubuntu ./1-init
+                --signal-file ${SignalFileName} 3; fi
               - SignalFileName: !Ref SignalFileName
-            - !If
+            - !If 
               - LoadTpcC
-              - !Sub
-                - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-100x3-hub/ data/
-                - Region: !Ref "AWS::Region"
-              - !Sub
-                - sudo -u ubuntu ./2-restart -n --download-data --signal-file ${SignalFileName} --hub-addr ${HubIpAddress}
+              - !Sub 
+                - >-
+                  sudo -u ubuntu aws s3 sync --delete
+                  s3://sunstorm-${Region}/tpcc-100x3-hub/ data/
+                - Region: !Ref 'AWS::Region'
+              - !Sub 
+                - >-
+                  sudo -u ubuntu ./2-restart -n --download-data --signal-file
+                  ${SignalFileName} --hub-addr ${HubIpAddress}
                 - SignalFileName: !Ref SignalFileName
                   HubIpAddress: !Ref HubIpAddress
-            - !Sub
+            - !Sub 
               - >-
                 sudo -u ubuntu ./2-restart --region-id 0 --pageserver-mem
                 ${PageserverMemory} --signal-file ${SignalFileName} --hub-addr
@@ -546,9 +576,9 @@ Resources:
                 PageserverIpAddress: !Ref HubIpAddress
                 SafekeeperIpAddress: !Ref HubIpAddress
                 ComputeIpAddress: !Ref HubIpAddress
-                XactserverIpAddresses: !Join
+                XactserverIpAddresses: !Join 
                   - ','
-                  - !FindInMap
+                  - !FindInMap 
                     - RegionMap
                     - global
                     - XactserverIpAddresses

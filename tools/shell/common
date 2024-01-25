@@ -4,8 +4,6 @@
 XACTSERVER_DIR=$HOME/src/sunstorm/xactserver
 # The directory of the neon repo
 NEON_DIR=$HOME/src/sunstorm/neon
-# The directory to store data
-DATA="./data"
 
 run() {
   name=$1

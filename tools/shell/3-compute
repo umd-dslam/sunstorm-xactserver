@@ -7,6 +7,7 @@ usage() {
   echo "Usage: $0 [options]"
   echo "Options:"
   echo "  -n, --new               Start with new data"
+  echo "  -d, --data              The data directory"
   echo "      --region-id         The region id"
   echo "      --postgres-mem      The postgres shared buffer size"
   echo "      --stop              Stop the compute instance"
@@ -22,6 +23,7 @@ region_id=0
 postgres_mem="16GB"
 stop_only=0
 vanilla=0
+data="./data"
 
 pageserver_addr=localhost
 xactserver_addr=localhost
@@ -32,6 +34,10 @@ while (( "$#" )); do
     -n|--new)
       new_data=1
       shift 1
+      ;;
+    -d|--data)
+      data=$2
+      shift 2
       ;;
     --region-id)
       region_id=$2
@@ -77,10 +83,10 @@ while (( "$#" )); do
   esac
 done
 
-mkdir -p $DATA
+mkdir -p $data
 
 if [ $new_data -eq 1 ]; then
-  rm -rf $DATA/compute
+  rm -rf $data/compute
 fi
 
 echo "===Stopping any previous compute instance"
@@ -139,7 +145,7 @@ sed -i "s/REGION/${region_id}/" ${spec}
 
 cat ${spec}
 
-run compute "$NEON_DIR/target/release/compute_ctl --pgdata $DATA/compute    \
+run compute "$NEON_DIR/target/release/compute_ctl --pgdata $data/compute    \
     -C "postgresql://cloud_admin@localhost:55433/postgres"                  \
     -b $NEON_DIR/pg_install/v14/bin/postgres                                \
     -S ${spec}"

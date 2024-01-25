@@ -10,6 +10,7 @@ usage() {
   echo "  -s, --safekeeper        Restart only safekeeper"
   echo "  -x, --xactserver        Restart only xactserver"
   echo "  -n, --new               Start with new data"
+  echo "  -d, --data              The data directory"
   echo "      --region-id         The region id"
   echo "      --safekeeper-id     The safekeeper id"
   echo "      --pageserver-mem    The pageserver buffer cache size in 8KB blocks"
@@ -34,6 +35,7 @@ flag_set=0
 stop_only=0
 new_data=0
 download_data_only=0
+data="./data"
 
 region_id=0
 safekeeper_id=0
@@ -68,6 +70,10 @@ while (( "$#" )); do
     -n|--new)
       new_data=1
       shift 1
+      ;;
+    -d|--data)
+      data=$2
+      shift 2
       ;;
     --region-id)
       region_id=$2
@@ -136,16 +142,16 @@ if [ $flag_set -eq 0 ]; then
 fi
 
 # If the data directory doesn't exist, copy the data from minio
-if [ $stop_only -eq 0 ] && ([ ! -d $DATA ] || [ $new_data -eq 1 ]); then
-  rm -rf $DATA
-  mkdir -p $DATA
+if [ $stop_only -eq 0 ] && ([ ! -d $data ] || [ $new_data -eq 1 ]); then
+  rm -rf $data
+  mkdir -p $data
   until (mc alias set minio http://${hub_addr}:9000 minioadmin minioadmin) do
       echo 'Waiting to start minio...' && sleep 1
   done
   until (mc stat minio/sunstorm/.neon/$signal_file) do
       echo 'Waiting for the base data...' && sleep 1
   done
-  mc cp -r minio/sunstorm/.neon $DATA/
+  mc cp -r minio/sunstorm/.neon $data/
 fi
 
 if [ $download_data_only -eq 1 ]; then
@@ -167,14 +173,14 @@ if [ $run_pageserver -eq 1 ]; then
 
   if [ $stop_only -eq 0 ]; then
     if [ $vanilla -eq 0 ]; then
-      run pageserver "$NEON_DIR/target/release/pageserver -D $DATA/.neon \
+      run pageserver "$NEON_DIR/target/release/pageserver -D $data/.neon \
         -c broker_endpoint='http://$hub_addr:50051'                      \
         -c listen_pg_addr='0.0.0.0:6400'                                 \
         -c listen_http_addr='0.0.0.0:9898'                               \
         -c page_cache_size=$pageserver_mem                               \
         -c tenant_config.checkpoint_distance=1073741824"
     else
-      run pageserver "$NEON_DIR/target/release/pageserver -D $DATA/.neon/pageserver_1 \
+      run pageserver "$NEON_DIR/target/release/pageserver -D $data/.neon/pageserver_1 \
         -c broker_endpoint='http://$hub_addr:50051'                                   \
         -c listen_pg_addr='0.0.0.0:6400'                                              \
         -c listen_http_addr='0.0.0.0:9898'                                            \
@@ -194,7 +200,7 @@ if [ $run_safekeeper -eq 1 ]; then
   if [ $stop_only -eq 0 ]; then
     run $safekeeper_name "$NEON_DIR/target/release/safekeeper \
       --id=$safekeeper_id                                     \
-      --datadir=$DATA                                         \
+      --datadir=$data                                         \
       --advertise-pg=${safekeeper_addr}:5454                  \
       --listen-pg=0.0.0.0:5454                                \
       --listen-http=0.0.0.0:7676                              \
