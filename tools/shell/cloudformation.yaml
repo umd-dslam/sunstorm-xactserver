@@ -82,11 +82,11 @@ Parameters:
   PageserverInstanceType:
     Type: String
     Description: Select the instance type for the pageserver
-    Default: c5.2xlarge
+    Default: c5d.2xlarge
     AllowedValues:
-      - c5.xlarge
-      - c5.2xlarge
-      - c5.4xlarge
+      - c5d.xlarge
+      - c5d.2xlarge
+      - c5d.4xlarge
   PageserverMemory:
     Type: Number
     Description: The pageserver buffer cache size in 8KB blocks
@@ -145,10 +145,6 @@ Resources:
             - RegionMap
             - !Ref 'AWS::Region'
             - PageserverIpAddress
-      BlockDeviceMappings:
-        - DeviceName: /dev/sda1
-          Ebs:
-            VolumeSize: 350
       Tags:
         - Key: Name
           Value: pageserver
@@ -159,6 +155,7 @@ Resources:
           - - '#!/bin/bash'
             - mkfs -t xfs /dev/nvme1n1 || true
             - mount /dev/nvme1n1 /media/sunstorm
+            - chown ubuntu:ubuntu /media/sunstorm
             - cd /home/ubuntu/sunstorm/xactserver/tools/shell
             - sudo -u ubuntu ./4-stop
             - sleep 2
@@ -471,7 +468,7 @@ Resources:
                   sudo -u ubuntu aws s3 sync --delete
                   s3://sunstorm-${Region}/tpcc-100x3/compute data/compute
                 - Region: !Ref 'AWS::Region'
-              - rm -rf /home/ubuntu/sunstorm/xactserver/tools/shell/data
+              - rm -rf data/compute
             - !Sub 
               - >-
                 sudo -u ubuntu ./3-compute --region-id ${Region} --postgres-mem
@@ -523,10 +520,6 @@ Resources:
             - sg-018aeab319579349c
             - sg-025168353d1c32884
             - sg-0964d215659b6e7fb
-      BlockDeviceMappings:
-        - DeviceName: /dev/sda1
-          Ebs:
-            VolumeSize: 350
       Volumes:
         - Device: /dev/sdh
           VolumeId: vol-07c1a3991139f191c
