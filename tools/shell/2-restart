@@ -143,8 +143,7 @@ fi
 
 # If the data directory doesn't exist, copy the data from minio
 if [ $stop_only -eq 0 ] && ([ ! -d $data ] || [ $new_data -eq 1 ]); then
-  rm -rf $data
-  mkdir -p $data
+  rm -rf $data/*
   until (mc alias set minio http://${hub_addr}:9000 minioadmin minioadmin) do
       echo 'Waiting to start minio...' && sleep 1
   done
