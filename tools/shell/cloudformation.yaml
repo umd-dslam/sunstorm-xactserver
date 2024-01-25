@@ -162,21 +162,9 @@ Resources:
             - sleep 2
             - !If
               - LoadTpcC
-              - 'Fn::Join':
-                - |+
-
-                - - !Sub
-                    - sudo -u ubuntu aws s3 ls --recursive s3://sunstorm-${Region}/tpcc-200x3/ | awk '{print $4}' > tpcc-keys
-                    - Region: !Ref "AWS::Region"
-                  - if [[ "$RESTART" -ne 1 ]]; then
-                  - !Sub 
-                    - sudo -u ubuntu parallel -j 16 f={}';' aws s3 cp s3://sunstorm-${Region}/'$f' data/'${!f##tpcc-200x3/}' < tpcc-keys
-                    - Region: !Ref "AWS::Region"
-                  - else
-                  - !Sub
-                    - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-200x3/ data/
-                    - Region: !Ref "AWS::Region"
-                  - fi
+              - !Sub
+                - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-100x3/.neon data/.neon
+                - Region: !Ref "AWS::Region"
               - !Sub
                 - sudo -u ubuntu ./2-restart -n --download-data --signal-file ${SignalFileName} --hub-addr ${HubIpAddress}
                 - SignalFileName: !Ref SignalFileName
@@ -254,29 +242,13 @@ Resources:
             - sleep 2
             - !If
               - LoadTpcC
-              - 'Fn::Join':
-                - |+
-
-                - - !Sub
-                    - sudo -u ubuntu aws s3 ls --recursive s3://sunstorm-${Region}/tpcc-200x3/ | awk '/tpcc-200x3\/${TenantId}/ {print $4}' > tpcc-keys
-                    - Region: !Ref "AWS::Region"
-                      TenantId: !FindInMap
-                        - RegionMap
-                        - global
-                        - TpcCTenantId
-                  - if [[ "$RESTART" -ne 1 ]]; then
-                  - !Sub
-                    - sudo -u ubuntu parallel -j 16 f={}';' aws s3 cp s3://sunstorm-${Region}/'$f' data/'${!f##tpcc-200x3/}' < tpcc-keys
-                    - Region: !Ref "AWS::Region"
-                  - else
-                  - !Sub
-                    - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-200x3/${TenantId} data/${TenantId}
-                    - Region: !Ref "AWS::Region"
-                      TenantId: !FindInMap
-                        - RegionMap
-                        - global
-                        - TpcCTenantId
-                  - fi
+              - !Sub
+                - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-100x3/${TenantId} data/${TenantId}
+                - Region: !Ref "AWS::Region"
+                  TenantId: !FindInMap
+                    - RegionMap
+                    - global
+                    - TpcCTenantId
               - !Sub
                 - sudo -u ubuntu ./2-restart -n --download-data --signal-file ${SignalFileName} --hub-addr ${HubIpAddress}
                 - SignalFileName: !Ref SignalFileName
@@ -344,29 +316,13 @@ Resources:
             - sleep 2
             - !If
               - LoadTpcC
-              - 'Fn::Join':
-                - |+
-
-                - - !Sub
-                    - sudo -u ubuntu aws s3 ls --recursive s3://sunstorm-${Region}/tpcc-200x3/ | awk '/tpcc-200x3\/${TenantId}/ {print $4}' > tpcc-keys
-                    - Region: !Ref "AWS::Region"
-                      TenantId: !FindInMap
-                        - RegionMap
-                        - global
-                        - TpcCTenantId
-                  - if [[ "$RESTART" -ne 1 ]]; then
-                  - !Sub
-                    - sudo -u ubuntu parallel -j 16 f={}';' aws s3 cp s3://sunstorm-${Region}/'$f' data/'${!f##tpcc-200x3/}' < tpcc-keys
-                    - Region: !Ref "AWS::Region"
-                  - else
-                  - !Sub
-                    - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-200x3/${TenantId} data/${TenantId}
-                    - Region: !Ref "AWS::Region"
-                      TenantId: !FindInMap
-                        - RegionMap
-                        - global
-                        - TpcCTenantId
-                  - fi
+              - !Sub
+                - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-100x3/${TenantId} data/${TenantId}
+                - Region: !Ref "AWS::Region"
+                  TenantId: !FindInMap
+                    - RegionMap
+                    - global
+                    - TpcCTenantId
               - !Sub
                 - sudo -u ubuntu ./2-restart -n --download-data --signal-file ${SignalFileName} --hub-addr ${HubIpAddress}
                 - SignalFileName: !Ref SignalFileName
@@ -422,29 +378,13 @@ Resources:
             - sleep 2
             - !If
               - LoadTpcC
-              - 'Fn::Join':
-                - |+
-
-                - - !Sub
-                    - sudo -u ubuntu aws s3 ls --recursive s3://sunstorm-${Region}/tpcc-200x3/ | awk '/tpcc-200x3\/${TenantId}/ {print $4}' > tpcc-keys
-                    - Region: !Ref "AWS::Region"
-                      TenantId: !FindInMap
-                        - RegionMap
-                        - global
-                        - TpcCTenantId
-                  - if [[ "$RESTART" -ne 1 ]]; then
-                  - !Sub
-                    - sudo -u ubuntu parallel -j 16 f={}';' aws s3 cp s3://sunstorm-${Region}/'$f' data/'${!f##tpcc-200x3/}' < tpcc-keys
-                    - Region: !Ref "AWS::Region"
-                  - else
-                  - !Sub
-                    - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-200x3/${TenantId} data/${TenantId}
-                    - Region: !Ref "AWS::Region"
-                      TenantId: !FindInMap
-                        - RegionMap
-                        - global
-                        - TpcCTenantId
-                  - fi
+              - !Sub
+                - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-100x3/${TenantId} data/${TenantId}
+                - Region: !Ref "AWS::Region"
+                  TenantId: !FindInMap
+                    - RegionMap
+                    - global
+                    - TpcCTenantId
               - !Sub
                 - sudo -u ubuntu ./2-restart -n --download-data --signal-file ${SignalFileName} --hub-addr ${HubIpAddress}
                 - SignalFileName: !Ref SignalFileName
@@ -504,21 +444,9 @@ Resources:
             - sleep 2
             - !If
               - LoadTpcC
-              - 'Fn::Join':
-                - |+
-
-                - - !Sub
-                    - sudo -u ubuntu aws s3 ls --recursive s3://sunstorm-${Region}/tpcc-200x3/ | awk '/tpcc-200x3\/compute/ {print $4}' > tpcc-keys
-                    - Region: !Ref "AWS::Region"
-                  - if [[ "$RESTART" -ne 1 ]]; then
-                  - !Sub
-                    - sudo -u ubuntu parallel -j 16 f={}';' aws s3 cp s3://sunstorm-${Region}/'$f' data/'${!f##tpcc-200x3/}' < tpcc-keys
-                    - Region: !Ref "AWS::Region"
-                  - else
-                  - !Sub
-                    - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-200x3/compute data/compute
-                    - Region: !Ref "AWS::Region"
-                  - fi
+              - !Sub
+                - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-100x3/compute data/compute
+                - Region: !Ref "AWS::Region"
               - rm -rf /home/ubuntu/sunstorm/xactserver/tools/shell/data
             - !Sub 
               - >-
@@ -598,26 +526,14 @@ Resources:
               - SignalFileName: !Ref SignalFileName
             - !If
               - LoadTpcC
-              - 'Fn::Join':
-                - |+
-
-                - - !Sub
-                    - sudo -u ubuntu aws s3 ls --recursive s3://sunstorm-${Region}/tpcc-200x3-hub/ | awk '{print $4}' > tpcc-keys
-                    - Region: !Ref "AWS::Region"
-                  - if [[ "$RESTART" -ne 1 ]]; then
-                  - !Sub 
-                    - sudo -u ubuntu parallel -j 16 f={}';' aws s3 cp s3://sunstorm-${Region}/'$f' data/'${!f##tpcc-200x3-hub/}' < tpcc-keys
-                    - Region: !Ref "AWS::Region"
-                  - else
-                  - !Sub
-                    - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-200x3-hub/ data/
-                    - Region: !Ref "AWS::Region"
-                  - fi
+              - !Sub
+                - sudo -u ubuntu aws s3 sync --delete s3://sunstorm-${Region}/tpcc-100x3-hub/ data/
+                - Region: !Ref "AWS::Region"
               - !Sub
                 - sudo -u ubuntu ./2-restart -n --download-data --signal-file ${SignalFileName} --hub-addr ${HubIpAddress}
                 - SignalFileName: !Ref SignalFileName
                   HubIpAddress: !Ref HubIpAddress
-            - !Sub 
+            - !Sub
               - >-
                 sudo -u ubuntu ./2-restart --region-id 0 --pageserver-mem
                 ${PageserverMemory} --signal-file ${SignalFileName} --hub-addr
@@ -662,7 +578,7 @@ Conditions:
 Mappings:
   RegionMap:
     global:
-      TpcCTenantId: c4f8e20001f61d8b26bda0162f73105a
+      TpcCTenantId: 60a17736fc44ddef20e6384e13d48d6a
       XactserverIpAddresses:
         - 10.0.0.5
         - 10.0.0.20
