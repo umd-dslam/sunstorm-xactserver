@@ -105,46 +105,51 @@ fi
 if [ $stop_only -eq 0 ] && ([ ! -d $data ] || [ $new_data -eq 1 ]); then
     echo "Clearing $data"
     rm -rf $data/*
-    rm -rf $data/.*
+    rm -rf $data/.* || true
 fi
 
 if [ $run_master -eq 1 ]; then
     echo "Stopping any previous master instance"
     pkill -e yb-master || true
-
-    if [ $stop_only -eq 0 ]; then
-        echo "Starting master"
-        /home/ubuntu/yugabyte-2.20.0.1/bin/yb-master                 \
-        --master_addresses=${master_addrs_str}                       \
-        --fs_data_dirs=$data                                         \
-        --rpc_bind_addresses=0.0.0.0                                 \
-        --server_broadcast_addresses=${master_addrs[$region_id - 1]} \
-        --placement_cloud=aws                                        \
-        --placement_region=region-$region_id                         \
-        --placement_zone=region-$region_id                           \
-        --leader_failure_max_missed_heartbeat_periods=10             \
-        > /home/ubuntu/yb-master.out 2>&1 &
-    fi
 fi
 
 if [ $run_tserver -eq 1 ]; then
     echo "Stopping any previous tserver instance"
     pkill -e yb-tserver || true
+fi
 
-    if [ $stop_only -eq 0 ]; then
-        echo "Starting tserver"
-        /home/ubuntu/yugabyte-2.20.0.1/bin/yb-tserver                 \
-        --tserver_master_addrs=${master_addrs_str}                    \
-        --fs_data_dirs=$data                                          \
-        --rpc_bind_addresses=0.0.0.0                                  \
-        --server_broadcast_addresses=${tserver_addrs[$tserver_id]}    \
-        --cql_proxy_bind_address=0.0.0.0:9042                         \
-        --pgsql_proxy_bind_address=0.0.0.0:5433                       \
-        --webserver_interface=0.0.0.0                                 \
-        --placement_cloud=aws                                         \
-        --placement_region=region-$region_id                          \
-        --placement_zone=region-$region_id                            \
-        --leader_failure_max_missed_heartbeat_periods=10              \
-        > /home/ubuntu/yb-tserver.out 2>&1 &
-    fi
+if [ $stop_only -eq 1 ]; then
+    exit 0
+fi
+
+if [ $run_master -eq 1 ]; then
+    echo "Starting master"
+    /home/ubuntu/yugabyte-2.20.0.1/bin/yb-master                 \
+    --master_addresses=${master_addrs_str}                       \
+    --fs_data_dirs=$data                                         \
+    --rpc_bind_addresses=0.0.0.0                                 \
+    --server_broadcast_addresses=${master_addrs[$region_id - 1]} \
+    --placement_cloud=aws                                        \
+    --placement_region=region-$region_id                         \
+    --placement_zone=region-$region_id                           \
+    --leader_failure_max_missed_heartbeat_periods=10             \
+    > /home/ubuntu/yb-master.out 2>&1 &
+fi
+
+
+if [ $run_tserver -eq 1 ]; then
+    echo "Starting tserver"
+    /home/ubuntu/yugabyte-2.20.0.1/bin/yb-tserver                 \
+    --tserver_master_addrs=${master_addrs_str}                    \
+    --fs_data_dirs=$data                                          \
+    --rpc_bind_addresses=0.0.0.0                                  \
+    --server_broadcast_addresses=${tserver_addrs[$tserver_id]}    \
+    --cql_proxy_bind_address=0.0.0.0:9042                         \
+    --pgsql_proxy_bind_address=0.0.0.0:5433                       \
+    --webserver_interface=0.0.0.0                                 \
+    --placement_cloud=aws                                         \
+    --placement_region=region-$region_id                          \
+    --placement_zone=region-$region_id                            \
+    --leader_failure_max_missed_heartbeat_periods=10              \
+    > /home/ubuntu/yb-tserver.out 2>&1 &
 fi
