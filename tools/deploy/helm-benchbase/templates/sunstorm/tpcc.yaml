@@ -138,7 +138,8 @@ data:
         FOREIGN KEY (s_i_id) REFERENCES item (i_id) ON DELETE CASCADE,
         {{- end }}
         PRIMARY KEY (s_w_id, s_i_id)
-    );
+    )
+    WITH (fillfactor=90);
 
     CREATE TABLE district_{{ $i }} (
         d_w_id      int            NOT NULL,
@@ -184,7 +185,8 @@ data:
         FOREIGN KEY (c_w_id, c_d_id) REFERENCES district_{{ $i }} (d_w_id, d_id) ON DELETE CASCADE,
         {{- end }}
         PRIMARY KEY (c_w_id, c_d_id, c_id)
-    );
+    )
+    WITH (fillfactor=90);
 
     CREATE TABLE history_{{ $i }} (
         h_c_id   int           NOT NULL,
@@ -200,7 +202,8 @@ data:
         FOREIGN KEY (h_c_w_id, h_c_d_id, h_c_id) REFERENCES customer_{{ $i }} (c_w_id, c_d_id, c_id) ON DELETE CASCADE,
         FOREIGN KEY (h_w_id, h_d_id) REFERENCES district_{{ $i }} (d_w_id, d_id) ON DELETE CASCADE
         {{- end }}
-    );
+    )
+    WITH (fillfactor=90);
 
     CREATE TABLE oorder_{{ $i }} (
         o_w_id       int       NOT NULL,
