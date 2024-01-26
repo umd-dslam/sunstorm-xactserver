@@ -82,7 +82,7 @@ Parameters:
   PageserverInstanceType:
     Type: String
     Description: Select the instance type for the pageserver
-    Default: c5d.2xlarge
+    Default: c5d.4xlarge
     AllowedValues:
       - c5d.xlarge
       - c5d.2xlarge
@@ -170,7 +170,7 @@ Resources:
                 - >-
                   sudo -u ubuntu ./2-restart -n --download-data --signal-file
                   ${SignalFileName} --hub-addr ${HubIpAddress} --data
-                  /media/sunstorm
+                  /media/sunstorm; rm -rf /media/sunstorm/.neon
                 - SignalFileName: !Ref SignalFileName
                   HubIpAddress: !Ref HubIpAddress
             - !Sub 
@@ -249,13 +249,9 @@ Resources:
               - !Sub 
                 - >-
                   sudo -u ubuntu aws s3 sync --delete
-                  s3://sunstorm-${Region}/tpcc-100x3/${TenantId}
-                  data/${TenantId}
+                  s3://sunstorm-${Region}/tpcc-100x3/safekeeper
+                  data/
                 - Region: !Ref 'AWS::Region'
-                  TenantId: !FindInMap 
-                    - RegionMap
-                    - global
-                    - TpcCTenantId
               - !Sub 
                 - >-
                   sudo -u ubuntu ./2-restart -n --download-data --signal-file
@@ -328,13 +324,9 @@ Resources:
               - !Sub 
                 - >-
                   sudo -u ubuntu aws s3 sync --delete
-                  s3://sunstorm-${Region}/tpcc-100x3/${TenantId}
-                  data/${TenantId}
+                  s3://sunstorm-${Region}/tpcc-100x3/safekeeper
+                  data/
                 - Region: !Ref 'AWS::Region'
-                  TenantId: !FindInMap 
-                    - RegionMap
-                    - global
-                    - TpcCTenantId
               - !Sub 
                 - >-
                   sudo -u ubuntu ./2-restart -n --download-data --signal-file
@@ -395,13 +387,9 @@ Resources:
               - !Sub 
                 - >-
                   sudo -u ubuntu aws s3 sync --delete
-                  s3://sunstorm-${Region}/tpcc-100x3/${TenantId}
-                  data/${TenantId}
+                  s3://sunstorm-${Region}/tpcc-100x3/safekeeper
+                  data/
                 - Region: !Ref 'AWS::Region'
-                  TenantId: !FindInMap 
-                    - RegionMap
-                    - global
-                    - TpcCTenantId
               - !Sub 
                 - >-
                   sudo -u ubuntu ./2-restart -n --download-data --signal-file
@@ -601,7 +589,6 @@ Conditions:
 Mappings:
   RegionMap:
     global:
-      TpcCTenantId: 60a17736fc44ddef20e6384e13d48d6a
       XactserverIpAddresses:
         - 10.0.0.5
         - 10.0.0.20
