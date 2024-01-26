@@ -35,11 +35,11 @@ Parameters:
   InstanceType:
     Type: String
     Description: Select the instance type
-    Default: c5.4xlarge
+    Default: c5d.4xlarge
     AllowedValues:
-      - c5.xlarge
-      - c5.2xlarge
-      - c5.4xlarge
+      - c5d.xlarge
+      - c5d.2xlarge
+      - c5d.4xlarge
   MasterIpAddresses:
     Type: List<String>
     Description: 'Enter master IP addresses. 10.0.0.10,10.1.0.10,10.8.0.10'
@@ -82,11 +82,14 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
+            - mkfs -t xfs /dev/nvme1n1 || true
+            - mount /dev/nvme1n1 /media/yugabyte
+            - chown ubuntu:ubuntu /media/yugabyte
             - !Sub 
               - >-
                 /home/ubuntu/run-yb --master-addrs ${MasterIpAddresses}
                 --tserver-addrs ${PrivateIpAddresses} --region-id ${Region}
-                --tserver-id 0 -n
+                --tserver-id 0 -n --data /media/yugabyte
               - MasterIpAddresses: !Join 
                   - ','
                   - !Ref MasterIpAddresses
@@ -118,11 +121,14 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
+            - mkfs -t xfs /dev/nvme1n1 || true
+            - mount /dev/nvme1n1 /media/yugabyte
+            - chown ubuntu:ubuntu /media/yugabyte
             - !Sub 
               - >-
                 /home/ubuntu/run-yb --master-addrs ${MasterIpAddresses}
                 --tserver-addrs ${PrivateIpAddresses} --region-id ${Region}
-                --tserver-id 1 -n
+                --tserver-id 1 -n --data /media/yugabyte
               - MasterIpAddresses: !Join 
                   - ','
                   - !Ref MasterIpAddresses
@@ -154,11 +160,14 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
+            - mkfs -t xfs /dev/nvme1n1 || true
+            - mount /dev/nvme1n1 /media/yugabyte
+            - chown ubuntu:ubuntu /media/yugabyte
             - !Sub 
               - >-
                 /home/ubuntu/run-yb --master-addrs ${MasterIpAddresses}
                 --tserver-addrs ${PrivateIpAddresses} --region-id ${Region}
-                --tserver-id 2 -n
+                --tserver-id 2 -n --data /media/yugabyte
               - MasterIpAddresses: !Join 
                   - ','
                   - !Ref MasterIpAddresses
