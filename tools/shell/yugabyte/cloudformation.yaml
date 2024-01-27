@@ -40,23 +40,6 @@ Parameters:
       - c5d.xlarge
       - c5d.2xlarge
       - c5d.4xlarge
-  MasterIpAddresses:
-    Type: List<String>
-    Description: 'Enter master IP addresses. 10.0.0.10,10.1.0.10,10.8.0.10'
-    AllowedPattern: '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$'
-    ConstraintDescription: Must be a valid IP address
-  PrivateIpAddresses:
-    Type: List<String>
-    Description: |-
-      Enter private IP addresses for 3 instances.
-      us-east-1a: 10.0.0.10,10.0.0.20,10.0.0.30
-      us-east-2a: 10.1.0.10,10.1.0.20,10.1.0.30
-      us-west-1a: 10.8.0.10,10.8.0.20,10.8.0.30
-    AllowedPattern: '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$'
-    ConstraintDescription: Must be a valid IP address
-  Region:
-    Type: Number
-    Description: 'Enter the region id number. us-east-1: 1. us-east-2: 2. us-west-1: 3'
   LaunchTemplateVersion:
     Type: Number
     Description: Version of the launch template "yugabyte"
@@ -71,9 +54,12 @@ Resources:
       InstanceType: !Ref InstanceType
       NetworkInterfaces:
         - DeviceIndex: 0
-          PrivateIpAddress: !Select 
+          PrivateIpAddress: !Select
             - 0
-            - !Ref PrivateIpAddresses
+            - !FindInMap 
+              - RegionMap
+              - !Ref 'AWS::Region'
+              - PrivateIpAddresses          
       Tags:
         - Key: Name
           Value: yugabyte0
@@ -92,11 +78,20 @@ Resources:
                 --tserver-id 0 -n --data /media/yugabyte
               - MasterIpAddresses: !Join 
                   - ','
-                  - !Ref MasterIpAddresses
+                  - !FindInMap 
+                    - RegionMap
+                    - global
+                    - MasterIpAddresses
                 PrivateIpAddresses: !Join 
                   - ','
-                  - !Ref PrivateIpAddresses
-                Region: !Ref Region
+                  - !FindInMap 
+                    - RegionMap
+                    - !Ref 'AWS::Region'
+                    - PrivateIpAddresses
+                Region: !FindInMap 
+                  - RegionMap
+                  - !Ref 'AWS::Region'
+                  - Region
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 7a791c52-491f-408e-9590-3257a01751f7
@@ -112,7 +107,10 @@ Resources:
         - DeviceIndex: 0
           PrivateIpAddress: !Select 
             - 1
-            - !Ref PrivateIpAddresses
+            - !FindInMap 
+              - RegionMap
+              - !Ref 'AWS::Region'
+              - PrivateIpAddresses
       Tags:
         - Key: Name
           Value: yugabyte1
@@ -131,11 +129,20 @@ Resources:
                 --tserver-id 1 -n --data /media/yugabyte
               - MasterIpAddresses: !Join 
                   - ','
-                  - !Ref MasterIpAddresses
+                  - !FindInMap 
+                    - RegionMap
+                    - global
+                    - MasterIpAddresses
                 PrivateIpAddresses: !Join 
                   - ','
-                  - !Ref PrivateIpAddresses
-                Region: !Ref Region
+                  - !FindInMap 
+                    - RegionMap
+                    - !Ref 'AWS::Region'
+                    - PrivateIpAddresses
+                Region: !FindInMap 
+                  - RegionMap
+                  - !Ref 'AWS::Region'
+                  - Region
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 4cf70855-2ef5-4b25-b569-7b7ff3f986b7
@@ -151,7 +158,10 @@ Resources:
         - DeviceIndex: 0
           PrivateIpAddress: !Select 
             - 2
-            - !Ref PrivateIpAddresses
+            - !FindInMap 
+              - RegionMap
+              - !Ref 'AWS::Region'
+              - PrivateIpAddresses
       Tags:
         - Key: Name
           Value: yugabyte2
@@ -170,11 +180,45 @@ Resources:
                 --tserver-id 2 -n --data /media/yugabyte
               - MasterIpAddresses: !Join 
                   - ','
-                  - !Ref MasterIpAddresses
+                  - !FindInMap 
+                    - RegionMap
+                    - global
+                    - MasterIpAddresses
                 PrivateIpAddresses: !Join 
                   - ','
-                  - !Ref PrivateIpAddresses
-                Region: !Ref Region
+                  - !FindInMap 
+                    - RegionMap
+                    - !Ref 'AWS::Region'
+                    - PrivateIpAddresses
+                Region: !FindInMap 
+                  - RegionMap
+                  - !Ref 'AWS::Region'
+                  - Region
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 490cb00a-d1e3-4260-9e64-71725ab0b4ad
+Mappings:
+  RegionMap:
+    global:
+      MasterIpAddresses:
+        - 10.0.0.10
+        - 10.1.0.10
+        - 10.8.0.10
+    us-east-1:
+      Region: 1
+      PrivateIpAddresses:
+        - 10.0.0.10
+        - 10.0.0.20
+        - 10.0.0.30
+    us-east-2:
+      Region: 2
+      PrivateIpAddresses:
+        - 10.1.0.10
+        - 10.1.0.20
+        - 10.1.0.30
+    us-west-1:
+      Region: 3
+      PrivateIpAddresses:
+        - 10.8.0.10
+        - 10.8.0.20
+        - 10.8.0.30
