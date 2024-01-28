@@ -168,9 +168,10 @@ Resources:
                 - Region: !Ref 'AWS::Region'
               - !Sub 
                 - >-
+                  rm -rf /media/sunstorm/.neon;
                   sudo -u ubuntu ./2-restart -n --download-data --signal-file
                   ${SignalFileName} --hub-addr ${HubIpAddress} --data
-                  /media/sunstorm; rm -rf /media/sunstorm/.neon
+                  /media/sunstorm;
                 - SignalFileName: !Ref SignalFileName
                   HubIpAddress: !Ref HubIpAddress
             - !Sub 
