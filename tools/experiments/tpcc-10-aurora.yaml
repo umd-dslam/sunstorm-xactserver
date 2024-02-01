@@ -1,0 +1,11 @@
+# python3 tools/experiment.py --logs-per-sec 10 -o ~/data/aurora/tpcc tpcc-10-aurora
+dbtype: aurora
+benchmark: tpcc
+scalefactor: 10
+time: 60
+rate: 50000
+isolation: '!us-east-1:TRANSACTION_SERIALIZABLE; us-east-2:TRANSACTION_REPEATABLE_READ; us-west-1:TRANSACTION_REPEATABLE_READ'
+param_keys:
+  - terminals
+param_values:
+  terminals: [1, 10, 20, 40, 60, 80, 100]
