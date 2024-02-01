@@ -1,0 +1,11 @@
+# python3 tools/experiment.py --logs-per-sec 10 -o ~/data/yugabyte/tpcc tpcc-10-yugabyte
+dbtype: yugabyte
+benchmark: tpcc
+scalefactor: 10
+time: 60
+rate: 50000
+isolation: TRANSACTION_SERIALIZABLE
+param_keys:
+  - terminals
+param_values:
+  terminals: [1, 16, 32, 64, 128, 256, 512]
