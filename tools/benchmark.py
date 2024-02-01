@@ -134,8 +134,6 @@ def get_job_logs(namespace: str, region: str, job: str, dry_run: bool):
                 selector,
                 phases=["Running", "Pending", "Succeeded"],
             )
-            if len(pods) > 1:
-                raise Exception(f'More than one pod found for job "{job}"')
         except kubernetes.client.rest.ApiException as e:  # type: ignore
             body = json.loads(e.body)
             LOG.warning(
@@ -145,6 +143,9 @@ def get_job_logs(namespace: str, region: str, job: str, dry_run: bool):
 
     if not pods:
         raise Exception(f'No pods found for job "{job}" in namespace "{namespace}"')
+
+    if len(pods) > 1:
+        LOG.warning(f'More than one pod found for job "{job}". Picking only one arbitrarily')
 
     attempt = 10
     while attempt > 0:
@@ -228,7 +229,7 @@ class Create(Operation):
             return
 
         additional_settings = ["operation=create"]
-        target = cls.config["global_region_target_address_and_database"]
+        target = cls.config.get("global_region_target_address_and_database")
         if target:
             additional_settings.append(f"target_address_and_database={target}")
 

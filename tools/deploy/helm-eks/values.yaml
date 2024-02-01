@@ -7,6 +7,9 @@ instance_types:
   # pageserver: c5.4xlarge
   client: c5.xlarge
 
+capacity:
+  client: 1
+
 spot:
   compute: false
   pageserver: false

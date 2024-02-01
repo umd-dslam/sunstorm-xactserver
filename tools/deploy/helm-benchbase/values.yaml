@@ -1,6 +1,9 @@
 # Type of database (sunstorm, aurora, or yugabyte)
 dbtype: sunstorm
 
+# Number of benchbase instances to start in each region for execution
+instances: 1
+
 # The operation to perform, can be "create", "load", or "execute".
 # If you run benchmark.py, this value will be set automatically.
 operation: create

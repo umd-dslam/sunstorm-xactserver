@@ -1,14 +1,16 @@
-# AWS regions to deploy to. If the context of a region is not set,
-# it will be inferred from the region name and the ".kube/config" file.
-# If "target_address_and_database" is specified, the benchmark will send
-# workload to the given target instead of the default "compute" service.
-# If "warmup" is specified, the benchmark will run for the given number
-# of seconds before the actual measurement starts.
+# AWS regions to deploy to.
+# Per-region configurations:
+# - id: The ID of the region. 
+# - context: The context of the region. If not set, it will be inferred from the region name and the ".kube/config" file.
+# - benchbase_instances: The number of benchbase instances to deploy for benchmark execution.
+# - target_address_and_database: The address of the database to connect to. If not set, the target address is "compute" and the database is "postgres".
+# - warmup: The warmup time in seconds. If not set, the warmup time is 0.
 regions:
   us-east-1:
     id: 1
     # context: minikube
-    
+    benchbase_instances: 2
+
     # sunstorm
     # target_address_and_database: 10.0.0.30:55433/postgres
     # warmup: 0
@@ -23,6 +25,7 @@ regions:
   us-east-2:
     id: 2 
     # context: minikube
+    benchbase_instances: 1
 
     # sunstorm
     # target_address_and_database: 10.1.0.30:55433/postgres
@@ -38,6 +41,7 @@ regions:
   us-west-1:
     id: 3
     # context: minikube
+    benchbase_instances: 1
 
     # sunstorm
     # target_address_and_database: 10.8.0.30:55433/postgres

@@ -7,7 +7,15 @@ metadata:
     app: execute
     part-of: neon
 spec:
+  completions: {{ .Values.instances }}
+  parallelism: {{ .Values.instances }}
+  completionMode: Indexed
   template:
+    metadata:
+      name: execute
+      labels:
+        app: execute
+        part-of: neon
     spec:
       containers:
         - name: execute
@@ -28,7 +36,7 @@ spec:
 
               /usr/bin/mc alias set minio http://{{ .Values.minio }} minioadmin minioadmin
               /usr/bin/mc mb --ignore-existing minio/results
-              /usr/bin/mc cp ./results/* minio/results/{{ .Values.tag | default .Values.timestamp }}/{{ .Values.namespace_id }}-{{ .Release.Namespace }}/
+              /usr/bin/mc cp ./results/* minio/results/{{ .Values.tag | default .Values.timestamp }}/{{ .Values.namespace_id }}-{{ .Release.Namespace }}-$JOB_COMPLETION_INDEX/
           volumeMounts:
             - name: config
               mountPath: /config
@@ -51,4 +59,16 @@ spec:
                     operator: In
                     values:
                       - client
+        podAntiAffinity:
+          # Prefer to schedule the pods on separate machines
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                      - execute
+                topologyKey: "kubernetes.io/hostname"
 {{ end }}
