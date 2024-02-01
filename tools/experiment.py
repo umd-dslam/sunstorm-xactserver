@@ -509,7 +509,7 @@ def main(args):
 
                         benchmark.main(["create"] + bm_args + set_arg + dry_run_arg)
                         header(
-                            "Waiting %d seconds for the change to propagate",
+                            "Waiting %d seconds for the changes to propagate",
                             DELAY_SECONDS,
                         )
                         if not args.dry_run:
@@ -539,6 +539,10 @@ def main(args):
                         )
 
                 header("Running benchmark %s", json.dumps(metadata, indent=4))
+
+                if args.interactive:
+                    if not Confirm.ask("Continue?", default=True):
+                        break
 
                 result = benchmark.main(
                     [
@@ -626,6 +630,12 @@ if __name__ == "__main__":
         default=0,
         type=int,
         help="The number of logs to be collected per second",
+    )
+    parser.add_argument(
+        "--interactive",
+        "-i",
+        action="store_true",
+        help="Stop and ask for confirmation before each run",
     )
     args = parser.parse_args()
 
