@@ -32,6 +32,10 @@ Parameters:
   KeyName:
     Type: 'AWS::EC2::KeyPair::KeyName'
     Description: Enter key pair name for connecting to the instances
+  NumRegions:
+    Type: Number
+    Description: Number of regions
+    Default: 3
   InstanceType:
     Type: String
     Description: Select the instance type
@@ -54,12 +58,12 @@ Resources:
       InstanceType: !Ref InstanceType
       NetworkInterfaces:
         - DeviceIndex: 0
-          PrivateIpAddress: !Select
+          PrivateIpAddress: !Select 
             - 0
             - !FindInMap 
               - RegionMap
               - !Ref 'AWS::Region'
-              - PrivateIpAddresses          
+              - PrivateIpAddresses
       Tags:
         - Key: Name
           Value: yugabyte0
@@ -70,7 +74,7 @@ Resources:
           - - '#!/bin/bash'
             - mkfs -t xfs /dev/nvme1n1 || true
             - mount /dev/nvme1n1 /media/yugabyte
-            - chown ubuntu:ubuntu /media/yugabyte
+            - 'chown ubuntu:ubuntu /media/yugabyte'
             - !Sub 
               - >-
                 /home/ubuntu/run-yb --master-addrs ${MasterIpAddresses}
@@ -79,9 +83,9 @@ Resources:
               - MasterIpAddresses: !Join 
                   - ','
                   - !FindInMap 
-                    - RegionMap
-                    - global
+                    - GlobalMap
                     - MasterIpAddresses
+                    - !Ref NumRegions
                 PrivateIpAddresses: !Join 
                   - ','
                   - !FindInMap 
@@ -91,7 +95,7 @@ Resources:
                 Region: !FindInMap 
                   - RegionMap
                   - !Ref 'AWS::Region'
-                  - Region
+                  - Id
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 7a791c52-491f-408e-9590-3257a01751f7
@@ -121,18 +125,18 @@ Resources:
           - - '#!/bin/bash'
             - mkfs -t xfs /dev/nvme1n1 || true
             - mount /dev/nvme1n1 /media/yugabyte
-            - chown ubuntu:ubuntu /media/yugabyte
+            - 'chown ubuntu:ubuntu /media/yugabyte'
             - !Sub 
               - >-
-                /home/ubuntu/run-yb --master-addrs ${MasterIpAddresses}
-                --tserver-addrs ${PrivateIpAddresses} --region-id ${Region}
-                --tserver-id 1 -n --data /media/yugabyte
+                /home/ubuntu/run-yb --tserver --master-addrs
+                ${MasterIpAddresses} --tserver-addrs ${PrivateIpAddresses}
+                --region-id ${Region} --tserver-id 1 -n --data /media/yugabyte
               - MasterIpAddresses: !Join 
                   - ','
                   - !FindInMap 
-                    - RegionMap
-                    - global
+                    - GlobalMap
                     - MasterIpAddresses
+                    - !Ref NumRegions
                 PrivateIpAddresses: !Join 
                   - ','
                   - !FindInMap 
@@ -142,7 +146,7 @@ Resources:
                 Region: !FindInMap 
                   - RegionMap
                   - !Ref 'AWS::Region'
-                  - Region
+                  - Id
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 4cf70855-2ef5-4b25-b569-7b7ff3f986b7
@@ -172,18 +176,18 @@ Resources:
           - - '#!/bin/bash'
             - mkfs -t xfs /dev/nvme1n1 || true
             - mount /dev/nvme1n1 /media/yugabyte
-            - chown ubuntu:ubuntu /media/yugabyte
+            - 'chown ubuntu:ubuntu /media/yugabyte'
             - !Sub 
               - >-
-                /home/ubuntu/run-yb --master-addrs ${MasterIpAddresses}
-                --tserver-addrs ${PrivateIpAddresses} --region-id ${Region}
-                --tserver-id 2 -n --data /media/yugabyte
+                /home/ubuntu/run-yb --tserver --master-addrs
+                ${MasterIpAddresses} --tserver-addrs ${PrivateIpAddresses}
+                --region-id ${Region} --tserver-id 2 -n --data /media/yugabyte
               - MasterIpAddresses: !Join 
                   - ','
                   - !FindInMap 
-                    - RegionMap
-                    - global
+                    - GlobalMap
                     - MasterIpAddresses
+                    - !Ref NumRegions
                 PrivateIpAddresses: !Join 
                   - ','
                   - !FindInMap 
@@ -193,32 +197,131 @@ Resources:
                 Region: !FindInMap 
                   - RegionMap
                   - !Ref 'AWS::Region'
-                  - Region
+                  - Id
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 490cb00a-d1e3-4260-9e64-71725ab0b4ad
 Mappings:
-  RegionMap:
-    global:
-      MasterIpAddresses:
+  GlobalMap:
+    MasterIpAddresses:
+      '3':
         - 10.0.0.10
         - 10.1.0.10
         - 10.8.0.10
+      '4':
+        - 10.0.0.10
+        - 10.1.0.10
+        - 10.8.0.10
+        - 10.9.0.10
+      '5':
+        - 10.0.0.10
+        - 10.1.0.10
+        - 10.8.0.10
+        - 10.9.0.10
+        - 10.2.0.10
+      '6':
+        - 10.0.0.10
+        - 10.1.0.10
+        - 10.8.0.10
+        - 10.9.0.10
+        - 10.2.0.10
+        - 10.3.0.10
+      '7':
+        - 10.0.0.10
+        - 10.1.0.10
+        - 10.8.0.10
+        - 10.9.0.10
+        - 10.2.0.10
+        - 10.3.0.10
+        - 10.6.0.10
+      '8':
+        - 10.0.0.10
+        - 10.1.0.10
+        - 10.8.0.10
+        - 10.9.0.10
+        - 10.2.0.10
+        - 10.3.0.10
+        - 10.6.0.10
+        - 10.7.0.10
+      '9':
+        - 10.0.0.10
+        - 10.1.0.10
+        - 10.8.0.10
+        - 10.9.0.10
+        - 10.2.0.10
+        - 10.3.0.10
+        - 10.6.0.10
+        - 10.7.0.10
+        - 10.4.0.10
+      '10':
+        - 10.0.0.10
+        - 10.1.0.10
+        - 10.8.0.10
+        - 10.9.0.10
+        - 10.2.0.10
+        - 10.3.0.10
+        - 10.6.0.10
+        - 10.7.0.10
+        - 10.4.0.10
+        - 10.5.0.10
+  RegionMap:
     us-east-1:
-      Region: 1
+      Id: 1
       PrivateIpAddresses:
         - 10.0.0.10
         - 10.0.0.20
         - 10.0.0.30
     us-east-2:
-      Region: 2
+      Id: 2
       PrivateIpAddresses:
         - 10.1.0.10
         - 10.1.0.20
         - 10.1.0.30
     us-west-1:
-      Region: 3
+      Id: 3
       PrivateIpAddresses:
         - 10.8.0.10
         - 10.8.0.20
         - 10.8.0.30
+    us-west-2:
+      Id: 4
+      PrivateIpAddresses:
+        - 10.9.0.10
+        - 10.9.0.20
+        - 10.9.0.30
+    eu-west-1:
+      Id: 5
+      PrivateIpAddresses:
+        - 10.2.0.10
+        - 10.2.0.20
+        - 10.2.0.30
+    eu-west-2:
+      Id: 6
+      PrivateIpAddresses:
+        - 10.3.0.10
+        - 10.3.0.20
+        - 10.3.0.30
+    ap-northeast-1:
+      Id: 7
+      PrivateIpAddresses:
+        - 10.6.0.10
+        - 10.6.0.20
+        - 10.6.0.30
+    ap-northeast-2:
+      Id: 8
+      PrivateIpAddresses:
+        - 10.7.0.10
+        - 10.7.0.20
+        - 10.7.0.30
+    ap-southeast-1:
+      Id: 9
+      PrivateIpAddresses:
+        - 10.4.0.10
+        - 10.4.0.20
+        - 10.4.0.30
+    ap-southeast-2:
+      Id: 10
+      PrivateIpAddresses:
+        - 10.5.0.10
+        - 10.5.0.20
+        - 10.5.0.30
