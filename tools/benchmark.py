@@ -388,6 +388,9 @@ class Execute(Operation):
                 warmup = ns.info["warmup"]
                 if warmup:
                     per_region_settings.append(f"warmup={warmup}")
+                instances = ns.info["benchbase_instances"]
+                if instances:
+                    per_region_settings.append(f"instances={instances}")
 
                 executor.submit(
                     run_benchmark,

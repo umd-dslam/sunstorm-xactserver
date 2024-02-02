@@ -151,6 +151,7 @@ class NamespaceInfo(TypedDict):
     id: int
     target_address_and_database: str | None
     warmup: int
+    benchbase_instances: int
 
 
 def get_namespaces(config: MainConfig):
@@ -162,6 +163,7 @@ def get_namespaces(config: MainConfig):
                 "global_region_target_address_and_database"
             ),
             "warmup": 0,
+            "benchbase_instances": 1,
         }
     }
     regions: dict[str, RegionInfo] = config.get("regions") or {}
@@ -173,6 +175,7 @@ def get_namespaces(config: MainConfig):
                 "target_address_and_database"
             ),
             "warmup": region_info.get("warmup", 0),
+            "benchbase_instances": region_info.get("benchbase_instances", 1)
         }
     return namespaces
 
