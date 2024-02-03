@@ -11,7 +11,7 @@ hot.hot: [0, 100000, 10000, 1000]
 # k = np.arange(1, 3)
 # a = 2.6
 # z = k**-a/zeta(a)
-# (z/sum(z) * scale).astype(int) # scale is the percentage of multi-region transactions times 1000
+# (z/sum(z) * scale).astype(int) # scale is the percentage of multi-region transactions times 1000 (e.g. 5000 for 5% mr)
 # ```
 hot.weights:
   - name: F-mr0

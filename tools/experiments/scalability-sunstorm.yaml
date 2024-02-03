@@ -1,0 +1,103 @@
+# Example:
+#   python3 tools/experiment.py --logs-per-sec 10 -o ~/data/sunstorm/ycsb/throughput ycsb-throughput-sunstorm
+dbtype: sunstorm
+reload_every: 1
+benchmark: hot
+scalefactor: 1000
+time: 60
+rate: 50000
+isolation: TRANSACTION_SERIALIZABLE
+param_keys:
+  - regions
+  - name: hot.hot
+    always_used_in_tag: true
+  - hot.weights
+  - hot.keyspertxn
+  - hot.maxscancount
+  - terminals
+param_values:
+  regions: [3, 4, 5, 6, 7, 8, 9, 10]
+  terminals: null
+  hot.keyspertxn: 10
+  hot.maxscancount: 50
+  hot.hot: [0, 1000]
+  hot.weights:
+    - name: F-mr0
+      value: 100000,0,0,0,0,0,0,0,0,0
+    - name: F-mr5
+      value: null
+replace:
+  - match:
+      - hot.weights:
+          name: F-mr0
+    set:
+      terminals: 64
+  - match:
+      - hot.weights:
+          name: F-mr5
+    set:
+      terminals: 96
+  - match:
+      - regions: 3
+        hot.weights:
+          name: F-mr5
+    set:
+      hot.weights:
+        name: F-mr5
+        value: 95000,4292,707,0,0,0,0,0,0,0
+  - match:
+      - regions: 4
+        hot.weights:
+          name: F-mr5
+    set:
+      hot.weights:
+        name: F-mr5
+        value: 95000,4090,674,235,0,0,0,0,0,0
+  - match:
+      - regions: 5
+        hot.weights:
+          name: F-mr5
+    set:
+      hot.weights:
+        name: F-mr5
+        value: 95000,4001,659,229,108,0,0,0,0,0
+  - match:
+      - regions: 6
+        hot.weights:
+          name: F-mr5
+    set:
+      hot.weights:
+        name: F-mr5
+        value: 95000,3953,652,227,107,60,0,0,0,0
+  - match:
+      - regions: 7
+        hot.weights:
+          name: F-mr5
+    set:
+      hot.weights:
+        name: F-mr5
+        value: 95000,3923,647,225,106,59,37,0,0,0
+  - match:
+      - regions: 8
+        hot.weights:
+          name: F-mr5
+    set:
+      hot.weights:
+        name: F-mr5
+        value: 95000,3904,643,224,106,59,37,24,0,0
+  - match:
+      - regions: 9
+        hot.weights:
+          name: F-mr5
+    set:
+      hot.weights:
+        name: F-mr5
+        value: 95000,3890,641,223,105,59,36,24,17,0
+  - match:
+      - regions: 10
+        hot.weights:
+          name: F-mr5
+    set:
+      hot.weights:
+        name: F-mr5
+        value: 95000,3880,640,223,105,59,36,24,17,12

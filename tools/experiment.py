@@ -300,7 +300,7 @@ class Progress:
         keys = [p.keys() for p in self.progress]
         fieldnames = set().union(*keys)
         with open(self.path, "w") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer = csv.DictWriter(f, fieldnames=sorted(fieldnames))
             writer.writeheader()
             writer.writerows(self.progress)
 
