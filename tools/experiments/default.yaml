@@ -2,7 +2,7 @@
 # See the Experiment class in experiment.py for the type definitions.
 
 # Type of database system
-dbtype: postgres
+dbtype: aurora
 # Name of the benchbase benchmark to run
 benchmark: hot
 # The scale factor to use for the benchmark. The meaning of this value is benchmark-specific.
@@ -11,6 +11,8 @@ scalefactor: 10
 time: 10
 # The maximum transactions that can be sent per second
 rate: 10000
+# Transaction isolation level
+isolation: TRANSACTION_SERIALIZABLE
 # The number of data points between reloads of the database
 reload_every: 15
 # Information about the parameter keys. The order specified here will be the order in which
@@ -22,6 +24,9 @@ param_keys:
   - name: hot.keyspertxn
     always_used_in_tag: true
   - hot.hot
+  # It is OK to specify parameters that do not appear in the benchmark. This is useful when the
+  # parameter change (e.g. number of regions) requires redeploying the system
+  - pseudo
 # Each parameter is a list of values, which will be combined in all possible ways. A value
 # can either be a literal value or an object with a "name" and "value" field. The latter way
 # of specifying the value should be used if the value is too long because all values will be
@@ -31,10 +36,9 @@ param_values:
   hot.keyspertxn: 4
   hot.hot: [0, 100]
   hot.weights:
-    - name: A
-      value: 100,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
-    - name: B
-      value: 0,0,0,0,0,0, 100,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
+    - name: F-mr0
+      value: 100000,0,0,0,0,0,0,0,0,0
+  pseudo: [1, 2]
 # A list of rules to replace the values in a parameter combination. Every combination generated
 # from "parameters" will be passed through these rules. The rules are applied in the order they
 # are listed here. Each rule has two parts: a "match" and a "set". The "match" part specifies
@@ -43,18 +47,6 @@ param_values:
 replace:
   - match:
       - hot.weights:
-          name: A
+          name: F-mr0
     set:
       terminals: 1
-  - match:
-      - hot.weights:
-          name: B
-        hot.hot: 0
-    set:
-      terminals: 2
-  - match:
-      - hot.weights:
-          name: B
-        hot.hot: 100
-    set:
-      terminals: 3

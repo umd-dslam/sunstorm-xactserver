@@ -1,9 +1,10 @@
-dbtype: postgres
+dbtype: sunstorm
 reload_every: 8
 benchmark: hot
 scalefactor: 1000
 time: 15
 rate: 50000
+isolation: TRANSACTION_SERIALIZABLE
 param_keys:
   - hot.weights
   - terminals
@@ -14,13 +15,5 @@ param_values:
   hot.keyspertxn: 12
   hot.hot: 0
   hot.weights:
-    - name: A
-      value: 100,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
-    - name: B
-      value: 0,0,0,0,0,0, 100,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
-    - name: D
-      value: 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 100,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
-    - name: E
-      value: 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 100,0,0,0,0,0, 0,0,0,0,0,0
-    - name: F
-      value: 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 100,0,0,0,0,0
+    - name: F-mr0
+      value: 100000,0,0,0,0,0,0,0,0,0

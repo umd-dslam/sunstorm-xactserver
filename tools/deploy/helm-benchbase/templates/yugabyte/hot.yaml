@@ -72,101 +72,6 @@ data:
 
         <!-- HOT Procedures declaration -->
         <transactiontypes>
-            <!-- Workload A: 50% Read, 50% Write -->
-            <transactiontype>
-                <name>WorkloadA1</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadA2</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadA3</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadA4</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadA5</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadA6</name>
-            </transactiontype>
-            <!-- Workload B: 95% Read, 5% Write -->
-            <transactiontype>
-                <name>WorkloadB1</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadB2</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadB3</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadB4</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadB5</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadB6</name>
-            </transactiontype>
-            <!-- Workload C: 100% Read -->
-            <transactiontype>
-                <name>WorkloadC1</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadC2</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadC3</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadC4</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadC5</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadC6</name>
-            </transactiontype>
-            <!-- Workload D: 95% Read (latest), 5% Insert -->
-            <transactiontype>
-                <name>WorkloadD1</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadD2</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadD3</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadD4</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadD5</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadD6</name>
-            </transactiontype>
-            <!-- Workload E: 95% Scan, 5% Insert -->
-            <transactiontype>
-                <name>WorkloadE1</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadE2</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadE3</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadE4</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadE5</name>
-            </transactiontype>
-            <transactiontype>
-                <name>WorkloadE6</name>
-            </transactiontype>
             <!-- Workload F: 50% Read, 50% RMW -->
             <transactiontype>
                 <name>WorkloadF1</name>
@@ -185,6 +90,18 @@ data:
             </transactiontype>
             <transactiontype>
                 <name>WorkloadF6</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadF7</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadF8</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadF9</name>
+            </transactiontype>
+            <transactiontype>
+                <name>WorkloadF10</name>
             </transactiontype>
         </transactiontypes>
     </parameters>

@@ -177,7 +177,7 @@ def benchmark_args(exp: Experiment, prefix: str | None, suffix: str | None):
             param_keys[param_key] = {"always_used_in_tag": False}
         else:
             param_keys[param_key["name"]] = {
-                "always_used_in_tag": param_key["always_used_in_tag"]
+                "always_used_in_tag": param_key.get("always_used_in_tag", False)
             }
 
     param_values = exp["param_values"]
