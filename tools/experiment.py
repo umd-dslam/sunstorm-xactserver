@@ -65,7 +65,7 @@ ReplaceCondition: TypeAlias = dict[str, ParameterValue | NamedParameterValue]
 
 class Replace(TypedDict):
     match: list[ReplaceCondition]
-    set: dict[str, ParameterValue]
+    set: dict[str, ParameterValue | NamedParameterValue]
 
 
 class Experiment(TypedDict):
@@ -87,6 +87,16 @@ class Experiment(TypedDict):
     replace: list[Replace] | None
 
 
+def to_named_value(param: str, value: ParameterValue | NamedParameterValue | None) -> NamedParameterValue:
+    if isinstance(value, dict):
+        # Return as-is if the value is already named
+        return value
+    else:
+        # Otherwise, use the value as the name
+        param_suffix = param.split(".")[-1]    
+        return {"name": f"{param_suffix}{value}", "value": value}
+
+
 def replace_values(
     replacements: list[Replace], named_values: dict[str, NamedParameterValue]
 ):
@@ -99,6 +109,7 @@ def replace_values(
 
         # If there are no conditions, the replacement will be applied to all
         match_or = len(conditions) == 0
+        # A match condition is ORs of ANDs
         for and_clause in conditions:
             match_and = True
             for param, value in and_clause.items():
@@ -106,25 +117,26 @@ def replace_values(
                     raise ValueError(
                         f'Unknown parameter "{param}" specified in replace.match'
                     )
+                # If the match condition is given as a dict, compare the "name" fields
                 if isinstance(value, dict):
                     if value["name"] != named_values[param]["name"]:
                         match_and = False
                         break
+                # If the match condition is gievn as a string, compare the value
                 elif value != named_values[param]["value"]:
                     match_and = False
                     break
+            # The match is satisfied if one of the AND clause is true
             match_or = match_or or match_and
 
+        # If match, perform the replacement
         if match_or:
             for param, value in replace["set"].items():
                 if param not in named_values:
                     raise ValueError(
                         f'Unknown parameter "{param}" specified in replace.set'
                     )
-                named_values[param] = {
-                    "name": named_values[param]["name"],
-                    "value": value,
-                }
+                named_values[param] = to_named_value(param, value)
 
 
 def benchmark_args(exp: Experiment, prefix: str | None, suffix: str | None):
@@ -195,16 +207,7 @@ def benchmark_args(exp: Experiment, prefix: str | None, suffix: str | None):
 
         named_values: list[NamedParameterValue] = []
         for value in values:
-            if isinstance(value, dict):
-                # If a name is specified, use it
-                name = value["name"]
-                value = value["value"]
-            else:
-                # Otherwise, use the value as the name
-                param_suffix = param.split(".")[-1]
-                name = f"{param_suffix}{value}"
-                value = value
-            named_values.append({"name": name, "value": value})
+            named_values.append(to_named_value(param, value))
 
         # Only include in the tag the params with more than one values or the
         # params that are specified to always be used in the tag

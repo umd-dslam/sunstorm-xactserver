@@ -1,8 +1,11 @@
 # This is an example of an experiment configuration file. It contains all available options.
 # See the Experiment class in experiment.py for the type definitions.
+# To see what parameter sets this config generates, run the following command:
+#   python3 tools/experiment.py -n --dry-run
+# Then check the workspace/default.csv file
 
 # Type of database system
-dbtype: aurora
+dbtype: sunstorm
 # Name of the benchbase benchmark to run
 benchmark: hot
 # The scale factor to use for the benchmark. The meaning of this value is benchmark-specific.
@@ -31,6 +34,35 @@ param_keys:
 # can either be a literal value or an object with a "name" and "value" field. The latter way
 # of specifying the value should be used if the value is too long because all values will be
 # used in the name of the result. All parameters here must appear in "param_keys".
+# The following example generates these combinations (each tuple is a (name, value))
+#   {
+#     terminals: (terminalsNone, None),
+#     hot.keyspertxn: (keyspertxn4, 4),
+#     hot.hot: (hot0, 0),
+#     hot.weights: (F-mr0, 100000,0,0,0,0,0,0,0,0,0),
+#     pseudo: (pseudo1, 1)
+#   }  
+#   {
+#     terminals: (terminalsNone, None),
+#     hot.keyspertxn: (keyspertxn4, 4),
+#     hot.hot: (hot0, 0),
+#     hot.weights: (F-mr0, 100000,0,0,0,0,0,0,0,0,0),
+#     pseudo: (pseudo2, 2)
+#   }
+#   {
+#     terminals: (terminalsNone, None),
+#     hot.keyspertxn: (keyspertxn4, 4),
+#     hot.hot: (hot100, 100),
+#     hot.weights: (F-mr0, 100000,0,0,0,0,0,0,0,0,0),
+#     pseudo: (pseudo1, 1)
+#   }
+#   {
+#     terminals: (terminalsNone, None),
+#     hot.keyspertxn: (keyspertxn4, 4),
+#     hot.hot: (hot100, 100),
+#     hot.weights: (F-mr0, 100000,0,0,0,0,0,0,0,0,0),
+#     pseudo: (pseudo2, 2)
+#   }
 param_values:
   terminals: null
   hot.keyspertxn: 4
@@ -46,7 +78,105 @@ param_values:
 # The "set" part specifies the values that will be set if the combination matches.
 replace:
   - match:
+      # match with combinations
+      #   {
+      #     terminals: (terminalsNone, None),
+      #     hot.keyspertxn: (keyspertxn4, 4),
+      #     hot.hot: (hot0, 0),
+      #     hot.weights: (F-mr0, 100000,0,0,0,0,0,0,0,0,0),
+      #     pseudo: (pseudo1, 1)
+      #   }  
+      #   {
+      #     terminals: (terminalsNone, None),
+      #     hot.keyspertxn: (keyspertxn4, 4),
+      #     hot.hot: (hot0, 0),
+      #     hot.weights: (F-mr0, 100000,0,0,0,0,0,0,0,0,0),
+      #     pseudo: (pseudo2, 2)
+      #   }
+      #   {
+      #     terminals: (terminalsNone, None),
+      #     hot.keyspertxn: (keyspertxn4, 4),
+      #     hot.hot: (hot100, 100),
+      #     hot.weights: (F-mr0, 100000,0,0,0,0,0,0,0,0,0),
+      #     pseudo: (pseudo1, 1)
+      #   }
+      #   {
+      #     terminals: (terminalsNone, None),
+      #     hot.keyspertxn: (keyspertxn4, 4),
+      #     hot.hot: (hot100, 100),
+      #     hot.weights: (F-mr0, 100000,0,0,0,0,0,0,0,0,0),
+      #     pseudo: (pseudo2, 2)
+      #   }
+      # instead of using the value name, the value can be also be used to match (e.g. hot.weight: '100000,0,0,0,0,0,0,0,0,0')
       - hot.weights:
           name: F-mr0
     set:
+      # then set their "terminals" field
+      #   {
+      #     terminals: (terminals1, 1),
+      #     hot.keyspertxn: (keyspertxn4, 4),
+      #     hot.hot: (hot0, 0),
+      #     hot.weights: (F-mr0, 100000,0,0,0,0,0,0,0,0,0),
+      #     pseudo: (pseudo1, 1)
+      #   }  
+      #   {
+      #     terminals: (terminals1, 1),
+      #     hot.keyspertxn: (keyspertxn4, 4),
+      #     hot.hot: (hot0, 0),
+      #     hot.weights: (F-mr0, 100000,0,0,0,0,0,0,0,0,0),
+      #     pseudo: (pseudo2, 2)
+      #   }
+      #   {
+      #     terminals: (terminals1, 1),
+      #     hot.keyspertxn: (keyspertxn4, 4),
+      #     hot.hot: (hot100, 100),
+      #     hot.weights: (F-mr0, 100000,0,0,0,0,0,0,0,0,0),
+      #     pseudo: (pseudo1, 1)
+      #   }
+      #   {
+      #     terminals: (terminals1, 1),
+      #     hot.keyspertxn: (keyspertxn4, 4),
+      #     hot.hot: (hot100, 100),
+      #     hot.weights: (F-mr0, 100000,0,0,0,0,0,0,0,0,0),
+      #     pseudo: (pseudo2, 2)
+      #   }
       terminals: 1
+  - match:
+      # match with combinations, the "terminals" field has already been set previously
+      #   {
+      #     terminals: (terminals1, 1),
+      #     hot.keyspertxn: (keyspertxn4, 4),
+      #     hot.hot: (hot0, 0),
+      #     hot.weights: (F-mr0, 100000,0,0,0,0,0,0,0,0,0),
+      #     pseudo: (pseudo2, 2)
+      #   }
+      #   {
+      #     terminals: (terminals1, 1),
+      #     hot.keyspertxn: (keyspertxn4, 4),
+      #     hot.hot: (hot100, 100),
+      #     hot.weights: (F-mr0, 100000,0,0,0,0,0,0,0,0,0),
+      #     pseudo: (pseudo1, 1)
+      #   }
+      - hot.hot: 0
+        pseudo: 2
+      - hot.hot: 100
+        pseudo: 1
+    set:
+      # then set the hot.keyspertxn field. Note that the value name can also be set here
+      #   {
+      #     terminals: (terminals1, 1),
+      #     hot.keyspertxn: (8keys, 8),
+      #     hot.hot: (hot0, 0),
+      #     hot.weights: (F-mr0, 100000,0,0,0,0,0,0,0,0,0),
+      #     pseudo: (pseudo2, 2)
+      #   }
+      #   {
+      #     terminals: (terminals1, 1),
+      #     hot.keyspertxn: (8keys, 8),
+      #     hot.hot: (hot100, 100),
+      #     hot.weights: (F-mr0, 100000,0,0,0,0,0,0,0,0,0),
+      #     pseudo: (pseudo1, 1)
+      #   }
+      hot.keyspertxn:
+        name: 8keys
+        value: 8
