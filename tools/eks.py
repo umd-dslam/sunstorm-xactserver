@@ -100,6 +100,7 @@ def delete_eks_cluster(info: RegionInfo, dry_run: bool):
             "delete",
             "cluster",
             "--force",
+            "--disable-nodegroup-eviction",
             "--config-file",
             eks_config_file.as_posix(),
         ],
