@@ -9,14 +9,14 @@ regions:
   us-east-1:
     id: 1
     # context: minikube
-    benchbase_instances: 2
+    benchbase_instances: 1
 
     # sunstorm
     # target_address_and_database: 10.0.0.30:55433/postgres
     # warmup: 0
 
     # aurora
-    # target_address_and_database: master.coh7r4lbsfrp.us-east-1.rds.amazonaws.com:5432/postgres
+    # target_address_and_database: 
     # warmup: 0
 
     # yugabyte
@@ -32,7 +32,7 @@ regions:
     # warmup: 0
 
     # aurora
-    # target_address_and_database: follower.cc0cnngq1jy5.us-east-2.rds.amazonaws.com:5432/postgres
+    # target_address_and_database: 
     # warmup: 0
 
     # yugabyte
@@ -48,11 +48,123 @@ regions:
     # warmup: 0
 
     # aurora
-    # target_address_and_database: follower.cm27bilwogwz.us-west-1.rds.amazonaws.com:5432/postgres
+    # target_address_and_database: 
     # warmup: 0
 
     # yugabyte
     # target_address_and_database: 10.8.0.10:5433/postgres;10.8.0.20:5433/postgres;10.8.0.30:5433/postgres
+    # warmup: 0
+  us-west-2:
+    id: 4
+    # context: minikube
+    benchbase_instances: 1
+
+    # sunstorm
+    # target_address_and_database: 10.9.0.30:55433/postgres
+    # warmup: 0
+
+    # aurora
+    # target_address_and_database: 
+    # warmup: 0
+
+    # yugabyte
+    # target_address_and_database: 10.9.0.10:5433/postgres;10.9.0.20:5433/postgres;10.9.0.30:5433/postgres
+    # warmup: 0
+  eu-west-1:
+    id: 5
+    # context: minikube
+    benchbase_instances: 1
+
+    # sunstorm
+    # target_address_and_database: 10.2.0.30:55433/postgres
+    # warmup: 0
+
+    # aurora
+    # target_address_and_database: 
+    # warmup: 0
+
+    # yugabyte
+    # target_address_and_database: 10.2.0.10:5433/postgres;10.2.0.20:5433/postgres;10.2.0.30:5433/postgres
+    # warmup: 0
+  eu-west-1:
+    id: 6
+    # context: minikube
+    benchbase_instances: 1
+
+    # sunstorm
+    # target_address_and_database: 10.3.0.30:55433/postgres
+    # warmup: 0
+
+    # aurora
+    # target_address_and_database: 
+    # warmup: 0
+
+    # yugabyte
+    # target_address_and_database: 10.3.0.10:5433/postgres;10.3.0.20:5433/postgres;10.3.0.30:5433/postgres
+    # warmup: 0
+  ap-northeast-1:
+    id: 7
+    # context: minikube
+    benchbase_instances: 1
+
+    # sunstorm
+    # target_address_and_database: 10.6.0.30:55433/postgres
+    # warmup: 0
+
+    # aurora
+    # target_address_and_database: 
+    # warmup: 0
+
+    # yugabyte
+    # target_address_and_database: 10.6.0.10:5433/postgres;10.6.0.20:5433/postgres;10.6.0.30:5433/postgres
+    # warmup: 0
+  ap-northeast-2:
+    id: 8
+    # context: minikube
+    benchbase_instances: 1
+
+    # sunstorm
+    # target_address_and_database: 10.7.0.30:55433/postgres
+    # warmup: 0
+
+    # aurora
+    # target_address_and_database: 
+    # warmup: 0
+
+    # yugabyte
+    # target_address_and_database: 10.7.0.10:5433/postgres;10.7.0.20:5433/postgres;10.7.0.30:5433/postgres
+    # warmup: 0
+  ap-southeast-1:
+    id: 9
+    # context: minikube
+    benchbase_instances: 1
+
+    # sunstorm
+    # target_address_and_database: 10.4.0.30:55433/postgres
+    # warmup: 0
+
+    # aurora
+    # target_address_and_database: 
+    # warmup: 0
+
+    # yugabyte
+    # target_address_and_database: 10.4.0.10:5433/postgres;10.4.0.20:5433/postgres;10.4.0.30:5433/postgres
+    # warmup: 0
+  ap-southeast-2:
+    id: 10
+    # context: minikube
+    benchbase_instances: 1
+
+    # sunstorm
+    # target_address_and_database: 10.5.0.30:55433/postgres
+    # warmup: 0
+
+    # aurora
+    # target_address_and_database: 
+    # warmup: 0
+
+    # yugabyte
+    # target_address_and_database: 10.5.0.10:5433/postgres;10.5.0.20:5433/postgres;10.5.0.30:5433/postgres
     # warmup: 0
 
 # The region that contains the global resources. This region can

@@ -44,6 +44,18 @@ subnets:
     eu-west-2a: subnet-01d4009a020da46df
     eu-west-2b: subnet-0e2ad7f39541c75df
     eu-west-2c: subnet-0c7df5b4993c904ef
+  ap-northeast-1:
+    ap-northeast-1a: subnet-0e16430fc4f55394b
+    ap-northeast-1c: subnet-0cf3ecec581c0f801
+  ap-northeast-2:
+    ap-northeast-2a: subnet-0135ff358c7f249c5
+    ap-northeast-2b: subnet-092101fa3fd0de8cc
+  ap-southeast-1:
+    ap-southeast-1a: subnet-0fa0565f66845688f
+    ap-southeast-1b: subnet-0416065989fc5865b
+  ap-southeast-2:
+    ap-southeast-2a: subnet-0c301a9cb4e9a937e
+    ap-southeast-2b: subnet-07bae99f877e55879
 
 security_groups:
   us-east-1: sg-018aeab319579349c
@@ -52,5 +64,9 @@ security_groups:
   us-west-2: sg-0f6f9d8fed793f085
   eu-west-1: sg-0af119315a40fa0f9
   eu-west-2: sg-0ec4e1d97b23dff45
+  ap-northeast-1: sg-040ea3f4ab853fb24
+  ap-northeast-2: sg-0e2fa8c2439db5867
+  ap-southeast-1: sg-06d7f712e0c63f678
+  ap-southeast-2: sg-0d2f75ba8e1077f63
   
 ssh_key_name:
