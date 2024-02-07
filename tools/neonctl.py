@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import itertools
 
+from pathlib import Path
 from utils import get_logger, Command, initialize_and_run_commands
 from neonclone import clone_neon
 
@@ -198,10 +199,34 @@ class NeonCommand(Command):
         LOG.info("Starting neon in all regions")
 
         neon = self.get_neon(args)
+
+        valgrind_supp_path = Path(__file__).parent / "valgrind.supp"
+        valgrind_args = [
+            "valgrind",
+            "--leak-check=no",
+            "--error-markers=VALGRINDERROR-BEGIN,VALGRINDERROR-END",
+            f"--suppressions={valgrind_supp_path.as_posix()}",
+            "--trace-children=yes",
+            "--time-stamp=yes",
+        ]
+
         for region, dir in regions_and_dirs:
             neon.run(["start"], cwd=dir)
+            start_args = [
+                "endpoint",
+                "start",
+                region,
+                "--pg-version",
+                args.pg_version,
+            ]
+            if args.valgrind:
+                start_args += [
+                    "--valgrind",
+                    " ".join(valgrind_args)
+                ]
+
             neon.run(
-                ["endpoint", "start", region, "--pg-version", args.pg_version],
+                start_args,
                 cwd=dir,
             )
 
@@ -370,6 +395,7 @@ class StartCommand(NeonCommand):
     def add_arguments(self, parser):
         super().add_arguments(parser)
         parser.add_argument("--pg-version", choices=["14", "15"], default="14")
+        parser.add_argument("--valgrind", action="store_true", help="Run with valgrind")
 
     def do_command(self, args):
         self.start_all_regions(args)
