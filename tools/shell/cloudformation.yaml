@@ -120,8 +120,8 @@ Parameters:
     Description: The postgres shared buffer size
     Default: 16GB
   LaunchTemplateVersion:
-    Type: Number
-    Description: Version of the launch template "sunstorm"
+    Type: String
+    Description: Version of the launch template "sunstorm". Leave empty to use the default version.
   SignalFileName:
     Type: String
     Description: >-
@@ -550,12 +550,11 @@ Resources:
             - !Sub 
               - >-
                 sudo -u ubuntu ./2-restart --region-id 0 --pageserver-mem
-                ${PageserverMemory} --signal-file ${SignalFileName} --hub-addr
+                327680 --signal-file ${SignalFileName} --hub-addr
                 ${HubIpAddress} --pageserver-addr ${PageserverIpAddress}
                 --safekeeper-addr ${SafekeeperIpAddress} --compute-addr
                 ${ComputeIpAddress} --xactserver-addrs ${XactserverIpAddresses}
               - SignalFileName: !Ref SignalFileName
-                PageserverMemory: !Ref PageserverMemory
                 HubIpAddress: !Ref HubIpAddress
                 PageserverIpAddress: !Ref HubIpAddress
                 SafekeeperIpAddress: !Ref HubIpAddress

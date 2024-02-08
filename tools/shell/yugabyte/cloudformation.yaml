@@ -45,8 +45,8 @@ Parameters:
       - c5d.2xlarge
       - c5d.4xlarge
   LaunchTemplateVersion:
-    Type: Number
-    Description: Version of the launch template "yugabyte"
+    Type: String
+    Description: Version of the launch template "yugabyte". Leave empty to use the default version.
 Resources:
   Yugabyte0:
     Type: 'AWS::EC2::Instance'
