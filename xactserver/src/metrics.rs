@@ -10,9 +10,11 @@ use crate::RollbackReason;
 use crate::XactStatus;
 
 const DURATION_BUCKETS: &[f64] = &[
-    0.000_001, 0.000_010, 0.000_100, // 1 us, 10 us, 100 us
-    0.001_000, 0.010_000, 0.100_000, // 1 ms, 10 ms, 100 ms
-    1.0, 10.0, 100.0, // 1 s, 10 s, 100 s
+    0.000_001, 0.000_010, 0.000_100, 0.000_500, // 1 us, 10 us, 100 us, 500 us
+    0.001_000, 0.002_500, 0.005_000, 0.007_500, // 1 ms, 2.5 ms, 5 ms, 7.5 ms
+    0.010_000, 0.025_000, 0.050_000, 0.075_000, // 10 ms, 25 ms, 50 ms, 75 ms
+    0.100_000, 0.250_000, 0.500_000, 0.750_000, // 100 ms, 250 ms, 500 ms, 750 ms
+    1.000_000, 2.500_000, 5.000_000, 7.500_000, // 1 s, 2 s, 5 s, 10 s
 ];
 
 lazy_static! {
@@ -32,6 +34,13 @@ lazy_static! {
         "xactserver_commit_duration_seconds",
         "Time a transaction spent in the xactserver",
         &["region", "coordinator", "is_local"],
+        DURATION_BUCKETS.into()
+    )
+    .unwrap();
+    pub static ref PEER_NETWORK_DURATION: HistogramVec = register_histogram_vec!(
+        "xactserver_peer_network_duration_seconds",
+        "Time spent for network communication with other xact servers",
+        &["region", "peer", "action"],
         DURATION_BUCKETS.into()
     )
     .unwrap();

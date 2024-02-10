@@ -11,6 +11,7 @@ The progress are frequently saved so that the experiment can be resumed from the
 last saved point in case when the experiment is interrupted. On resuming, the
 successful cases will be skipped.
 """
+
 import argparse
 import csv
 import json
@@ -87,13 +88,15 @@ class Experiment(TypedDict):
     replace: list[Replace] | None
 
 
-def to_named_value(param: str, value: ParameterValue | NamedParameterValue | None) -> NamedParameterValue:
+def to_named_value(
+    param: str, value: ParameterValue | NamedParameterValue | None
+) -> NamedParameterValue:
     if isinstance(value, dict):
         # Return as-is if the value is already named
         return value
     else:
         # Otherwise, use the value as the name
-        param_suffix = param.split(".")[-1]    
+        param_suffix = param.split(".")[-1]
         return {"name": f"{param_suffix}{value}", "value": value}
 
 
@@ -506,6 +509,12 @@ def main(args):
             LOG.warning("Skip already run benchmark: %s", metadata)
         else:
             try:
+                header("Running benchmark %s", json.dumps(metadata, indent=4))
+
+                if args.interactive:
+                    if not Confirm.ask("Continue?", default=True):
+                        break
+
                 if not args.skip_create_load:
                     if reload_counter == 0:
                         header("Creating the database")
@@ -540,12 +549,6 @@ def main(args):
                             "Reloading the database after %d more executions",
                             reload_counter,
                         )
-
-                header("Running benchmark %s", json.dumps(metadata, indent=4))
-
-                if args.interactive:
-                    if not Confirm.ask("Continue?", default=True):
-                        break
 
                 result = benchmark.main(
                     [

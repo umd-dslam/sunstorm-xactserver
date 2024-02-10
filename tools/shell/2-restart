@@ -23,6 +23,7 @@ usage() {
   echo "      --safekeeper-addr   The safekeeper address"
   echo "      --compute-addr      The compute address"
   echo "      --xactserver-addrs  Comma-separated list of xactserver addresses"
+  echo "      --xactserver-conns  Size of peer connection pools of the xactserver"
   exit 1
 }
 
@@ -49,6 +50,8 @@ pageserver_addr=localhost
 safekeeper_addr=localhost
 compute_addr=localhost
 xactserver_addrs=localhost
+
+xactserver_conns=300
 
 while (( "$#" )); do
   case "$1" in
@@ -121,6 +124,10 @@ while (( "$#" )); do
       ;;
     --xactserver-addrs)
       IFS=',' read -r -a xactserver_addrs <<< "$2"
+      shift 2
+      ;;
+    --xactserver-conns)
+      xactserver_conns=$2
       shift 2
       ;;
     -h|--help)
@@ -226,7 +233,7 @@ if [ $run_xactserver -eq 1 ]; then
       --max-conn-pool-size-pg=300                                         \
       --node-id=$region_id                                                \
       --nodes=$node_urls                                                  \
-      --max-conn-pool-size-peer=300                                       \
+      --max-conn-pool-size-peer=$xactserver_conns                         \
       --listen-peer=0.0.0.0:23000                                         \
       --listen-http=0.0.0.0:8080                                          \
       --no-ansi"

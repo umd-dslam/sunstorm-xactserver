@@ -1,5 +1,7 @@
 use crate::decoder::RWSet;
-use crate::metrics::{get_rollback_reason_label, FINISHED_XACTS, STARTED_XACTS, TOTAL_DURATION};
+use crate::metrics::{
+    get_rollback_reason_label, FINISHED_XACTS, PEER_NETWORK_DURATION, STARTED_XACTS, TOTAL_DURATION,
+};
 use crate::node::client;
 use crate::pg::{create_pg_conn_pool, PgConnectionPool};
 use crate::proto::{PrepareMessage, VoteMessage};
@@ -242,15 +244,34 @@ impl XactStateManager {
 
         // Send the transaction to other participants
         self.send_to_all_but_me(&rwset.participants(), |p| {
+            let from = self.node_id;
             let peers = self.peers.clone();
             let message = PrepareMessage {
-                from: self.node_id.into(),
+                from: from.into(),
                 xact_id: self.xact_id.into(),
                 data: data.clone().into_iter().collect(),
             };
             async move {
-                let mut client = peers.get(p).await?;
-                client.prepare(tonic::Request::new(message)).await?;
+                let mut client = {
+                    let _timer = PEER_NETWORK_DURATION
+                        .with_label_values(&[
+                            &from.to_string(),
+                            &p.to_string(),
+                            "get_client_to_prepare",
+                        ])
+                        .start_timer();
+
+                    peers.get(p).await?
+                };
+
+                {
+                    let _timer = PEER_NETWORK_DURATION
+                        .with_label_values(&[&from.to_string(), &p.to_string(), "prepare"])
+                        .start_timer();
+
+                    client.prepare(tonic::Request::new(message)).await?;
+                }
+
                 Ok::<(), anyhow::Error>(())
             }
         })
@@ -309,15 +330,34 @@ impl XactStateManager {
 
         // Send the vote to other participants
         self.send_to_all_but_me(&rwset.participants(), |p| {
+            let from = self.node_id;
             let peers = self.peers.clone();
             let message = VoteMessage {
-                from: self.node_id.into(),
+                from: from.into(),
                 xact_id: self.xact_id.into(),
                 rollback_reason: rollback_reason.clone(),
             };
             async move {
-                let mut client = peers.get(p).await?;
-                client.vote(tonic::Request::new(message)).await?;
+                let mut client = {
+                    let _timer = PEER_NETWORK_DURATION
+                        .with_label_values(&[
+                            &from.to_string(),
+                            &p.to_string(),
+                            "get_client_to_vote",
+                        ])
+                        .start_timer();
+
+                    peers.get(p).await?
+                };
+
+                {
+                    let _timer = PEER_NETWORK_DURATION
+                        .with_label_values(&[&from.to_string(), &p.to_string(), "vote"])
+                        .start_timer();
+
+                    client.vote(tonic::Request::new(message)).await?;
+                }
+
                 Ok::<(), anyhow::Error>(())
             }
         })

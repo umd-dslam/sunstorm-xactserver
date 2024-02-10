@@ -175,7 +175,7 @@ def get_namespaces(config: MainConfig):
                 "target_address_and_database"
             ),
             "warmup": region_info.get("warmup", 0),
-            "benchbase_instances": region_info.get("benchbase_instances", 1)
+            "benchbase_instances": region_info.get("benchbase_instances", 1),
         }
     return namespaces
 
