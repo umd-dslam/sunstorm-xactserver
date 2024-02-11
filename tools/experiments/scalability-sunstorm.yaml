@@ -4,7 +4,7 @@ dbtype: sunstorm
 reload_every: 1
 benchmark: hot
 scalefactor: 1000
-time: 120
+time: 90
 rate: 50000
 isolation: TRANSACTION_SERIALIZABLE
 param_keys:
@@ -16,11 +16,11 @@ param_keys:
   - hot.maxscancount
   - terminals
 param_values:
-  regions: [3, 4, 5, 6, 7, 8, 9, 10]
+  regions: [3, 4, 5, 6, 8, 10]
   terminals: null
-  hot.keyspertxn: 10
+  hot.keyspertxn: 8
   hot.maxscancount: 50
-  hot.hot: [0, 1000]
+  hot.hot: [0, 10000]
   hot.weights:
     - name: F-mr0
       value: 100000,0,0,0,0,0,0,0,0,0
@@ -33,15 +33,11 @@ replace:
     set:
       terminals: 64
   - match:
-      - hot.weights:
-          name: F-mr5
-    set:
-      terminals: 96
-  - match:
       - regions: 3
         hot.weights:
           name: F-mr5
     set:
+      terminals: 96
       hot.weights:
         name: F-mr5
         value: 95000,4292,707,0,0,0,0,0,0,0
@@ -50,6 +46,7 @@ replace:
         hot.weights:
           name: F-mr5
     set:
+      terminals: 96
       hot.weights:
         name: F-mr5
         value: 95000,4090,674,235,0,0,0,0,0,0
@@ -58,6 +55,7 @@ replace:
         hot.weights:
           name: F-mr5
     set:
+      terminals: 128
       hot.weights:
         name: F-mr5
         value: 95000,4001,659,229,108,0,0,0,0,0
@@ -66,6 +64,7 @@ replace:
         hot.weights:
           name: F-mr5
     set:
+      terminals: 128
       hot.weights:
         name: F-mr5
         value: 95000,3953,652,227,107,60,0,0,0,0
@@ -74,6 +73,7 @@ replace:
         hot.weights:
           name: F-mr5
     set:
+      terminals: 160
       hot.weights:
         name: F-mr5
         value: 95000,3923,647,225,106,59,37,0,0,0
@@ -82,6 +82,7 @@ replace:
         hot.weights:
           name: F-mr5
     set:
+      terminals: 160
       hot.weights:
         name: F-mr5
         value: 95000,3904,643,224,106,59,37,24,0,0
@@ -90,6 +91,7 @@ replace:
         hot.weights:
           name: F-mr5
     set:
+      terminals: 192
       hot.weights:
         name: F-mr5
         value: 95000,3890,641,223,105,59,36,24,17,0
@@ -98,6 +100,7 @@ replace:
         hot.weights:
           name: F-mr5
     set:
+      terminals: 192
       hot.weights:
         name: F-mr5
         value: 95000,3880,640,223,105,59,36,24,17,12

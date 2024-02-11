@@ -3,7 +3,7 @@
 dbtype: yugabyte
 benchmark: hot
 scalefactor: 1000
-time: 120
+time: 90
 rate: 50000
 isolation: TRANSACTION_SERIALIZABLE
 param_keys: !include ycsb/param-keys.yaml

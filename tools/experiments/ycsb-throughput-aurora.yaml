@@ -4,7 +4,7 @@ dbtype: aurora
 reload_every: 1
 benchmark: hot
 scalefactor: 1000
-time: 120
+time: 90
 rate: 50000
 isolation: '!us-east-1:TRANSACTION_SERIALIZABLE; us-east-2:TRANSACTION_REPEATABLE_READ; us-west-1:TRANSACTION_REPEATABLE_READ'
 param_keys: !include ycsb/param-keys.yaml

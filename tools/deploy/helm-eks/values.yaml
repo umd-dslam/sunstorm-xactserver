@@ -5,7 +5,7 @@ instance_types:
   # hub: c5.4xlarge
   # compute: r5.4xlarge
   # pageserver: c5.4xlarge
-  client: c5.xlarge
+  client: c5.2xlarge
 
 capacity:
   client: 1

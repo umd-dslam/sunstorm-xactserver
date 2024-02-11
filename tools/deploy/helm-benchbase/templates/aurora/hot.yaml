@@ -49,6 +49,9 @@ data:
         <terminals>{{ .Values.terminals }}</terminals>
         <works>
             <work>
+                {{- if .Values.warmup }}
+                <warmup>{{ .Values.warmup }}</warmup>
+                {{- end }}
                 <time>{{ .Values.time }}</time>
                 <rate>{{ .Values.rate }}</rate>
                 <weights>{{ .Values.hot.weights }}</weights>

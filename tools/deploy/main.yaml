@@ -13,15 +13,15 @@ regions:
 
     # sunstorm
     # target_address_and_database: 10.0.0.30:55433/postgres
-    # warmup: 0
+    # warmup: 30
 
     # aurora
     # target_address_and_database: 
-    # warmup: 0
+    # warmup: 30
 
     # yugabyte
     # target_address_and_database: 10.0.0.10:5433/postgres;10.0.0.20:5433/postgres;10.0.0.30:5433/postgres
-    # warmup: 0
+    # warmup: 30
   us-east-2:
     id: 2 
     # context: minikube
@@ -29,15 +29,15 @@ regions:
 
     # sunstorm
     # target_address_and_database: 10.1.0.30:55433/postgres
-    # warmup: 0
+    # warmup: 30
 
     # aurora
     # target_address_and_database: 
-    # warmup: 0
+    # warmup: 30
 
     # yugabyte
     # target_address_and_database: 10.1.0.10:5433/postgres;10.1.0.20:5433/postgres;10.1.0.30:5433/postgres
-    # warmup: 0
+    # warmup: 30
   us-west-1:
     id: 3
     # context: minikube
@@ -45,15 +45,15 @@ regions:
 
     # sunstorm
     # target_address_and_database: 10.8.0.30:55433/postgres
-    # warmup: 0
+    # warmup: 30
 
     # aurora
     # target_address_and_database: 
-    # warmup: 0
+    # warmup: 30
 
     # yugabyte
     # target_address_and_database: 10.8.0.10:5433/postgres;10.8.0.20:5433/postgres;10.8.0.30:5433/postgres
-    # warmup: 0
+    # warmup: 30
   us-west-2:
     id: 4
     # context: minikube
@@ -61,15 +61,15 @@ regions:
 
     # sunstorm
     # target_address_and_database: 10.9.0.30:55433/postgres
-    # warmup: 0
+    # warmup: 30
 
     # aurora
     # target_address_and_database: 
-    # warmup: 0
+    # warmup: 30
 
     # yugabyte
     # target_address_and_database: 10.9.0.10:5433/postgres;10.9.0.20:5433/postgres;10.9.0.30:5433/postgres
-    # warmup: 0
+    # warmup: 30
   eu-west-1:
     id: 5
     # context: minikube
@@ -77,31 +77,31 @@ regions:
 
     # sunstorm
     # target_address_and_database: 10.2.0.30:55433/postgres
-    # warmup: 0
+    # warmup: 30
 
-    # aurora
+    # # aurora
     # target_address_and_database: 
-    # warmup: 0
+    # warmup: 30
 
-    # yugabyte
+    # # yugabyte
     # target_address_and_database: 10.2.0.10:5433/postgres;10.2.0.20:5433/postgres;10.2.0.30:5433/postgres
-    # warmup: 0
-  eu-west-1:
+    # warmup: 30
+  eu-west-2:
     id: 6
     # context: minikube
     benchbase_instances: 1
 
     # sunstorm
     # target_address_and_database: 10.3.0.30:55433/postgres
-    # warmup: 0
+    # warmup: 30
 
     # aurora
     # target_address_and_database: 
-    # warmup: 0
+    # warmup: 30
 
-    # yugabyte
-    # target_address_and_database: 10.3.0.10:5433/postgres;10.3.0.20:5433/postgres;10.3.0.30:5433/postgres
-    # warmup: 0
+  #   # yugabyte
+  #   # target_address_and_database: 10.3.0.10:5433/postgres;10.3.0.20:5433/postgres;10.3.0.30:5433/postgres
+  #   # warmup: 30
   ap-northeast-1:
     id: 7
     # context: minikube
@@ -109,15 +109,15 @@ regions:
 
     # sunstorm
     # target_address_and_database: 10.6.0.30:55433/postgres
-    # warmup: 0
+    # warmup: 30
 
     # aurora
     # target_address_and_database: 
-    # warmup: 0
+    # warmup: 30
 
     # yugabyte
     # target_address_and_database: 10.6.0.10:5433/postgres;10.6.0.20:5433/postgres;10.6.0.30:5433/postgres
-    # warmup: 0
+    # warmup: 30
   ap-northeast-2:
     id: 8
     # context: minikube
@@ -125,15 +125,15 @@ regions:
 
     # sunstorm
     # target_address_and_database: 10.7.0.30:55433/postgres
-    # warmup: 0
+    # warmup: 30
 
     # aurora
     # target_address_and_database: 
-    # warmup: 0
+    # warmup: 30
 
     # yugabyte
     # target_address_and_database: 10.7.0.10:5433/postgres;10.7.0.20:5433/postgres;10.7.0.30:5433/postgres
-    # warmup: 0
+    # warmup: 30
   ap-southeast-1:
     id: 9
     # context: minikube
@@ -141,15 +141,15 @@ regions:
 
     # sunstorm
     # target_address_and_database: 10.4.0.30:55433/postgres
-    # warmup: 0
+    # warmup: 30
 
     # aurora
     # target_address_and_database: 
-    # warmup: 0
+    # warmup: 30
 
     # yugabyte
     # target_address_and_database: 10.4.0.10:5433/postgres;10.4.0.20:5433/postgres;10.4.0.30:5433/postgres
-    # warmup: 0
+    # warmup: 30
   ap-southeast-2:
     id: 10
     # context: minikube
@@ -157,15 +157,15 @@ regions:
 
     # sunstorm
     # target_address_and_database: 10.5.0.30:55433/postgres
-    # warmup: 0
+    # warmup: 30
 
     # aurora
     # target_address_and_database: 
-    # warmup: 0
+    # warmup: 30
 
     # yugabyte
     # target_address_and_database: 10.5.0.10:5433/postgres;10.5.0.20:5433/postgres;10.5.0.30:5433/postgres
-    # warmup: 0
+    # warmup: 30
 
 # The region that contains the global resources. This region can
 # be one of the regions listed above, or a different region.
