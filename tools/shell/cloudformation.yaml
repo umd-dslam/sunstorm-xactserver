@@ -215,7 +215,7 @@ Resources:
       'AWS::CloudFormation::Designer':
         id: 7a791c52-491f-408e-9590-3257a01751f7
     Condition: NotHubOnly
-  Safekeeper0:
+  Safekeeper0AndXactserver:
     Type: 'AWS::EC2::Instance'
     Properties:
       LaunchTemplate:
@@ -234,7 +234,7 @@ Resources:
               - SafekeeperIpAddresses
       Tags:
         - Key: Name
-          Value: safekeeper0
+          Value: safekeeper0-xactserver
       UserData: !Base64 
         'Fn::Join':
           - |+
@@ -262,13 +262,14 @@ Resources:
                   ${SignalFileName} --hub-addr ${HubIpAddress}
                 - SignalFileName: !Ref SignalFileName
                   HubIpAddress: !Ref HubIpAddress
+            - sudo -u ubuntu aws s3 cp s3://sunstorm-us-east-1/spec-template.json spec-template.json
             - !Sub 
               - >-
                 sudo -u ubuntu ./2-restart --safekeeper --xactserver --region-id
                 ${Region} --safekeeper-id 0 --signal-file ${SignalFileName}
                 --hub-addr ${HubIpAddress} --safekeeper-addr
                 ${SafekeeperIpAddress} --compute-addr ${ComputeIpAddress}
-                --xactserver-addrs ${XactserverIpAddresses}
+                --xactserver-addrs ${XactserverIpAddresses} --xactserver-conns 500
               - Region: !FindInMap 
                   - RegionMap
                   - !Ref 'AWS::Region'
