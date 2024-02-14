@@ -102,9 +102,9 @@ data:
     DROP TABLE IF EXISTS item CASCADE;
 
     {{- range $i := $regionsRange }}
-    DROP TABLESPACE IF EXISTS region_{{ $i }} CASCADE;
+    DROP TABLESPACE IF EXISTS region_{{ $i }};
     {{- end }}
-    DROP TABLESPACE IF EXISTS global CASCADE;
+    DROP TABLESPACE IF EXISTS global;
 
     CREATE TABLESPACE global WITH (
       replica_placement='{"num_replicas": 3,
