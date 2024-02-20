@@ -262,7 +262,6 @@ Resources:
                   ${SignalFileName} --hub-addr ${HubIpAddress}
                 - SignalFileName: !Ref SignalFileName
                   HubIpAddress: !Ref HubIpAddress
-            - sudo -u ubuntu aws s3 cp s3://sunstorm-us-east-1/spec-template.json spec-template.json
             - !Sub 
               - >-
                 sudo -u ubuntu ./2-restart --safekeeper --xactserver --region-id
@@ -460,6 +459,7 @@ Resources:
                   s3://sunstorm-${Region}/tpcc-100x3/compute data/compute
                 - Region: !Ref 'AWS::Region'
               - rm -rf data/compute
+            - sudo -u ubuntu aws s3 cp s3://sunstorm-us-east-1/spec-template.json spec-template.json
             - !Sub 
               - >-
                 sudo -u ubuntu ./3-compute --region-id ${Region} --postgres-mem

@@ -1,12 +1,20 @@
 # Example:
-#   python3 tools/experiment.py -o ~/data/sunstorm/scalability scalability-sunstorm
-dbtype: sunstorm
-reload_every: 1
+#   python3 tools/experiment.py -o ~/data/aurora/scalability scalability-aurora --sload
+dbtype: aurora
+reload_every: 4
 benchmark: hot
 scalefactor: 1000
 time: 90
 rate: 50000
-isolation: TRANSACTION_SERIALIZABLE
+# Uncomment the following line for the appropriate number of regions
+# 3 regions
+isolation: '!us-east-1:TRANSACTION_SERIALIZABLE; us-east-2:TRANSACTION_REPEATABLE_READ; us-west-1:TRANSACTION_REPEATABLE_READ'
+# 4 regions
+# isolation: '!us-east-1:TRANSACTION_SERIALIZABLE; us-east-2:TRANSACTION_REPEATABLE_READ; us-west-1:TRANSACTION_REPEATABLE_READ; us-west-2:TRANSACTION_REPEATABLE_READ'
+# 5 regions
+# isolation: '!us-east-1:TRANSACTION_SERIALIZABLE; us-east-2:TRANSACTION_REPEATABLE_READ; us-west-1:TRANSACTION_REPEATABLE_READ; us-west-2:TRANSACTION_REPEATABLE_READ; eu-west-1:TRANSACTION_REPEATABLE_READ'
+# 6 regions
+# isolation: '!us-east-1:TRANSACTION_SERIALIZABLE; us-east-2:TRANSACTION_REPEATABLE_READ; us-west-1:TRANSACTION_REPEATABLE_READ; us-west-2:TRANSACTION_REPEATABLE_READ; eu-west-1:TRANSACTION_REPEATABLE_READ; eu-west-2:TRANSACTION_REPEATABLE_READ'
 param_keys:
   - regions
   - name: hot.hot
@@ -17,7 +25,7 @@ param_keys:
   - terminals
 param_values:
   regions: [3, 4, 5, 6]
-  terminals: null
+  terminals: 64
   hot.keyspertxn: 8
   hot.maxscancount: 50
   hot.hot: [0, 10000]
@@ -28,16 +36,10 @@ param_values:
       value: null
 replace:
   - match:
-      - hot.weights:
-          name: F-mr0
-    set:
-      terminals: 64
-  - match:
       - regions: 3
         hot.weights:
           name: F-mr5
     set:
-      terminals: 96
       hot.weights:
         name: F-mr5
         value: 95000,4292,707,0,0,0,0,0,0,0
@@ -46,7 +48,6 @@ replace:
         hot.weights:
           name: F-mr5
     set:
-      terminals: 96
       hot.weights:
         name: F-mr5
         value: 95000,4090,674,235,0,0,0,0,0,0
@@ -55,7 +56,6 @@ replace:
         hot.weights:
           name: F-mr5
     set:
-      terminals: 128
       hot.weights:
         name: F-mr5
         value: 95000,4001,659,229,108,0,0,0,0,0
@@ -64,7 +64,6 @@ replace:
         hot.weights:
           name: F-mr5
     set:
-      terminals: 128
       hot.weights:
         name: F-mr5
         value: 95000,3953,652,227,107,60,0,0,0,0

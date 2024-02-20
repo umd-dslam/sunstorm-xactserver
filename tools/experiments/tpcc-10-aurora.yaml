@@ -1,4 +1,4 @@
-# python3 tools/experiment.py --logs-per-sec 10 -o ~/data/aurora/tpcc tpcc-10-aurora
+# python3 tools/experiment.py -o ~/data/aurora/tpcc tpcc-10-aurora
 dbtype: aurora
 benchmark: tpcc
 scalefactor: 10

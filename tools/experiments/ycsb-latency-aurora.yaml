@@ -1,4 +1,4 @@
-# python3 tools/experiment.py --logs-per-sec 10 -o ~/data/sunstorm/ycsb/latency ycsb-latency-aurora
+# python3 tools/experiment.py -o ~/data/sunstorm/ycsb/latency ycsb-latency-aurora
 dbtype: aurora
 benchmark: hot
 scalefactor: 1000

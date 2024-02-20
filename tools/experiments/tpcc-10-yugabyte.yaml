@@ -1,4 +1,4 @@
-# python3 tools/experiment.py --logs-per-sec 10 -o ~/data/yugabyte/tpcc tpcc-10-yugabyte
+# python3 tools/experiment.py -o ~/data/yugabyte/tpcc tpcc-10-yugabyte
 dbtype: yugabyte
 benchmark: tpcc
 scalefactor: 10

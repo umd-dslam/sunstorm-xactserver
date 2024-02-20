@@ -135,7 +135,7 @@
           },
           {
               "name": "max_prepared_transactions",
-              "value": "500",
+              "value": "10000",
               "vartype": "integer"
           },
           {

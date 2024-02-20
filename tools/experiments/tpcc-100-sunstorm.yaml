@@ -1,4 +1,4 @@
-# python3 tools/experiment.py --logs-per-sec 10 -o ~/data/sunstorm/tpcc tpcc-100-sunstorm
+# python3 tools/experiment.py -o ~/data/sunstorm/tpcc tpcc-100-sunstorm
 dbtype: sunstorm
 benchmark: tpcc
 scalefactor: 100

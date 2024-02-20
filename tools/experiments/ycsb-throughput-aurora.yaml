@@ -1,5 +1,5 @@
 # Example:
-#   python3 tools/experiment.py --logs-per-sec 10 -o ~/data/sunstorm/ycsb/throughput ycsb-throughput-aurora
+#   python3 tools/experiment.py -o ~/data/sunstorm/ycsb/throughput ycsb-throughput-aurora
 dbtype: aurora
 reload_every: 1
 benchmark: hot
